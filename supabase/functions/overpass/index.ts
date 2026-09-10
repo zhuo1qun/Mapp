@@ -131,7 +131,8 @@ Deno.serve(async (req) => {
       return json(geojson, {
         headers: {
           ...corsHeaders(origin),
-          'Cache-Control': 'public, max-age=300'
+          // API 响应不使用不可变长缓存，避免边界数据或筛选结果过期。
+          'Cache-Control': 'public, max-age=0, must-revalidate'
         }
       });
     } catch (e) {
@@ -145,4 +146,3 @@ Deno.serve(async (req) => {
     { status: 502, headers: corsHeaders(origin) }
   );
 });
-

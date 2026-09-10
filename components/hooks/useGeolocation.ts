@@ -23,10 +23,7 @@ const getScreenOrientationAngle = (): number => {
 };
 
 /** Derive compass heading (degrees clockwise from true/magnetic north, device top). */
-const headingFromOrientationEvent = (
-  event: DeviceOrientationEvent,
-  isAbsoluteEvent: boolean
-): number | null => {
+const headingFromOrientationEvent = (event: DeviceOrientationEvent): number | null => {
   const webkitHeading = (event as DeviceOrientationEvent & { webkitCompassHeading?: number })
     .webkitCompassHeading;
   if (typeof webkitHeading === 'number' && !Number.isNaN(webkitHeading)) {
@@ -35,12 +32,11 @@ const headingFromOrientationEvent = (
 
   if (event.alpha == null || Number.isNaN(event.alpha)) return null;
 
-  // Absolute alpha / deviceorientationabsolute: 0 = north. Relative alpha needs 360 - alpha.
-  const absolute =
-    isAbsoluteEvent ||
-    (event as DeviceOrientationEvent & { absolute?: boolean }).absolute === true;
-
-  let heading = absolute ? event.alpha : 360 - event.alpha;
+  // `alpha` is a counter-clockwise rotation around Z for both orientation
+  // event types. A compass bearing increases clockwise, so absolute data must
+  // be inverted too; treating deviceorientationabsolute as a direct heading
+  // makes the on-map direction sector rotate the opposite way.
+  let heading = 360 - event.alpha;
   heading = normalizeHeading(heading - getScreenOrientationAngle());
   return heading;
 };
@@ -235,7 +231,7 @@ export const useGeolocation = (isMapMode: boolean) => {
 
     let gotAbsoluteSample = false;
     const handleAbsolute = (event: DeviceOrientationEvent) => {
-      const heading = headingFromOrientationEvent(event, true);
+      const heading = headingFromOrientationEvent(event);
       if (heading == null) return;
       gotAbsoluteSample = true;
       applyHeadingSample(heading);
@@ -246,7 +242,7 @@ export const useGeolocation = (isMapMode: boolean) => {
       const webkitHeading = (event as DeviceOrientationEvent & { webkitCompassHeading?: number })
         .webkitCompassHeading;
       if (gotAbsoluteSample && typeof webkitHeading !== 'number') return;
-      const heading = headingFromOrientationEvent(event, false);
+      const heading = headingFromOrientationEvent(event);
       if (heading != null) applyHeadingSample(heading);
     };
 

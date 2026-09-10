@@ -84,9 +84,8 @@ Deno.serve(async (req) => {
   return json(data, {
     headers: {
       ...corsHeaders(origin),
-      // allow edge caching if you put a CDN in front later
-      'Cache-Control': 'public, max-age=30'
+      // 地理编码结果不可使用不可变长缓存，客户端每次应向服务器校验。
+      'Cache-Control': 'public, max-age=0, must-revalidate'
     }
   });
 });
-

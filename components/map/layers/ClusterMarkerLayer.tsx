@@ -58,9 +58,20 @@ function ClusterMarkerLayerInner({
   const map = useMap();
   const [, bump] = useState(0);
   const rafRef = useRef<number | null>(null);
+  /** Native Leaflet pinch emits `move` for every touch frame. React must not
+   * reconcile markers in that loop: Leaflet already transforms them visually. */
+  const isGestureZoomingRef = useRef(false);
 
   useMapEvents({
+    zoomstart: () => {
+      isGestureZoomingRef.current = true;
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    },
     zoomend: () => {
+      isGestureZoomingRef.current = false;
       if (map._mappSmoothZooming || map._animatingZoom || map._mappZoomCommitGuard) return;
       bump((n) => n + 1);
     },
@@ -71,8 +82,17 @@ function ClusterMarkerLayerInner({
     // @ts-expect-error custom event from smoothMapZoom commit
     mappzoomcommitdone: () => bump((n) => n + 1),
     move: () => {
-      // During smooth CSS zoom, Leaflet markers follow zoomanim — don't remount via React.
-      if (map._mappSmoothZooming || map._animatingZoom || map._mappZoomCommitGuard) return;
+      // Native pinch also sends `move` every frame. Let Leaflet own the visual
+      // transform until zoomend; rerendering here re-projects every DivIcon and
+      // visibly fights the tile/marker transform on mobile.
+      if (
+        isGestureZoomingRef.current ||
+        map._mappSmoothZooming ||
+        map._animatingZoom ||
+        map._mappZoomCommitGuard
+      ) {
+        return;
+      }
       if (rafRef.current != null) return;
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;

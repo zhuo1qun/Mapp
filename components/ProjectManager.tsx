@@ -1384,7 +1384,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           'h-full w-full min-h-0 flex flex-col items-center justify-start pt-24 pb-0 relative'
         : 'h-full w-full min-h-0 flex flex-col items-center justify-start pt-24 pb-0 p-4 relative'
       : isSidebar
-        ? 'h-full w-full shadow-2xl flex flex-col border-r overflow-hidden'
+        ? 'h-full w-full flex flex-col border-r overflow-hidden'
         : 'w-full h-[100dvh] min-h-0 overflow-y-auto theme-surface-scrollbar flex flex-col items-center justify-start pt-40 pb-0 p-4 relative';
 
   const titleClass =
@@ -1642,12 +1642,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
       {isSidebar && !expandToHomeLayout && !transitionListOnly && (
         <>
-          <div className="absolute top-4 left-4 z-[2010] flex items-center gap-2">
+          <div className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex items-center gap-2">
             <button
               onClick={() => {
                 if (onBackToHome) onBackToHome();
               }}
-              className="p-2 rounded-xl text-theme-chrome-fg transition-colors"
+              className="project-sidebar-action p-2 rounded-xl text-theme-chrome-fg transition-colors"
               style={{ backgroundColor: themeColor }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
@@ -1663,7 +1663,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     setShowAppearanceSettingsBlockInSettings(true);
                     setShowHomeSettings(true);
                   }}
-                  className="p-2 rounded-xl text-theme-chrome-fg transition-colors"
+                  className="project-sidebar-action p-2 rounded-xl text-theme-chrome-fg transition-colors"
                   style={{ backgroundColor: themeColor }}
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = themeColorDark)}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = themeColor)}
@@ -1673,10 +1673,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 </button>
               )}
           </div>
-          <div className="absolute top-4 right-10 z-[2000] flex items-center gap-2">
+          <div className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-10 z-[2000] flex items-center gap-2">
             {activeProject && syncStatus === 'idle' && getLastSyncTime() && (
               <div
-                className="flex items-center justify-center w-10 h-10 rounded-xl text-theme-chrome-fg transition-colors cursor-help"
+                className="project-sidebar-action project-sidebar-sync-status flex items-center justify-center w-10 h-10 rounded-xl text-theme-chrome-fg transition-colors cursor-help"
                 style={{ backgroundColor: themeColor }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
@@ -1688,7 +1688,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             {activeProject && (
               <button 
                 onClick={handleExportCurrentView}
-                className="w-10 h-10 p-2 rounded-xl text-theme-chrome-fg transition-colors flex items-center justify-center"
+                className="project-sidebar-action w-10 h-10 p-2 rounded-xl text-theme-chrome-fg transition-colors flex items-center justify-center"
                 style={{ backgroundColor: themeColor }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
@@ -1699,7 +1699,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             )}
             <button 
               onClick={onCloseSidebar} 
-              className="w-10 h-10 p-2 rounded-xl text-theme-chrome-fg transition-colors flex items-center justify-center"
+              className="project-sidebar-action w-10 h-10 p-2 rounded-xl text-theme-chrome-fg transition-colors flex items-center justify-center"
               style={{ backgroundColor: themeColor }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}

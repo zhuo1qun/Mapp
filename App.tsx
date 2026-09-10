@@ -208,7 +208,7 @@ export default function App() {
 
         const createdIds: string[] = [];
         for (const ex of manifest) {
-          const res = await fetch(`/examples/${ex.file}`, { cache: 'no-store' });
+          const res = await fetch(`/examples/${ex.file}`, { cache: 'no-cache' });
           if (!res.ok) continue;
           const text = await res.text();
           const { project } = parseExportPayload(text);
@@ -1510,31 +1510,26 @@ export default function App() {
             {showDockedProjectSidebar && (
               <MotionDiv
                 key="docked-project-sidebar"
-                className="relative z-[1990] h-full min-h-0 shrink-0 overflow-visible shadow-2xl"
+                className="relative z-[1990] h-full min-h-0 shrink-0 overflow-hidden shadow-2xl"
                 style={{
                   borderRightWidth: projectSidebarIsFullWidth ? 0 : 1,
                   borderRightStyle: 'solid',
                   borderRightColor: themeColor,
-                  willChange: 'width, transform, opacity',
+                  backgroundColor: themeColor,
+                  willChange: 'width',
                   boxShadow: projectSidebarIsFullWidth ? 'none' : undefined
                 }}
-                initial={{ width: 0, x: '-100%', opacity: 0 }}
-                animate={{ width: projectSidebarDrawerWidthPx, x: 0, opacity: 1 }}
-                exit={{ width: 0, x: '-100%', opacity: 0 }}
+                // Docked sidebar only changes its occupied width. Combining a
+                // width animation with a second translate made its transparent
+                // outer shell expose the workspace behind it like a second panel.
+                initial={{ width: 0 }}
+                animate={{ width: projectSidebarDrawerWidthPx }}
+                exit={{ width: 0 }}
                 transition={{
                   width: {
                     type: 'tween',
                     duration: PROJECT_OPEN_SLIDE_DURATION_S,
                     ease: PROJECT_OPEN_SLIDE_EASE
-                  },
-                  x: {
-                    type: 'tween',
-                    duration: PROJECT_OPEN_SLIDE_DURATION_S,
-                    ease: PROJECT_OPEN_SLIDE_EASE
-                  },
-                  opacity: {
-                    duration: PROJECT_OPEN_OVERLAY_FADE_S,
-                    ease: 'easeOut'
                   }
                 }}
               >
@@ -1630,7 +1625,7 @@ export default function App() {
                }}
              />
              <MotionDiv
-               className="relative h-full z-[2001] overflow-hidden shrink-0"
+               className="relative h-full z-[2001] overflow-hidden shrink-0 shadow-2xl"
                initial={{ x: '-100%', width: projectSidebarDrawerWidthPx }}
                animate={{
                  x: 0,
@@ -1802,12 +1797,10 @@ export default function App() {
                  sidebarButtonDragRef.current.isDragging = false;
                }, 10);
              }}
-            className="absolute left-0 z-[900] pl-3 pr-4 rounded-r-xl shadow-lg text-theme-chrome-fg transition-none cursor-move"
+            className="sidebar-drawer-handle absolute left-0 z-[900] rounded-r-xl shadow-lg text-theme-chrome-fg transition-none cursor-move"
              style={{ 
                backgroundColor: themeColor,
-               top: `${sidebarButtonY}px`, 
-               paddingTop: '12.8px', 
-               paddingBottom: '12.8px' 
+               top: `${sidebarButtonY}px`
              }}
              onMouseEnter={(e) => {
                const darkR = Math.max(0, Math.floor(parseInt(themeColor.slice(1, 3), 16) * 0.9));

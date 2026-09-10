@@ -490,16 +490,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const isZoomingRef = useRef(false);
   const dragRectRef = useRef<DOMRect | null>(null);
   
-  // Long press leftovers（背景手势仍会清）
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressNoteIdRef = useRef<string | null>(null);
-  const longPressPointerIdRef = useRef<number | null>(null);
-  const longPressElementRef = useRef<HTMLElement | null>(null);
-  
   // Blank click count for exit logic
   const blankClickCountRef = useRef<number>(0);
   const blankClickResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  // 触屏长按卡片进入编辑时保留当前视图，不触发“进入编辑自动适配”。
+  const skipNextEditModeZoomRef = useRef(false);
 
   // 停止所有正在运行的画布动画
   const stopAnimations = useCallback(() => {
@@ -755,6 +751,22 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     dragRectRef.current = containerRef.current?.getBoundingClientRect() || null;
   }, []);
 
+  const enterEditFromTouchLongPress = useCallback(
+    (note: Note) => {
+      skipNextEditModeZoomRef.current = true;
+      setSelectedNoteId(note.id);
+      setSelectedNoteIds(new Set([note.id]));
+      setSelectedConnectionId(null);
+      setSelectedFrameId(null);
+      setConnectingFrom(null);
+      setConnectingTo(null);
+      setHoveringConnectionPoint(null);
+      resetBlankClickCount();
+      onWorkspaceEditModeChange(true);
+    },
+    [onWorkspaceEditModeChange]
+  );
+
   const {
     draggingNoteId,
     dragOffset,
@@ -763,6 +775,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     handleNotePointerDown,
     handleNotePointerMove,
     handleNotePointerUp,
+    handleNotePointerCancel,
+    cancelBrowseLongPress,
+    consumeSuppressedNoteClick,
     clearNotePressTracking,
     currentNotePressIdRef
   } = useBoardNoteDrag({
@@ -779,7 +794,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     commitProjectNotes,
     stopAnimations,
     cacheDragRect,
-    onBrowseOpenEditor: openBoardNoteEditor
+    onBrowseOpenEditor: openBoardNoteEditor,
+    onBrowseLongPressStartEdit: enterEditFromTouchLongPress
   });
 
   const { handleNoteClick, handleNoteDoubleClick, clearDeferredClick } = useBoardNoteInteraction({
@@ -1065,16 +1081,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       setSelectedFrameId(null); // 清除frame选中状态
       setSelectedNoteIds(new Set()); // Clear multi-select
       setIsShiftPressed(false);
-      // 清空长按相关状态，确保下次单击可以正常打开编辑器
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-      longPressNoteIdRef.current = null;
+      cancelBrowseLongPress();
       clearNotePressTracking();
       clearDeferredClick();
     }
-  }, [workspaceEditMode, clearNotePressTracking, clearDeferredClick]);
+  }, [workspaceEditMode, cancelBrowseLongPress, clearNotePressTracking, clearDeferredClick]);
 
   // 计算Note的中心点是否在Frame内
   const isNoteInFrame = (note: Note, frame: Frame): boolean => {
@@ -1537,6 +1548,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   // Zoom to Fit on Enter Edit Mode with animation
   useEffect(() => {
     if (workspaceEditMode && notes.length > 0 && containerRef.current) {
+        if (skipNextEditModeZoomRef.current) {
+            skipNextEditModeZoomRef.current = false;
+            return;
+        }
         // Wait for DOM to render and measure text notes
         const calculateBounds = () => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -2306,12 +2321,7 @@ const createNoteAtCenter = () => {
         isZoomingRef.current = true;
         setIsZooming(true);
 
-        // 取消便利贴的长按检测
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
-        longPressNoteIdRef.current = null;
+        cancelBrowseLongPress();
 
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -2340,11 +2350,7 @@ const createNoteAtCenter = () => {
     const handleTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 2 && touchStartRef.current) {
         e.preventDefault();
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
-        longPressNoteIdRef.current = null;
+        cancelBrowseLongPress();
 
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -2402,7 +2408,7 @@ const createNoteAtCenter = () => {
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [scheduleZoomTransformPersist]);
+  }, [scheduleZoomTransformPersist, cancelBrowseLongPress]);
 
   // Add wheel event listener with passive: false to allow preventDefault（与普通滚轮缩放一致，以指针为中心）
   useEffect(() => {
@@ -2477,12 +2483,7 @@ const createNoteAtCenter = () => {
       
       // 只有当目标不是 note 时，才取消长按检测和单击检测
       if (!isNoteClick) {
-        // 取消任何进行中的长按检测
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
-        longPressNoteIdRef.current = null;
+        cancelBrowseLongPress();
         // 注意：不清空 currentNotePressIdRef，因为用户可能在note上按下，然后移动鼠标到背景上
         // currentNotePressIdRef 会在 handleNotePointerUp 中根据移动距离判断是否清空
       }
@@ -4056,7 +4057,15 @@ const createNoteAtCenter = () => {
                     }}
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={(e) => handleNotePointerUp(e, note)}
-                  onClick={(e) => handleNoteClick(e, note)}
+                  onPointerCancel={handleNotePointerCancel}
+                  onClick={(e) => {
+                    if (consumeSuppressedNoteClick(note.id)) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+                    handleNoteClick(e, note);
+                  }}
                   onDoubleClick={(e) => handleNoteDoubleClick(e, note)}
                 >
                   {workspaceEditMode && (
@@ -4188,7 +4197,15 @@ const createNoteAtCenter = () => {
                   }}
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={(e) => handleNotePointerUp(e, note)}
-                  onClick={(e) => handleNoteClick(e, note)}
+                  onPointerCancel={handleNotePointerCancel}
+                  onClick={(e) => {
+                    if (consumeSuppressedNoteClick(note.id)) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+                    handleNoteClick(e, note);
+                  }}
                   onDoubleClick={(e) => handleNoteDoubleClick(e, note)}
                 >
                   {workspaceEditMode && (

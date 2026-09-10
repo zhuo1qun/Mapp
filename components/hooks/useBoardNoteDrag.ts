@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Frame, Note } from '../../types';
 import { applyBoardDragOffsetToNotes, noteWithBoardDragCommit } from '../../utils/board/boardNoteDrag';
 
@@ -6,6 +6,8 @@ const BROWSE_CANCEL_MOVE_PX = 20;
 const BROWSE_OPEN_EDITOR_MAX_MOVE_PX = 15;
 const EDIT_DRAG_COMMIT_MOVE_PX = 15;
 const SETTLE_FALLBACK_MS = 500;
+const LONG_PRESS_MS = 420;
+const LONG_PRESS_CANCEL_MOVE_PX = 10;
 
 type PendingSettle =
   | { kind: 'single'; id: string; boardX: number; boardY: number }
@@ -33,6 +35,8 @@ export interface UseBoardNoteDragArgs {
   stopAnimations: () => void;
   cacheDragRect?: () => void;
   onBrowseOpenEditor: (note: Note) => void;
+  /** 浏览态长按：切入编辑模式，但保留当前画布视图。 */
+  onBrowseLongPressStartEdit: (note: Note) => void;
 }
 
 /**
@@ -55,7 +59,8 @@ export function useBoardNoteDrag({
   commitProjectNotes,
   stopAnimations,
   cacheDragRect,
-  onBrowseOpenEditor
+  onBrowseOpenEditor,
+  onBrowseLongPressStartEdit
 }: UseBoardNoteDragArgs) {
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -67,6 +72,22 @@ export function useBoardNoteDrag({
   const currentNotePressIdRef = useRef<string | null>(null);
   const pendingSettleRef = useRef<PendingSettle | null>(null);
   const settleFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressNoteIdRef = useRef<string | null>(null);
+  const longPressPointerIdRef = useRef<number | null>(null);
+  const longPressElementRef = useRef<HTMLElement | null>(null);
+  const promotedTouchDragNoteIdRef = useRef<string | null>(null);
+  const suppressNextClickNoteIdRef = useRef<string | null>(null);
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressNoteIdRef.current = null;
+    longPressPointerIdRef.current = null;
+    longPressElementRef.current = null;
+  }, []);
 
   const clearNotePressTracking = useCallback(() => {
     currentNotePressIdRef.current = null;
@@ -81,6 +102,16 @@ export function useBoardNoteDrag({
     setMultiSelectDragOffset({ x: 0, y: 0 });
     dragPointerPosRef.current = null;
   }, []);
+
+  const cancelBrowseLongPress = useCallback(() => {
+    clearLongPressTimer();
+    if (promotedTouchDragNoteIdRef.current) {
+      promotedTouchDragNoteIdRef.current = null;
+      resetDragVisual();
+    }
+  }, [clearLongPressTimer, resetDragVisual]);
+
+  useEffect(() => cancelBrowseLongPress, [cancelBrowseLongPress]);
 
   const clearSettleFallback = useCallback(() => {
     if (settleFallbackTimerRef.current) {
@@ -128,7 +159,7 @@ export function useBoardNoteDrag({
   }, [notes, pendingMatched, clearSettleFallback, resetDragVisual]);
 
   const handleNotePointerDown = useCallback(
-    (e: React.PointerEvent, noteId: string, _note: Note) => {
+    (e: React.PointerEvent, noteId: string, note: Note) => {
       stopAnimations();
       cacheDragRect?.();
 
@@ -147,9 +178,35 @@ export function useBoardNoteDrag({
       if (!workspaceEditMode) {
         e.preventDefault();
         e.stopPropagation();
+        clearLongPressTimer();
+        promotedTouchDragNoteIdRef.current = null;
         currentNotePressIdRef.current = noteId;
         dragPointerPosRef.current = { x: e.clientX, y: e.clientY };
         notePressStartPosRef.current = { x: e.clientX, y: e.clientY };
+
+        // 长按统一支持触屏、鼠标和模拟器；普通单击仍维持原有打开卡片行为。
+        if (e.isPrimary && e.button === 0) {
+          const element = e.currentTarget as HTMLElement;
+          const pointerId = e.pointerId;
+          longPressNoteIdRef.current = noteId;
+          longPressPointerIdRef.current = pointerId;
+          longPressElementRef.current = element;
+          longPressTimerRef.current = setTimeout(() => {
+            if (longPressNoteIdRef.current !== noteId || isZoomingRef.current) return;
+            longPressTimerRef.current = null;
+            longPressNoteIdRef.current = null;
+            promotedTouchDragNoteIdRef.current = noteId;
+            suppressNextClickNoteIdRef.current = noteId;
+            setDraggingNoteId(noteId);
+            setDragOffset({ x: 0, y: 0 });
+            try {
+              longPressElementRef.current?.setPointerCapture(longPressPointerIdRef.current ?? pointerId);
+            } catch {
+              /* pointer may already have ended */
+            }
+            onBrowseLongPressStartEdit(note);
+          }, LONG_PRESS_MS);
+        }
         return;
       }
 
@@ -178,7 +235,9 @@ export function useBoardNoteDrag({
       setIsSelectingNotePosition,
       workspaceEditMode,
       selectedNoteIds,
-      clearSettleFallback
+      clearSettleFallback,
+      clearLongPressTimer,
+      onBrowseLongPressStartEdit
     ]
   );
 
@@ -188,14 +247,19 @@ export function useBoardNoteDrag({
       // settle 等待中不再累加偏移
       if (pendingSettleRef.current) return;
 
-      if (!workspaceEditMode) {
+      const isPromotedTouchDrag = promotedTouchDragNoteIdRef.current !== null;
+      const isEditingDrag = workspaceEditMode || isPromotedTouchDrag;
+
+      if (!isEditingDrag) {
         if (dragPointerPosRef.current && notePressStartPosRef.current) {
           const dx = e.clientX - notePressStartPosRef.current.x;
           const dy = e.clientY - notePressStartPosRef.current.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist > BROWSE_CANCEL_MOVE_PX) {
+            clearLongPressTimer();
             clearNotePressTracking();
           } else {
+            if (dist > LONG_PRESS_CANCEL_MOVE_PX) clearLongPressTimer();
             dragPointerPosRef.current = { x: e.clientX, y: e.clientY };
           }
         }
@@ -228,13 +292,18 @@ export function useBoardNoteDrag({
       transformScale,
       isMultiSelectDragging,
       draggingNoteId,
-      clearNotePressTracking
+      clearNotePressTracking,
+      clearLongPressTimer
     ]
   );
 
   const handleNotePointerUp = useCallback(
     (e: React.PointerEvent, note: Note) => {
-      if (isMultiSelectDragging && !isZoomingRef.current && workspaceEditMode) {
+      clearLongPressTimer();
+      const isPromotedTouchDrag = promotedTouchDragNoteIdRef.current === note.id;
+      const isEditingDrag = workspaceEditMode || isPromotedTouchDrag;
+
+      if (isMultiSelectDragging && !isZoomingRef.current && isEditingDrag) {
         e.stopPropagation();
         try {
           (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -269,6 +338,7 @@ export function useBoardNoteDrag({
         pendingSettleRef.current = { kind: 'multi', expected };
         commitProjectNotes(updated);
         armSettleFallback();
+        promotedTouchDragNoteIdRef.current = null;
         // 保留 multiSelectDragOffset / isMultiSelectDragging 直到 notes 对齐
         return;
       }
@@ -282,7 +352,7 @@ export function useBoardNoteDrag({
       const hasMoved = dragOffset.x !== 0 || dragOffset.y !== 0;
       const hasMovedEnough = movedDistance > EDIT_DRAG_COMMIT_MOVE_PX;
 
-      if (draggingNoteId === note.id && !isZoomingRef.current && workspaceEditMode) {
+      if (draggingNoteId === note.id && !isZoomingRef.current && isEditingDrag) {
         if (hasMoved || hasMovedEnough) {
           e.stopPropagation();
           try {
@@ -314,14 +384,14 @@ export function useBoardNoteDrag({
           };
           onUpdateNote(committed);
           armSettleFallback();
+          promotedTouchDragNoteIdRef.current = null;
           // 保留 draggingNoteId + dragOffset 直到 notes 对齐
           return;
         }
-        setDraggingNoteId(null);
-        setDragOffset({ x: 0, y: 0 });
+        resetDragVisual();
       }
 
-      if (!workspaceEditMode) {
+      if (!isEditingDrag) {
         const wasOnSameNote = currentNotePressIdRef.current === note.id;
         const isShortClick =
           wasOnSameNote &&
@@ -339,6 +409,9 @@ export function useBoardNoteDrag({
         }
       }
 
+      if (isPromotedTouchDrag) {
+        promotedTouchDragNoteIdRef.current = null;
+      }
       clearNotePressTracking();
     },
     [
@@ -357,9 +430,15 @@ export function useBoardNoteDrag({
       clearNotePressTracking,
       isShiftPressed,
       onBrowseOpenEditor,
-      armSettleFallback
+      armSettleFallback,
+      clearLongPressTimer
     ]
   );
+
+  const handleNotePointerCancel = useCallback(() => {
+    cancelBrowseLongPress();
+    clearNotePressTracking();
+  }, [cancelBrowseLongPress, clearNotePressTracking]);
 
   return {
     draggingNoteId,
@@ -369,6 +448,13 @@ export function useBoardNoteDrag({
     handleNotePointerDown,
     handleNotePointerMove,
     handleNotePointerUp,
+    handleNotePointerCancel,
+    cancelBrowseLongPress,
+    consumeSuppressedNoteClick: (noteId: string) => {
+      if (suppressNextClickNoteIdRef.current !== noteId) return false;
+      suppressNextClickNoteIdRef.current = null;
+      return true;
+    },
     clearNotePressTracking,
     currentNotePressIdRef
   };

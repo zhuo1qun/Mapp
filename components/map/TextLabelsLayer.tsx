@@ -153,13 +153,22 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
   const map = useMap();
   const [, bump] = useState(0);
   const rafRef = useRef<number | null>(null);
+  const isGestureZoomingRef = useRef(false);
   const chromeCss = useMemo(
     () => mapChromeSurfaceInlineCss(mapUiChromeOpacity, mapUiChromeBlurPx),
     [mapUiChromeOpacity, mapUiChromeBlurPx]
   );
 
   useMapEvents({
+    zoomstart: () => {
+      isGestureZoomingRef.current = true;
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    },
     zoomend: () => {
+      isGestureZoomingRef.current = false;
       if (map._mappSmoothZooming || map._animatingZoom || map._mappZoomCommitGuard) return;
       bump((n) => n + 1);
     },
@@ -170,7 +179,14 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
     // @ts-expect-error custom event from smoothMapZoom commit
     mappzoomcommitdone: () => bump((n) => n + 1),
     move: () => {
-      if (map._mappSmoothZooming || map._animatingZoom || map._mappZoomCommitGuard) return;
+      if (
+        isGestureZoomingRef.current ||
+        map._mappSmoothZooming ||
+        map._animatingZoom ||
+        map._mappZoomCommitGuard
+      ) {
+        return;
+      }
       if (rafRef.current != null) return;
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;

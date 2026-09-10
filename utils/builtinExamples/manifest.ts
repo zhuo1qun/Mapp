@@ -9,7 +9,8 @@ export type BuiltinExampleManifestEntry = {
 const MANIFEST_URL = '/examples/manifest.json';
 
 export async function fetchBuiltinExamplesManifest(): Promise<BuiltinExampleManifestEntry[]> {
-  const res = await fetch(MANIFEST_URL, { cache: 'no-store' });
+  // 示例清单会随发版更新；要求浏览器先向服务器校验，而不是完全禁止缓存。
+  const res = await fetch(MANIFEST_URL, { cache: 'no-cache' });
   if (!res.ok) return [];
   const data = (await res.json()) as BuiltinExampleManifestEntry[] | { examples?: BuiltinExampleManifestEntry[] };
   const list = Array.isArray(data) ? data : data.examples;
