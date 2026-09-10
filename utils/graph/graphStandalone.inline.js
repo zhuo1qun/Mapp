@@ -480,22 +480,22 @@
     return [...groups.from, ...groups.to];
   }
   function applyGraphNeighborHighlight(cy, centerId, chainLength = 1, allowedEdgeLabelKeys = null) {
+    const centerIds = (!centerId ? [] : typeof centerId === "string" ? [centerId] : [...centerId]).filter((id) => typeof id === "string" && id.length > 0);
+    const centerSet = new Set(centerIds);
     const prevCores = cy.nodes(".focus-core").toArray();
     for (const n of prevCores) {
-      if (centerId && n.id() === centerId) continue;
+      if (centerSet.has(n.id())) continue;
       const w = graphNodeRenderedSizePx(n);
       n.stop(true);
       n.style({ width: w, height: w });
     }
     cy.batch(() => {
       cy.elements().removeClass([...HL]);
-      if (!centerId) return;
-      const el = cy.getElementById(centerId);
-      if (el.empty() || !el.isNode()) return;
+      if (centerIds.length === 0) return;
       const depth = Math.max(1, Math.floor(Number.isFinite(chainLength) ? chainLength : 1));
-      const nodeIds = /* @__PURE__ */ new Set([centerId]);
+      const nodeIds = new Set(centerIds);
       const edgeIds = /* @__PURE__ */ new Set();
-      let frontier = /* @__PURE__ */ new Set([centerId]);
+      let frontier = new Set(centerIds);
       for (let dist = 0; dist < depth; dist += 1) {
         const nextFrontier = /* @__PURE__ */ new Set();
         for (const nodeId of frontier) {
@@ -525,9 +525,12 @@
         frontier = nextFrontier;
         if (frontier.size === 0) break;
       }
-      el.addClass("focus-core");
+      for (const id of centerIds) {
+        const el = cy.getElementById(id);
+        if (!el.empty() && el.isNode()) el.addClass("focus-core");
+      }
       nodeIds.forEach((id) => {
-        if (id === centerId) return;
+        if (centerSet.has(id)) return;
         const n = cy.getElementById(id);
         if (!n.empty() && n.isNode()) n.addClass("focus-nh");
       });
@@ -537,21 +540,19 @@
       });
     });
     applyGraphNodeStackZIndex(cy);
+    const prevCoreIds = new Set(prevCores.map((n) => n.id()));
     for (const n of prevCores) {
-      if (centerId && n.id() === centerId) continue;
+      if (centerSet.has(n.id())) continue;
       animateGraphNodeDiameter(n, graphNodeBaseSizePx(n), false);
     }
-    if (centerId) {
-      const el = cy.getElementById(centerId);
-      if (!el.empty() && el.isNode()) {
-        const alreadyCore = prevCores.some((n) => n.id() === centerId);
-        if (!alreadyCore) {
-          const base = graphNodeBaseSizePx(el);
-          el.stop(true);
-          el.style({ width: base, height: base });
-          animateGraphNodeDiameter(el, graphNodeFocusCoreSizePx(el), true);
-        }
-      }
+    for (const id of centerIds) {
+      const el = cy.getElementById(id);
+      if (el.empty() || !el.isNode()) continue;
+      if (prevCoreIds.has(id)) continue;
+      const base = graphNodeBaseSizePx(el);
+      el.stop(true);
+      el.style({ width: base, height: base });
+      animateGraphNodeDiameter(el, graphNodeFocusCoreSizePx(el), true);
     }
   }
   function applyGraphHoverHighlight(cy, hoverNodeId) {
@@ -734,8 +735,8 @@
         }
         detailHtml = withExternalMarkdownLinks(String(detailHtml));
       }
-      const imgSection = imgs.length > 0 ? `<div class="relative aspect-[4/3] bg-gray-100 flex items-center justify-center shrink-0">
-            <img src="${escapeHtml(imgs[previewImgIdx])}" class="w-full h-full object-cover" alt="" />
+      const imgSection = imgs.length > 0 ? `<div class="relative flex items-center justify-center shrink-0 px-4 py-3 bg-transparent">
+            <img src="${escapeHtml(imgs[previewImgIdx])}" class="w-full max-h-64 object-contain" style="filter:drop-shadow(0 8px 18px rgba(15,23,42,0.28))" alt="" />
             ${imgs.length > 1 ? `<button type="button" class="km-g-prev absolute left-2 p-1.5 bg-black/30 text-white rounded-full">\u2039</button>
                    <button type="button" class="km-g-next absolute right-2 p-1.5 bg-black/30 text-white rounded-full">\u203A</button>` : ""}
           </div>` : "";
@@ -839,6 +840,12 @@
   }
 
   // utils/graph/graphData.ts
+  var DEFAULT_NOTE_WEIGHT = 1;
+  function clampNoteWeight(raw) {
+    const w = Number(raw);
+    if (!Number.isFinite(w) || w <= 0) return DEFAULT_NOTE_WEIGHT;
+    return Math.round(Math.max(0.1, Math.min(10, w)) * 10) / 10;
+  }
   var GRAPH_NODE_SIZE_MAX_PX = 36;
   function graphNodeSizeFromDegree(degree, maxDegree, minSize) {
     const minS = Math.min(GRAPH_NODE_SIZE_MAX_PX, Math.max(1, minSize));
@@ -847,6 +854,11 @@
     const t = Math.max(0, Math.min(1, degree / maxDegree));
     const eased = Math.pow(t, 0.65);
     return Math.round((minS + (maxS - minS) * eased) * 100) / 100;
+  }
+  function graphNodeSizeWithWeight(baseSize, rawWeight) {
+    const weight = clampNoteWeight(rawWeight);
+    const weighted = baseSize + Math.log10(weight) * 8;
+    return Math.round(Math.max(1, Math.min(GRAPH_NODE_SIZE_MAX_PX, weighted)) * 100) / 100;
   }
   var DEFAULT_GRAPH_STYLESHEET_SIZING = {
     nodeSize: 28,
@@ -955,23 +967,24 @@
       {
         selector: "node",
         style: {
-          label: "data(label)",
+          /** 标题由 HTML overlay 绘制；节点 canvas label 只画圆内 Emoji。 */
+          label: "data(emoji)",
           "background-color": "data(color)",
           // 交互命中区域：略外扩，减少贴边时误点到连线
           "bounds-expansion": 4,
-          /** 未选中：与地图 label 未强调态一致的浅灰字，无衬底 */
-          color: "#9ca3af",
-          "text-valign": "bottom",
-          "text-margin-y": z.marginY,
-          "font-size": z.px(z.nf),
-          "font-weight": "600",
+          color: "#111827",
+          "text-valign": "center",
+          "text-halign": "center",
+          "text-margin-y": 0,
+          "font-size": "data(nodeEmojiSize)",
+          "font-family": "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif",
+          "font-weight": "400",
           "line-height": 1,
           width: "data(nodeSize)",
           height: "data(nodeSize)",
           "border-width": z.borderBase,
           "border-color": "#ffffff",
-          /** label 改由 HTML 层绘制，避免节点圆盖住其他节点文字 */
-          "text-opacity": 0,
+          "text-opacity": 1,
           "text-background-opacity": 0,
           "text-border-width": 0,
           /**
@@ -992,8 +1005,7 @@
       {
         selector: 'node[favorite = "yes"]',
         style: {
-          "text-margin-y": z.marginYFav,
-          "font-size": z.px(z.favNf),
+          "font-size": "data(nodeEmojiSizeFav)",
           width: "data(nodeSizeFav)",
           height: "data(nodeSizeFav)",
           "border-width": z.borderBaseFav
@@ -1015,14 +1027,13 @@
           "border-color": z.themeColor
         }
       },
-      /** 与选中点相连：节点描边高亮；label 由 HTML chrome 层绘制（隐藏 canvas 字） */
+      /** 与选中点相连：节点描边高亮；标题由 HTML chrome 层绘制，Emoji 保留在圆内。 */
       {
         selector: "node.focus-nh",
         style: {
           "border-width": z.borderNh,
           "border-color": z.themeColor,
           opacity: 1,
-          "text-opacity": 0,
           "text-background-opacity": 0,
           "text-border-width": 0,
           "z-compound-depth": "top",
@@ -1034,7 +1045,7 @@
         selector: 'node.focus-nh[favorite = "yes"]',
         style: {
           "border-width": z.borderNhFav,
-          "font-size": z.px(z.favNf)
+          "font-size": "data(nodeEmojiSizeFav)"
         }
       },
       /** 选中边时两端便签 */
@@ -1044,7 +1055,6 @@
           "border-width": z.borderNh,
           "border-color": z.themeColor,
           opacity: 1,
-          "text-opacity": 0,
           "text-background-opacity": 0,
           "text-border-width": 0,
           "z-compound-depth": "top",
@@ -1056,20 +1066,19 @@
         selector: 'node.focus-edge-endpoint[favorite = "yes"]',
         style: {
           "border-width": z.borderNhFav,
-          "font-size": z.px(z.favNf)
+          "font-size": "data(nodeEmojiSizeFav)"
         }
       },
-      /** 选中（焦点中心）：label 由 HTML chrome 层绘制 */
+      /** 选中（焦点中心）：标题由 HTML chrome 层绘制，Emoji 随圆放大。 */
       {
         selector: "node.focus-core",
         style: {
           opacity: 1,
           width: "data(nodeSizeCore)",
           height: "data(nodeSizeCore)",
-          "text-margin-y": z.marginYCore,
+          "font-size": "data(nodeEmojiSizeCore)",
           "border-width": z.borderCore,
           "border-color": z.themeColor,
-          "text-opacity": 0,
           "text-background-opacity": 0,
           "text-border-width": 0,
           "z-compound-depth": "top",
@@ -1083,19 +1092,18 @@
           opacity: 1,
           width: "data(nodeSizeFavCore)",
           height: "data(nodeSizeFavCore)",
-          "text-margin-y": z.marginYFavCore,
+          "font-size": "data(nodeEmojiSizeFavCore)",
           "border-width": z.borderCoreFav,
-          "font-size": z.px(z.favNf)
+          "font-weight": "400"
         }
       },
-      /** 悬停节点：label 由 HTML chrome 层绘制 */
+      /** 悬停节点：标题由 HTML chrome 层绘制，Emoji 保留在圆内。 */
       {
         selector: "node.focus-hover",
         style: {
           opacity: 1,
           "border-width": z.borderCore,
           "border-color": z.themeColor,
-          "text-opacity": 0,
           "text-background-opacity": 0,
           "text-border-width": 0,
           "z-compound-depth": "top",
@@ -1108,7 +1116,7 @@
         style: {
           opacity: 1,
           "border-width": z.borderCoreFav,
-          "font-size": z.px(z.favNf)
+          "font-size": "data(nodeEmojiSizeFav)"
         }
       },
       {
@@ -1351,7 +1359,8 @@
     const edgeRelVpTgt = "edge.focus-e.edge-lbl-vp-tgt";
     const edgeSelVpTgt = "edge.focus-edge-hover.edge-lbl-vp-tgt, edge.focus-edge-selected.edge-lbl-vp-tgt";
     cy.style().selector(nodeHi).style({
-      "text-opacity": 0,
+      // Cytoscape 的 node label 现在只承载圆内 Emoji；高亮时仍须保持可见。
+      "text-opacity": 1,
       "text-background-opacity": 0,
       "text-border-width": 0
     }).selector(edgeRel).style({
@@ -1823,15 +1832,23 @@
         cy.nodes().forEach((node) => {
           if (node.hasClass("frame-cluster-halo") || node.hasClass("frame-cluster-label")) return;
           const degree = Number(node.data("linkDegree") ?? 0);
-          const ns = graphNodeSizeFromDegree(
-            Number.isFinite(degree) ? degree : 0,
-            maxDegree,
-            sizing.nodeSize
+          const ns = graphNodeSizeWithWeight(
+            graphNodeSizeFromDegree(
+              Number.isFinite(degree) ? degree : 0,
+              maxDegree,
+              sizing.nodeSize
+            ),
+            node.data("nodeWeight")
           );
           node.data("nodeSize", ns);
           node.data("nodeSizeFav", Math.round(ns * favScale * 100) / 100);
           node.data("nodeSizeCore", Math.round(ns * coreScale * 100) / 100);
           node.data("nodeSizeFavCore", Math.round(ns * favScale * coreScale * 100) / 100);
+          const emojiSize = (diameter) => Math.round(Math.max(9, Math.min(24, diameter * 0.58)) * 100) / 100;
+          node.data("nodeEmojiSize", emojiSize(ns));
+          node.data("nodeEmojiSizeFav", emojiSize(ns * favScale));
+          node.data("nodeEmojiSizeCore", emojiSize(ns * coreScale));
+          node.data("nodeEmojiSizeFavCore", emojiSize(ns * favScale * coreScale));
         });
       });
       applyGraphHighlightLabelScreenSize(cy, sizing, chrome);
@@ -1902,10 +1919,22 @@
             ${slider("st-label", "\u8282\u70B9\u6807\u7B7E\u5B57\u53F7", sizing.labelFontPx, 4, 16, 1, (v) => `${Math.round(v)}px`)}
             ${slider("st-legend", "\u56FE\u4F8B\u5B57\u53F7", legendFontPx, 6, 24, 1, (v) => `${Math.round(v)}px`)}
             ${slider("st-edge-label", "\u8FB9\u6807\u7B7E\u5B57\u53F7", sizing.edgeLabelFontPx, 3, 16, 1, (v) => `${Math.round(v)}px`)}
-            <label class="flex min-w-0 cursor-pointer items-center justify-between gap-3 sm:col-span-2">
-              <span class="text-xs font-medium text-gray-600">\u8FDE\u7EBF\u66F2\u7EBF</span>
-              <input id="st-curve" type="checkbox" class="h-4 w-4 rounded border-gray-200" ${edgeCurve ? "checked" : ""} style="accent-color:${escapeHtml2(themeColor)}" />
-            </label>
+            <div class="flex min-w-0 items-center justify-between gap-3 sm:col-span-2">
+              <span class="text-xs font-medium text-gray-800">\u66F2\u7EBF\u76F8\u8FDE</span>
+              <button
+                type="button"
+                id="st-curve"
+                role="switch"
+                aria-checked="${edgeCurve ? "true" : "false"}"
+                aria-label="\u66F2\u7EBF\u76F8\u8FDE"
+                class="relative h-5 w-9 shrink-0 rounded-full border-0 cursor-pointer transition-colors ${edgeCurve ? "" : "bg-gray-200"}"
+                style="${edgeCurve ? `background-color:${escapeHtml2(themeColor)}` : ""}"
+              >
+                <span
+                  class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${edgeCurve ? "translate-x-4" : "translate-x-0"}"
+                ></span>
+              </button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -1951,9 +1980,11 @@
       bindRange("st-chrome-blur", (v) => {
         chrome = { ...chrome, blurPx: Math.round(Math.max(0, Math.min(24, v))) };
       });
-      panelSettings.querySelector("#st-curve")?.addEventListener("change", (e) => {
-        edgeCurve = e.target.checked;
+      panelSettings.querySelector("#st-curve")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        edgeCurve = !edgeCurve;
         applyStyles();
+        renderSettings();
       });
     }
     btnSettings?.addEventListener("click", (e) => {

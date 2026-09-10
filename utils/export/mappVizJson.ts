@@ -1,5 +1,5 @@
 import type { Connection, Note, Project } from '../../types';
-import { clampConnectionWeight } from '../graph/graphData';
+import { clampConnectionWeight, clampNoteWeight } from '../graph/graphData';
 import { parseNoteContent } from '../../utils';
 import { downloadTextFile } from '../builtinExamples/projectFromExport';
 
@@ -96,8 +96,7 @@ function boardSlot(index: number): { x: number; y: number } {
 function noteLabel(note: Note): string {
   const { title } = parseNoteContent(note.text || '');
   const head = (title || '').split(/[,，]/, 1)[0]?.trim() || '';
-  const withEmoji = `${note.emoji || ''}${head}`.trim();
-  return withEmoji || '便签';
+  return head || '便签';
 }
 
 function hasGeo(note: Note): note is Note & { coords: { lat: number; lng: number } } {
@@ -144,7 +143,7 @@ export function buildMappVizJson(project: Project): MappVizJson {
       x: pos.x,
       y: pos.y,
       size: note.isFavorite ? 1.2 : 1,
-      weight: note.isFavorite ? 1.2 : 1,
+      weight: clampNoteWeight(note.weight ?? (note.isFavorite ? 1.2 : 1)),
       article
     };
 

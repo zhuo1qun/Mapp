@@ -22,6 +22,16 @@ export type GraphEdgeDirection = 'forward' | 'backward' | 'both' | 'none';
 /** 连线权重：未设置或非法时按 1（兼容旧数据） */
 export const DEFAULT_CONNECTION_WEIGHT = 1;
 
+/** 节点视觉权重：未设置或非法时按 1（兼容旧数据） */
+export const DEFAULT_NOTE_WEIGHT = 1;
+
+/** 夹紧节点视觉权重到可用范围（0.1～10） */
+export function clampNoteWeight(raw: unknown): number {
+  const w = Number(raw);
+  if (!Number.isFinite(w) || w <= 0) return DEFAULT_NOTE_WEIGHT;
+  return Math.round(Math.max(0.1, Math.min(10, w)) * 10) / 10;
+}
+
 /** 夹紧连线权重到可用范围（0.1～10） */
 export function clampConnectionWeight(raw: unknown): number {
   const w = Number(raw);
@@ -132,7 +142,8 @@ function graphNoteShortTitle(text: string): string {
 
 function noteLabel(note: Note): string {
   const short = graphNoteShortTitle(note.text || '');
-  const raw = `${note.emoji || ''}${short}`.trim();
+  // Emoji 单独绘制在节点圆内；HTML label 只保留标题文字。
+  const raw = short.trim();
   return raw.length > 48 ? `${raw.slice(0, 45)}…` : raw;
 }
 
@@ -171,12 +182,27 @@ export function graphNodeSizeFromDegree(
   return Math.round((minS + (maxS - minS) * eased) * 100) / 100;
 }
 
+/**
+ * 在关联度尺寸之上叠加节点自身 weight：1 保持原尺寸；0.1 / 10 分别约 -8 / +8px。
+ * 对数映射让 1 附近更容易微调，同时避免高权重过早把所有节点顶到尺寸上限。
+ */
+export function graphNodeSizeWithWeight(baseSize: number, rawWeight: unknown): number {
+  const weight = clampNoteWeight(rawWeight);
+  const weighted = baseSize + Math.log10(weight) * 8;
+  return Math.round(Math.max(1, Math.min(GRAPH_NODE_SIZE_MAX_PX, weighted)) * 100) / 100;
+}
+
+/** 节点圆内 Emoji 字号，随节点直径温和缩放。 */
+function graphNodeEmojiSize(nodeSize: number): number {
+  return Math.round(Math.max(9, Math.min(24, nodeSize * 0.58)) * 100) / 100;
+}
+
 function attachNodeDegreeSizes(
   notes: Note[],
   connections: Connection[],
   noteIds: Set<string>,
   minSize: number
-): Map<string, { degree: number; nodeSize: number }> {
+): Map<string, { degree: number; nodeSize: number; nodeWeight: number }> {
   const adj = new Map<string, Set<string>>();
   for (const id of noteIds) adj.set(id, new Set());
   for (const c of connections) {
@@ -192,12 +218,16 @@ function attachNodeDegreeSizes(
     degrees.set(id, d);
     if (d > maxDegree) maxDegree = d;
   }
-  const out = new Map<string, { degree: number; nodeSize: number }>();
+  const out = new Map<string, { degree: number; nodeSize: number; nodeWeight: number }>();
+  const noteById = new Map(notes.map((note) => [note.id, note]));
   for (const id of noteIds) {
     const degree = degrees.get(id) ?? 0;
+    const nodeWeight = clampNoteWeight(noteById.get(id)?.weight);
+    const degreeSize = graphNodeSizeFromDegree(degree, maxDegree, minSize);
     out.set(id, {
       degree,
-      nodeSize: graphNodeSizeFromDegree(degree, maxDegree, minSize)
+      nodeSize: graphNodeSizeWithWeight(degreeSize, nodeWeight),
+      nodeWeight
     });
   }
   return out;
@@ -326,7 +356,11 @@ export function buildGraphElements(
       const label = yl ? `${main}\u2003\u2003${yl}` : main;
       const sized = degreeSizes.get(note.id) ?? {
         degree: 0,
-        nodeSize: graphNodeSizeFromDegree(0, 0, sizeMin)
+        nodeSize: graphNodeSizeWithWeight(
+          graphNodeSizeFromDegree(0, 0, sizeMin),
+          note.weight
+        ),
+        nodeWeight: clampNoteWeight(note.weight)
       };
       const ns = sized.nodeSize;
       const nsFav = Math.round(ns * favScale * 100) / 100;
@@ -337,6 +371,7 @@ export function buildGraphElements(
         data: {
           id: note.id,
           label,
+          emoji: note.emoji || '',
           fullTitle: parseNoteContent(note.text || '').title || '便签',
           year: yl,
           timeSort: note.startYear != null ? note.startYear : undefined,
@@ -346,10 +381,15 @@ export function buildGraphElements(
           /** 0~1：图中“相对层级(level)”归一化分数（后续在本函数末尾填充） */
           levelNorm: 0,
           linkDegree: sized.degree,
+          nodeWeight: sized.nodeWeight,
           nodeSize: ns,
           nodeSizeFav: nsFav,
           nodeSizeCore: nsCore,
           nodeSizeFavCore: nsFavCore,
+          nodeEmojiSize: graphNodeEmojiSize(ns),
+          nodeEmojiSizeFav: graphNodeEmojiSize(nsFav),
+          nodeEmojiSizeCore: graphNodeEmojiSize(nsCore),
+          nodeEmojiSizeFavCore: graphNodeEmojiSize(nsFavCore),
           /** 图谱「按标签分组」用：无首个标签时归入 GRAPH_UNTAGGED_TAG_GROUP */
           tagGroup,
           /** 全部标签（含 emoji；显隐：任一未隐藏则显示） */
@@ -724,23 +764,24 @@ export function getGraphStylesheet(
     {
       selector: 'node',
       style: {
-        label: 'data(label)',
+        /** 标题由 HTML overlay 绘制；节点 canvas label 只画圆内 Emoji。 */
+        label: 'data(emoji)',
         'background-color': 'data(color)',
         // 交互命中区域：略外扩，减少贴边时误点到连线
         'bounds-expansion': 4,
-        /** 未选中：与地图 label 未强调态一致的浅灰字，无衬底 */
-        color: '#9ca3af',
-        'text-valign': 'bottom',
-        'text-margin-y': z.marginY,
-        'font-size': z.px(z.nf),
-        'font-weight': '600',
+        color: '#111827',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-margin-y': 0,
+        'font-size': 'data(nodeEmojiSize)',
+        'font-family': 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif',
+        'font-weight': '400',
         'line-height': 1,
         width: 'data(nodeSize)',
         height: 'data(nodeSize)',
         'border-width': z.borderBase,
         'border-color': '#ffffff',
-        /** label 改由 HTML 层绘制，避免节点圆盖住其他节点文字 */
-        'text-opacity': 0,
+        'text-opacity': 1,
         'text-background-opacity': 0,
         'text-border-width': 0,
         /**
@@ -761,8 +802,7 @@ export function getGraphStylesheet(
     {
       selector: 'node[favorite = "yes"]',
       style: {
-        'text-margin-y': z.marginYFav,
-        'font-size': z.px(z.favNf),
+        'font-size': 'data(nodeEmojiSizeFav)',
         width: 'data(nodeSizeFav)',
         height: 'data(nodeSizeFav)',
         'border-width': z.borderBaseFav
@@ -784,14 +824,13 @@ export function getGraphStylesheet(
         'border-color': z.themeColor
       }
     },
-    /** 与选中点相连：节点描边高亮；label 由 HTML chrome 层绘制（隐藏 canvas 字） */
+    /** 与选中点相连：节点描边高亮；标题由 HTML chrome 层绘制，Emoji 保留在圆内。 */
     {
       selector: 'node.focus-nh',
       style: {
         'border-width': z.borderNh,
         'border-color': z.themeColor,
         opacity: 1,
-        'text-opacity': 0,
         'text-background-opacity': 0,
         'text-border-width': 0,
         'z-compound-depth': 'top',
@@ -803,7 +842,7 @@ export function getGraphStylesheet(
       selector: 'node.focus-nh[favorite = "yes"]',
       style: {
         'border-width': z.borderNhFav,
-        'font-size': z.px(z.favNf)
+        'font-size': 'data(nodeEmojiSizeFav)'
       }
     },
     /** 选中边时两端便签 */
@@ -813,7 +852,6 @@ export function getGraphStylesheet(
         'border-width': z.borderNh,
         'border-color': z.themeColor,
         opacity: 1,
-        'text-opacity': 0,
         'text-background-opacity': 0,
         'text-border-width': 0,
         'z-compound-depth': 'top',
@@ -825,20 +863,19 @@ export function getGraphStylesheet(
       selector: 'node.focus-edge-endpoint[favorite = "yes"]',
       style: {
         'border-width': z.borderNhFav,
-        'font-size': z.px(z.favNf)
+        'font-size': 'data(nodeEmojiSizeFav)'
       }
     },
-    /** 选中（焦点中心）：label 由 HTML chrome 层绘制 */
+    /** 选中（焦点中心）：标题由 HTML chrome 层绘制，Emoji 随圆放大。 */
     {
       selector: 'node.focus-core',
       style: {
         opacity: 1,
         width: 'data(nodeSizeCore)',
         height: 'data(nodeSizeCore)',
-        'text-margin-y': z.marginYCore,
+        'font-size': 'data(nodeEmojiSizeCore)',
         'border-width': z.borderCore,
         'border-color': z.themeColor,
-        'text-opacity': 0,
         'text-background-opacity': 0,
         'text-border-width': 0,
         'z-compound-depth': 'top',
@@ -852,19 +889,18 @@ export function getGraphStylesheet(
         opacity: 1,
         width: 'data(nodeSizeFavCore)',
         height: 'data(nodeSizeFavCore)',
-        'text-margin-y': z.marginYFavCore,
+        'font-size': 'data(nodeEmojiSizeFavCore)',
         'border-width': z.borderCoreFav,
-        'font-size': z.px(z.favNf)
+        'font-weight': '400'
       }
     },
-    /** 悬停节点：label 由 HTML chrome 层绘制 */
+    /** 悬停节点：标题由 HTML chrome 层绘制，Emoji 保留在圆内。 */
     {
       selector: 'node.focus-hover',
       style: {
         opacity: 1,
         'border-width': z.borderCore,
         'border-color': z.themeColor,
-        'text-opacity': 0,
         'text-background-opacity': 0,
         'text-border-width': 0,
         'z-compound-depth': 'top',
@@ -877,7 +913,7 @@ export function getGraphStylesheet(
       style: {
         opacity: 1,
         'border-width': z.borderCoreFav,
-        'font-size': z.px(z.favNf)
+        'font-size': 'data(nodeEmojiSizeFav)'
       }
     },
     {
@@ -1143,7 +1179,8 @@ export function applyGraphHighlightLabelScreenSize(
   (cy.style() as any)
     .selector(nodeHi)
     .style({
-      'text-opacity': 0,
+      // Cytoscape 的 node label 现在只承载圆内 Emoji；高亮时仍须保持可见。
+      'text-opacity': 1,
       'text-background-opacity': 0,
       'text-border-width': 0
     } as Record<string, string | number>)

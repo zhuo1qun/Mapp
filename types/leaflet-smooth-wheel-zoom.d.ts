@@ -8,7 +8,9 @@ declare module 'leaflet' {
     smoothWheelZoom?: boolean | string;
     smoothSensitivity?: number;
     touchZoomSensitivity?: number;
+    smoothTouchZoom?: boolean;
     smoothZoomInertia?: boolean;
+    smoothTouchZoomInertia?: boolean;
     smoothZoomCenter?: boolean;
   }
 

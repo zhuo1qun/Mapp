@@ -155,6 +155,11 @@ export interface Note {
   fontSize: number; // 1 to 5 scale
   isBold?: boolean;
   isFavorite?: boolean; // 收藏标记
+  /**
+   * 图谱节点自身的视觉权重；未设置时按 1。
+   * 建议范围 0.1～10，越大节点越醒目；与 Connection.weight 相互独立。
+   */
+  weight?: number;
   color?: string; // Background color
   /**
    * 图片资产 ID 列表（`img-…`）。勿再写入 data URL / Blob。

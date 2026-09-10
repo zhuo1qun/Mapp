@@ -19,6 +19,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "@tiptap/pm": "^3.18.0",
     "@tiptap/react": "^3.18.0",
+    "@tiptap/extension-link": "^3.18.0",
     "@tiptap/starter-kit": "^3.18.0",
     "cose-base": "^2.2.0",
     "cytoscape": "^3.33.1",

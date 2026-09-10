@@ -96,6 +96,7 @@
 | `emoji` | string | 可 `""` |
 | `fontSize` | 1–5 | 缺省常按 3 |
 | `createdAt` | number | Unix ms |
+| `weight` | number | 图谱节点视觉权重，建议 `0.1`–`10`，缺省为 `1`；与连线权重独立 |
 
 ### 3.2 常用可选
 

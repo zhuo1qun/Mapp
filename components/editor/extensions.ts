@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import Link from '@tiptap/extension-link';
 import { Markdown } from 'tiptap-markdown';
 
 // Custom extension to handle Feishu-like backspace behavior
@@ -46,9 +47,16 @@ export const EDITOR_EXTENSIONS = [
       levels: [1, 2, 3]
     }
   }),
+  Link.configure({
+    autolink: true,
+    linkOnPaste: true,
+    openOnClick: false,
+    HTMLAttributes: {
+      class: 'text-blue-600 underline underline-offset-2'
+    }
+  }),
   Markdown.configure({
     html: false,
     tightLists: true
   })
 ];
-

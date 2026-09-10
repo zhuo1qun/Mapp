@@ -10,6 +10,7 @@ import {
   GRAPH_FOCUS_CORE_NODE_SCALE,
   GRAPH_NODE_SIZE_MAX_PX,
   graphNodeSizeFromDegree,
+  graphNodeSizeWithWeight,
   type GraphExportPayload,
   type GraphStylesheetChrome,
   type GraphStylesheetSizing
@@ -156,15 +157,24 @@ export function wireStandaloneGraphChrome(
       cy.nodes().forEach((node) => {
         if (node.hasClass('frame-cluster-halo') || node.hasClass('frame-cluster-label')) return;
         const degree = Number(node.data('linkDegree') ?? 0);
-        const ns = graphNodeSizeFromDegree(
-          Number.isFinite(degree) ? degree : 0,
-          maxDegree,
-          sizing.nodeSize
+        const ns = graphNodeSizeWithWeight(
+          graphNodeSizeFromDegree(
+            Number.isFinite(degree) ? degree : 0,
+            maxDegree,
+            sizing.nodeSize
+          ),
+          node.data('nodeWeight')
         );
         node.data('nodeSize', ns);
         node.data('nodeSizeFav', Math.round(ns * favScale * 100) / 100);
         node.data('nodeSizeCore', Math.round(ns * coreScale * 100) / 100);
         node.data('nodeSizeFavCore', Math.round(ns * favScale * coreScale * 100) / 100);
+        const emojiSize = (diameter: number) =>
+          Math.round(Math.max(9, Math.min(24, diameter * 0.58)) * 100) / 100;
+        node.data('nodeEmojiSize', emojiSize(ns));
+        node.data('nodeEmojiSizeFav', emojiSize(ns * favScale));
+        node.data('nodeEmojiSizeCore', emojiSize(ns * coreScale));
+        node.data('nodeEmojiSizeFavCore', emojiSize(ns * favScale * coreScale));
       });
     });
 

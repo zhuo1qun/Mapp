@@ -21,6 +21,9 @@ export function createAppGraphCy(
     container,
     ...defaultUi,
     elements: opts.elements,
-    style: opts.style
+    style: opts.style,
+    /** single：需按住 Shift 才能框选；与 Map/Board Shift 多选语义一致 */
+    selectionType: 'single',
+    boxSelectionEnabled: true
   });
 }

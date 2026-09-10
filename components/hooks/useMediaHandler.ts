@@ -18,6 +18,8 @@ interface UseMediaHandlerArgs {
   text: string;
   setText: (text: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  /** 富文本编辑器中，图文混合粘贴时将文字写回当前选区。 */
+  insertTextAtSelection?: (text: string) => void;
 }
 
 async function ensureAssetIdForKind(
@@ -45,7 +47,14 @@ function buildInitialMedia(note?: Partial<Note>): NoteMediaItem[] {
   return ensureNoteMediaSynced(note as Note).media || [];
 }
 
-export function useMediaHandler({ initialNote, isOpen, text, setText, textareaRef }: UseMediaHandlerArgs) {
+export function useMediaHandler({
+  initialNote,
+  isOpen,
+  text,
+  setText,
+  textareaRef,
+  insertTextAtSelection
+}: UseMediaHandlerArgs) {
   const [mediaItems, setMediaItems] = useState<NoteMediaItem[]>(() => buildInitialMedia(initialNote));
   const [displaySrcs, setDisplaySrcs] = useState<string[]>(() =>
     buildInitialMedia(initialNote).map(() => '')
@@ -473,7 +482,8 @@ export function useMediaHandler({ initialNote, isOpen, text, setText, textareaRe
   }, [appendDisplayImages]);
 
   const handlePaste = useCallback(
-    async (e: React.ClipboardEvent) => {
+    async (e: { clipboardData: DataTransfer | null; preventDefault: () => void }) => {
+      if (!e.clipboardData) return;
       const items = Array.from(e.clipboardData.items) as DataTransferItem[];
       const imageItems = items.filter((item) => item.type.startsWith('image/'));
       const textData = e.clipboardData.getData('text/plain');
@@ -482,7 +492,9 @@ export function useMediaHandler({ initialNote, isOpen, text, setText, textareaRe
         e.preventDefault();
         setIsProcessingImages(true);
         try {
-          if (textData && textareaRef.current) {
+          if (textData && insertTextAtSelection) {
+            insertTextAtSelection(textData);
+          } else if (textData && textareaRef.current) {
             const start = textareaRef.current.selectionStart;
             const end = textareaRef.current.selectionEnd;
             const newText = text.substring(0, start) + textData + text.substring(end);
@@ -506,7 +518,7 @@ export function useMediaHandler({ initialNote, isOpen, text, setText, textareaRe
         }
       }
     },
-    [setText, text, textareaRef, appendDisplayImages]
+    [setText, text, textareaRef, insertTextAtSelection, appendDisplayImages]
   );
 
   const handleDropImages = useCallback(

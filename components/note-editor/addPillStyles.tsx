@@ -8,7 +8,7 @@ export const NOTE_EDITOR_ADD_PILL_ACTIVE =
   'text-gray-700 bg-black/[0.08]';
 
 export const NOTE_EDITOR_ADD_PILL_IDLE =
-  'text-gray-400 hover:text-gray-600 hover:bg-black/5';
+  'text-gray-700 hover:text-gray-900 hover:bg-black/5';
 
 /** 默认折叠文案；hover / active / focus-visible / expanded 时展开 */
 export function NoteEditorAddPillLabel({

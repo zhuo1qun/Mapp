@@ -24,7 +24,7 @@ export const MetadataSection: React.FC<MetadataSectionProps> = ({
   if (!hasMeta && !(showDelete && onDeleteNote)) return null;
 
   return (
-    <section className="shrink-0 border-t border-gray-100/80" aria-label="更多">
+    <section className="shrink-0 border-t border-gray-400/50" aria-label="更多">
       <div className="px-4 py-2 flex items-center gap-2">
         <button
           type="button"
@@ -50,7 +50,7 @@ export const MetadataSection: React.FC<MetadataSectionProps> = ({
               onDismissOverlays?.();
               onDeleteNote();
             }}
-            className="shrink-0 rounded-full p-2 min-h-9 min-w-9 inline-flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 active:scale-95 transition-colors border-0 cursor-pointer"
+            className="shrink-0 rounded-full p-2 min-h-9 min-w-9 inline-flex items-center justify-center text-gray-700 hover:text-red-600 hover:bg-red-50 active:scale-95 transition-colors border-0 cursor-pointer"
             title="删除便签"
           >
             <Trash2 size={20} strokeWidth={2} />

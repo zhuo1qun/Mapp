@@ -15,6 +15,7 @@ const INERTIA_FRICTION = 0.94;
 const IMPULSE_EMA = 0.45;
 const MAX_IMPULSE_DT_MS = 80;
 const MAX_COAST_VELOCITY = 0.02;
+const SMOOTH_ZOOM_CONTAINER_CLASS = 'mapp-smooth-zooming';
 
 L.Map.mergeOptions({
   smoothMapZoom: false,
@@ -22,7 +23,13 @@ L.Map.mergeOptions({
   smoothWheelZoom: false,
   smoothSensitivity: 1.5,
   touchZoomSensitivity: undefined,
+  // Touch devices use Leaflet's native handler by default. The custom handler
+  // stays available for environments that need it (for example, touch laptops).
+  smoothTouchZoom: true,
   smoothZoomInertia: true,
+  // Touch input already has a natural physical stopping point. Coasting after
+  // touchend makes a small pinch cross into the next tile zoom unexpectedly.
+  smoothTouchZoomInertia: false,
   smoothZoomCenter: false
 });
 
@@ -71,7 +78,9 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     if (this._map.touchZoom) this._map.touchZoom.disable();
 
     L.DomEvent.on(this._map._container, 'wheel', this._onWheel, this);
-    L.DomEvent.on(this._map._container, 'touchstart', this._onTouchStart, this);
+    if (this._map.options.smoothTouchZoom !== false) {
+      L.DomEvent.on(this._map._container, 'touchstart', this._onTouchStart, this);
+    }
   },
 
   removeHooks: function () {
@@ -108,6 +117,7 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     if (map._mapPane) {
       L.DomUtil.addClass(map._mapPane, 'leaflet-zoom-anim');
     }
+    L.DomUtil.addClass(map.getContainer(), SMOOTH_ZOOM_CONTAINER_CLASS);
     map._moveStart(true, false);
 
     this._raf = requestAnimationFrame(this._tick.bind(this));
@@ -142,6 +152,7 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     if (map._mapPane) {
       L.DomUtil.removeClass(map._mapPane, 'leaflet-zoom-anim');
     }
+    L.DomUtil.removeClass(map.getContainer(), SMOOTH_ZOOM_CONTAINER_CLASS);
     map._animatingZoom = false;
   },
 
@@ -205,8 +216,11 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     this._lastImpulseAt = now;
   },
 
-  _beginCoast: function () {
-    if (!this._map.options.smoothZoomInertia) {
+  _beginCoast: function (fromTouch) {
+    if (
+      !this._map.options.smoothZoomInertia ||
+      (fromTouch && this._map.options.smoothTouchZoomInertia !== true)
+    ) {
       this._velocity = 0;
     } else if (Math.abs(this._velocity) < VELOCITY_EPS) {
       this._velocity = 0;
@@ -255,7 +269,7 @@ L.Map.SmoothMapZoom = L.Handler.extend({
 
   _onWheelIdle: function () {
     this._wheeling = false;
-    this._beginCoast();
+    this._beginCoast(false);
   },
 
   // —— pinch ——
@@ -311,7 +325,7 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     if (e.touches && e.touches.length >= 2) return;
     this._pinching = false;
     this._unbindDocTouch();
-    this._beginCoast();
+    this._beginCoast(true);
   },
 
   _unbindDocTouch: function () {
@@ -357,8 +371,11 @@ L.Map.SmoothMapZoom = L.Handler.extend({
       noUpdate: true
     });
 
-    // Keep internal center/zoom in sync without firing zoom/move (avoids React remounts).
-    map._move(this._center, this._visualZoom, { pinch: true }, true);
+    // Keep internal center/zoom in sync without firing zoom/move. Passing
+    // `{ pinch: true }` here looks harmless, but Leaflet deliberately emits a
+    // `zoom` event for pinch updates even with events suppressed; that makes
+    // GridLayer reconsider tile levels on every touch frame.
+    map._move(this._center, this._visualZoom, undefined, true);
 
     var settled =
       !this._pinching &&

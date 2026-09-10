@@ -63,6 +63,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [navSheetOpen, setNavSheetOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const richPasteHandlerRef = useRef<(event: ClipboardEvent) => void>(() => {});
 
   const [startYear, setStartYear] = useState<number | undefined>(initialNote?.startYear);
   const [endYear, setEndYear] = useState<number | undefined>(initialNote?.endYear);
@@ -75,7 +76,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     setText,
     setIsFavorite,
     setTags,
-    setIsPreviewMode,
     setIsAddingTag,
     setEditingTagId,
     setNewTagLabel,
@@ -103,8 +103,19 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const { editor } = useTiptapEditor({
     noteId: initialNote?.id,
     content: text,
-    onMarkdownChange: setText
+    onMarkdownChange: setText,
+    onImagePaste: (event) => richPasteHandlerRef.current(event)
   });
+
+  const insertTextAtEditorSelection = useCallback(
+    (value: string) => {
+      if (!value || !editor) return;
+      const { from, to } = editor.state.selection;
+      editor.view.dispatch(editor.state.tr.insertText(value, from, to).scrollIntoView());
+      editor.commands.focus();
+    },
+    [editor]
+  );
 
   const color = '#FFFFFF';
 
@@ -134,7 +145,15 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     setPreviewImage,
     previewImageIndex,
     setPreviewImageIndex
-  } = useMediaHandler({ initialNote, isOpen, text, setText, textareaRef });
+  } = useMediaHandler({
+    initialNote,
+    isOpen,
+    text,
+    setText,
+    textareaRef,
+    insertTextAtSelection: insertTextAtEditorSelection
+  });
+  richPasteHandlerRef.current = handlePaste;
 
   const [isSketching, setIsSketching] = useState(false);
   const [lassoIndex, setLassoIndex] = useState<number | null>(null);
@@ -493,7 +512,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
   return (
     <div
-      className="fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto"
+      className="note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto"
       onPointerDown={(e) => e.stopPropagation()}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
@@ -510,12 +529,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         style={{ ...MODAL_BACKDROP_MASK_STYLE, zIndex: 5 }}
       />
 
-      <div className="relative z-10 flex flex-col items-end">
+      <div className="note-editor-shell relative z-10 flex flex-col items-end">
         <MotionDiv
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className={`w-[500px] max-w-[min(95%,calc(100%-2rem))] flex flex-col relative transition-colors duration-300 max-h-[90vh] max-h-[90dvh] min-h-[300px] rounded-2xl border border-gray-100/80 ${panelChromeStyle ? '' : 'bg-white'} ${isSketching ? 'min-h-[500px]' : ''}`}
+          className={`note-editor-panel w-[500px] max-w-[min(95%,calc(100%-2rem))] flex flex-col relative transition-colors duration-300 max-h-[90vh] max-h-[90dvh] min-h-[300px] rounded-2xl border border-gray-100/80 ${panelChromeStyle ? '' : 'bg-white'} ${isSketching ? 'min-h-[500px]' : ''}`}
           style={{
             ...(panelChromeStyle || {}),
             boxShadow: '0 25px 50px 12px rgba(0, 0, 0, 0.15)',
@@ -543,12 +562,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           <div className={`flex flex-col flex-1 h-full min-h-0 ${isSketching ? 'invisible' : ''}`} style={{ zIndex: 10 }}>
             <NoteHeader
               themeColor={themeColor}
-              panelChromeStyle={panelChromeStyle}
-              isPreviewMode={isPreviewMode}
-              onSetPreviewMode={(preview) => {
-                dismissOverlays();
-                setIsPreviewMode(preview);
-              }}
+              title={displayTitle}
               isFavorite={isFavorite}
               onToggleFavorite={() => {
                 dismissOverlays();
@@ -593,7 +607,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 dismissOverlays();
                 handleSave();
               }}
-              centerSlot={null}
             />
 
             {isProcessingImages && (
@@ -604,7 +617,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             )}
 
             <ContentSection
-              displayTitle={displayTitle}
               isPreviewMode={isPreviewMode}
               text={text}
               onTextChange={setText}

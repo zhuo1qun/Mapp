@@ -3,7 +3,6 @@ import type { Editor } from '@tiptap/core';
 import { EditorArea } from './EditorArea';
 
 interface ContentSectionProps {
-  displayTitle?: string;
   isPreviewMode: boolean;
   text: string;
   onTextChange: (value: string) => void;
@@ -16,9 +15,8 @@ interface ContentSectionProps {
   themeColor: string;
 }
 
-/** Content：正文 Markdown；displayTitle 仅派生展示 */
+/** Content：正文 Markdown（标题由卡片左上角统一展示）。 */
 export const ContentSection: React.FC<ContentSectionProps> = ({
-  displayTitle,
   isPreviewMode,
   text,
   onTextChange,
@@ -31,13 +29,6 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
   themeColor
 }) => (
   <section className="flex flex-col flex-1 min-h-0" aria-label="正文">
-    {displayTitle ? (
-      <div className="px-4 pt-1 pb-0 shrink-0">
-        <div className="text-[11px] font-medium text-gray-400 truncate" title={displayTitle}>
-          {displayTitle}
-        </div>
-      </div>
-    ) : null}
     <EditorArea
       isPreviewMode={isPreviewMode}
       text={text}

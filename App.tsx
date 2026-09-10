@@ -1506,23 +1506,35 @@ export default function App() {
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-gray-50">
         <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-row bg-gray-50">
+          <AnimatePresence initial={false}>
             {showDockedProjectSidebar && (
               <MotionDiv
+                key="docked-project-sidebar"
                 className="relative z-[1990] h-full min-h-0 shrink-0 overflow-visible shadow-2xl"
                 style={{
                   borderRightWidth: projectSidebarIsFullWidth ? 0 : 1,
                   borderRightStyle: 'solid',
                   borderRightColor: themeColor,
-                  willChange: 'width',
+                  willChange: 'width, transform, opacity',
                   boxShadow: projectSidebarIsFullWidth ? 'none' : undefined
                 }}
-                initial={false}
-                animate={{ width: projectSidebarDrawerWidthPx }}
+                initial={{ width: 0, x: '-100%', opacity: 0 }}
+                animate={{ width: projectSidebarDrawerWidthPx, x: 0, opacity: 1 }}
+                exit={{ width: 0, x: '-100%', opacity: 0 }}
                 transition={{
                   width: {
                     type: 'tween',
                     duration: PROJECT_OPEN_SLIDE_DURATION_S,
                     ease: PROJECT_OPEN_SLIDE_EASE
+                  },
+                  x: {
+                    type: 'tween',
+                    duration: PROJECT_OPEN_SLIDE_DURATION_S,
+                    ease: PROJECT_OPEN_SLIDE_EASE
+                  },
+                  opacity: {
+                    duration: PROJECT_OPEN_OVERLAY_FADE_S,
+                    ease: 'easeOut'
                   }
                 }}
               >
@@ -1596,6 +1608,7 @@ export default function App() {
                 />
               </MotionDiv>
             )}
+          </AnimatePresence>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <AnimatePresence>
       {isSidebarOpen && isUIVisible && !sidebarDockedInline && (

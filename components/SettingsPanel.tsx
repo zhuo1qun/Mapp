@@ -244,36 +244,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           </button>
         </div>
 
-        {settingsContextView === 'map' ? (
-          <div className="shrink-0 border-b border-gray-200/60 px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <span className="shrink-0 text-xs font-medium text-gray-600">底图背景</span>
-              <button
-                ref={mapBgTriggerRef}
-                type="button"
-                aria-expanded={mapBgMenuOpen}
-                aria-haspopup="listbox"
-                onClick={() => setMapBgMenuOpen((o) => !o)}
-                className="min-w-0 flex flex-1 items-center justify-between gap-2 rounded-lg border border-gray-200/70 bg-white/60 px-2.5 py-1.5 text-left text-xs text-gray-900 shadow-sm transition-colors hover:bg-white/90"
-              >
-                <span className="truncate">{currentMapStyleLabel}</span>
-                <ChevronDown
-                  size={16}
-                  className={`shrink-0 text-gray-500 transition-transform ${mapBgMenuOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 theme-surface-scrollbar">
           {settingsContextView === 'map' ? (
             <div className="flex flex-col gap-3">
-              <div className="flex items-start gap-1.5 text-xs text-gray-500">
-                <span className="mt-0.5 shrink-0 text-gray-700">{viewMeta.icon}</span>
-                <HelpHint>
-                  底图请在上方「底图背景」中选择；此处为地图上的图钉与文字标签大小，以及标记聚合距离。
-                </HelpHint>
+              <div className="flex items-center gap-2">
+                <span className="shrink-0 text-xs font-medium text-gray-600">底图背景</span>
+                <button
+                  ref={mapBgTriggerRef}
+                  type="button"
+                  aria-expanded={mapBgMenuOpen}
+                  aria-haspopup="listbox"
+                  onClick={() => setMapBgMenuOpen((o) => !o)}
+                  className="min-w-0 flex flex-1 items-center justify-between gap-2 rounded-lg border border-gray-200/70 bg-white/60 px-2.5 py-1.5 text-left text-xs text-gray-900 shadow-sm transition-colors hover:bg-white/90"
+                >
+                  <span className="truncate">{currentMapStyleLabel}</span>
+                  <ChevronDown
+                    size={16}
+                    className={`shrink-0 text-gray-500 transition-transform ${mapBgMenuOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
               </div>
               {showTextLabels !== undefined && onShowTextLabelsChange ? (
                 <SettingsToggleSwitch

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useEditor } from '@tiptap/react';
 import type { Editor } from '@tiptap/core';
 import { EDITOR_EXTENSIONS } from '../editor/extensions';
@@ -7,9 +7,14 @@ interface UseTiptapEditorArgs {
   noteId?: string;
   content: string;
   onMarkdownChange: (markdown: string) => void;
+  /** 图片粘贴需在 ProseMirror 处理前接管；文字由调用方插回当前选区。 */
+  onImagePaste?: (event: ClipboardEvent) => void;
 }
 
-export function useTiptapEditor({ noteId, content, onMarkdownChange }: UseTiptapEditorArgs) {
+export function useTiptapEditor({ noteId, content, onMarkdownChange, onImagePaste }: UseTiptapEditorArgs) {
+  const onImagePasteRef = useRef(onImagePaste);
+  onImagePasteRef.current = onImagePaste;
+
   const editor = useEditor({
     extensions: EDITOR_EXTENSIONS,
     content,
@@ -19,6 +24,14 @@ export function useTiptapEditor({ noteId, content, onMarkdownChange }: UseTiptap
       onMarkdownChange(markdown);
     },
     editorProps: {
+      handlePaste: (_view, event) => {
+        const hasImage = Array.from(event.clipboardData?.items || []).some((item) =>
+          item.type.startsWith('image/')
+        );
+        if (!hasImage) return false;
+        onImagePasteRef.current?.(event);
+        return true;
+      },
       attributes: {
         class:
           'prose cursor-text focus:outline-none min-h-[300px] p-0 text-[1.05rem] text-gray-800 leading-relaxed max-w-none tiptap-editor'
@@ -40,4 +53,3 @@ export function useTiptapEditor({ noteId, content, onMarkdownChange }: UseTiptap
 
   return { editor: editor as Editor | null };
 }
-

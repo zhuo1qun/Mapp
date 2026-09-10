@@ -49,9 +49,13 @@ export const compressImageFromBase64 = (base64: string, maxWidth: number = 1920,
         return;
       }
 
-      // Draw and compress
+      // PNG / WebP 可能包含 alpha；输出 JPEG 会把透明像素合成为黑色。
+      // 此处统一输出 PNG，以保留透明通道。
       ctx.drawImage(img, 0, 0, width, height);
-      const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+      const preservesAlpha = /^data:image\/(png|webp|gif);/i.test(base64);
+      const compressedDataUrl = preservesAlpha
+        ? canvas.toDataURL('image/png')
+        : canvas.toDataURL('image/jpeg', quality);
       resolve(compressedDataUrl);
     };
     img.onerror = (error) => reject(error);
@@ -184,9 +188,12 @@ export const compressImage = (file: File, maxWidth: number = 1920, maxHeight: nu
             return;
           }
 
-          // Draw and compress
+          // PNG / WebP / GIF 均可能有透明通道，不能编码成 JPEG。
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          const preservesAlpha = /image\/(png|webp|gif)/i.test(processedFile.type);
+          const compressedDataUrl = preservesAlpha
+            ? canvas.toDataURL('image/png')
+            : canvas.toDataURL('image/jpeg', quality);
           resolve(compressedDataUrl);
         };
         img.onerror = (error) => reject(error);

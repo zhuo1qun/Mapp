@@ -26,6 +26,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   const [selectedCategory, setSelectedCategory] =
     useState<keyof typeof EMOJI_CATEGORIES>('Recent');
   const categoryTabsRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -33,12 +34,15 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   const updatePlacement = useCallback(() => {
     const el = anchorRef.current;
     if (!el) return;
-    setPosition(
-      computeAnchoredPanelPlacement(el.getBoundingClientRect(), {
-        panelWidth: EMOJI_PICKER_EST_W,
-        panelHeight: EMOJI_PICKER_EST_H,
-        align: 'end'
-      })
+    // 首次打开使用估算值；已渲染后用实际尺寸重新锚定，避免面板偏移。
+    const panelRect = panelRef.current?.getBoundingClientRect();
+    const next = computeAnchoredPanelPlacement(el.getBoundingClientRect(), {
+      panelWidth: panelRect?.width || EMOJI_PICKER_EST_W,
+      panelHeight: panelRect?.height || EMOJI_PICKER_EST_H,
+      align: 'end'
+    });
+    setPosition((current) =>
+      current?.left === next.left && current.top === next.top ? current : next
     );
   }, [anchorRef]);
 
@@ -60,6 +64,18 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
       window.removeEventListener('scroll', onReposition, true);
     };
   }, [isOpen, updatePlacement]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !position || !panelRef.current) return;
+    const panel = panelRef.current;
+    const reposition = () => updatePlacement();
+    reposition();
+    const observer = new ResizeObserver(reposition);
+    observer.observe(panel);
+    // Emoji 按钮在打开时会展开标签；同时观察锚点，跟随这段过渡后的新位置。
+    if (anchorRef.current) observer.observe(anchorRef.current);
+    return () => observer.disconnect();
+  }, [anchorRef, isOpen, position, updatePlacement]);
 
   const checkScrollPosition = () => {
     if (!categoryTabsRef.current) return;
@@ -106,6 +122,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
     <>
       <div className="fixed inset-0" style={{ zIndex: 9999 }} onClick={onClose} />
       <div
+        ref={panelRef}
         className={`fixed rounded-xl border border-gray-100/80 shadow-lg overflow-hidden ${
           panelChromeStyle ? '' : 'bg-white'
         }`}

@@ -76,6 +76,17 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+/** Keep required basemap credits while removing Leaflet's non-essential UI prefix. */
+const MapAttributionPrefix: React.FC = () => {
+  const map = useMap();
+
+  useEffect(() => {
+    map.attributionControl?.setPrefix(false);
+  }, [map]);
+
+  return null;
+};
+
 interface MapViewProps {
   project: Project;
   onAddNote: (note: Note) => void;
@@ -1015,6 +1026,8 @@ export const MapView: React.FC<MapViewProps> = ({
     // 若点击的是展开的 label（或 label 组），不要清空选择，让 TextLabelsLayer 的 onSelectNote 处理
     const target = e.originalEvent?.target as HTMLElement;
     if (
+      // 详情卡现在与地图按钮共用 MapContainer 内的布局壳；卡片及其按钮点击不是地图空白点击。
+      target?.closest?.('.mapping-preview-selectable') ||
       target?.closest?.('.pre-selected-labels-container') ||
       target?.closest?.('.pre-selected-label-item') ||
       // Clicking a pin should not clear selection (otherwise label may show but edit button won't).
@@ -1213,7 +1226,15 @@ export const MapView: React.FC<MapViewProps> = ({
         doubleClickZoom={false}
         boxZoom={false}
       >
-        <MapSmoothZoom sensitivity={1.5} inertia />
+        <MapAttributionPrefix />
+        <MapSmoothZoom
+          sensitivity={1.5}
+          // Touch-first devices use Leaflet's native pinch handler; wheel zoom
+          // keeps its existing quicker, inertial desktop behaviour.
+          touchSensitivity={1}
+          inertia
+          touchInertia={false}
+        />
         <MapWorldMinZoom />
         <MapNavigationHandler coords={navigateToCoords} onComplete={onNavigateComplete} />
         <MapPositionTracker onPositionChange={handleMapPositionChange} />
@@ -1234,7 +1255,11 @@ export const MapView: React.FC<MapViewProps> = ({
           tileSize={256}
           zoomOffset={0}
           updateWhenZooming={false}
-          keepBuffer={4}
+          // Do not discard the visible tile neighbourhood during a touch pan.
+          // This makes the just-loaded map remain available while the next
+          // zoom level is fetched on slower mobile networks.
+          updateWhenIdle
+          keepBuffer={6}
         />
         
         <MapLongPressHandler onLongPress={handleLongPress} isPreviewMode={!isUIVisible} />
@@ -1483,7 +1508,7 @@ export const MapView: React.FC<MapViewProps> = ({
         {isUIVisible && (
           <div
             data-allow-context-menu
-            className={`fixed top-2 sm:top-4 ui-workspace-left z-[500] flex flex-col gap-2 pointer-events-none ${
+            className={`fixed top-2 sm:top-4 ui-workspace-left z-[1000] flex flex-col items-start gap-2 sm:gap-3 pointer-events-none ${
               isMapToolbarEditMode
                 ? 'right-2 sm:right-4 lg:right-[calc(20rem+0.75rem)]'
                 : 'right-2 sm:right-4'
@@ -1590,7 +1615,19 @@ export const MapView: React.FC<MapViewProps> = ({
                 </div>
               </div>
 
-          </div>
+              {/* 与按钮行共用定位容器：按钮在窄屏重排或高度变化时，详情卡自然跟随其下。 */}
+              {!isMapToolbarEditMode && !isEditorOpen && selectedNote ? (
+                <NotePreviewCard
+                  embedded
+                  note={selectedNote}
+                  currentImageIndex={currentPreviewImageIndex}
+                  onImageIndexChange={setCurrentPreviewImageIndex}
+                  chromeSurfaceStyle={mapChromeSurface}
+                  themeColor={themeColor}
+                  onOpenEditor={handleEditNoteFromLabel}
+                />
+              ) : null}
+            </div>
         )}
 
         <div className="absolute top-24 left-0 right-0 z-[400] pointer-events-none flex justify-center">
@@ -1674,16 +1711,14 @@ export const MapView: React.FC<MapViewProps> = ({
         />
       )}
 
-      {/* 非编辑 / Tab 预览：选中点详情卡（与 Graph 同款，含编辑铅笔） */}
-      {((isUIVisible && !isMapToolbarEditMode && !isEditorOpen && selectedNote) ||
-        (!isUIVisible && (hoveredNote ?? selectedNote))) && (
+      {/* Tab 预览没有左上按钮组，继续使用独立 fixed 详情卡。 */}
+      {!isUIVisible && (hoveredNote ?? selectedNote) && (
         <NotePreviewCard
-          note={(isUIVisible ? selectedNote : hoveredNote ?? selectedNote)!}
+          note={(hoveredNote ?? selectedNote)!}
           currentImageIndex={currentPreviewImageIndex}
           onImageIndexChange={setCurrentPreviewImageIndex}
           chromeSurfaceStyle={mapChromeSurface}
           themeColor={themeColor}
-          onOpenEditor={isUIVisible ? handleEditNoteFromLabel : undefined}
         />
       )}
 

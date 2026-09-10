@@ -55,7 +55,6 @@ import {
   isFrameClusterBasis,
   normalizeGraphClusterBasis,
   buildGraphNodeColorLegendItems,
-  resolveNoteClusterGroupKey,
   type GraphNodeColorLegendItem
 } from '../utils/graph/graphClusterBasis';
 import {
@@ -74,7 +73,7 @@ import { GraphConnectionPanel, connectionToPanelDraft, type ConnectionDraft } fr
 import { GraphHighlightChromeLabels } from './graph/GraphHighlightChromeLabels';
 import { GraphRelatedHighlightPanel } from './graph/GraphRelatedHighlightPanel';
 import { applyWorkspaceRightEdgeForInspector } from '../utils/ui/chromeMenuPosition';
-import { EditInspectorPanel } from './map/overlays/MapEditInspectorPanel';
+import { AnimatedEditInspectorPanel } from './editInspector/EditInspectorProvider';
 import { GraphTopLeftToolbar } from './graph/GraphTopLeftToolbar';
 import { GraphTopCenterConnectionButton } from './graph/GraphTopCenterConnectionButton';
 import { GraphTopRightToolbar } from './graph/GraphTopRightToolbar';
@@ -153,9 +152,6 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [presetLegendOverride, setPresetLegendOverride] = useState<GraphNodeColorLegendItem[] | null>(
     null
   );
-  const graphTopLeftChromeRef = useRef<HTMLDivElement>(null);
-  /** 详情 / 关联面板 top：避开左上角按钮与已展开面板 */
-  const [previewOffsetTopPx, setPreviewOffsetTopPx] = useState(64);
   const isGraphToolbarEditMode = workspaceEditMode;
 
   useEffect(() => {
@@ -178,6 +174,12 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const noteByIdRef = useRef<Map<string, Note>>(new Map());
   const connectionsRef = useRef<Connection[]>([]);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  /** Shift 多选集合；普通单击时与 focusedNodeId 同步为单元素 */
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  selectedNodeIdsRef.current = selectedNodeIds;
+  /** 框选结束后吞掉紧随其后的背景 tap，避免清空多选 */
+  const ignoreNextGraphBgTapRef = useRef(false);
   const [hoveredNote, setHoveredNote] = useState<Note | null>(null);
   const [chainLength, setChainLength] = useState<number>(1);
   const chainLengthRef = useRef<number>(1);
@@ -322,6 +324,12 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const timeClusterLayers = isFrameClusterBasis(clusterBasis)
     ? mergedFrameGraphLayers
     : mergedTagGraphLayers;
+  /**
+   * 普通便签编辑会让 merged layer 对象换引用；布局 effect 必须读 ref，不能把对象身份
+   * 当作“布局参数已变”，否则改标题 / Emoji / Weight 也会重跑时间线。
+   */
+  const timeClusterLayersRef = useRef(timeClusterLayers);
+  timeClusterLayersRef.current = timeClusterLayers;
 
   const timeLayoutOpts = useMemo(
     (): GraphTimeLayoutOptions => ({
@@ -401,11 +409,6 @@ export const GraphView: React.FC<GraphViewProps> = ({
     [onUpdateProject, project]
   );
 
-  const graphLayersHiddenKey = useMemo(
-    () => timeClusterLayers.hidden.slice().sort().join('\u0001'),
-    [timeClusterLayers.hidden]
-  );
-
   const graphLayersOrderKey = useMemo(
     () => (timeClusterLayers.order ?? []).join('\u0001'),
     [timeClusterLayers.order]
@@ -414,11 +417,6 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const tagGraphLayersHiddenKey = useMemo(
     () => mergedTagGraphLayers.hidden.slice().sort().join('\u0001'),
     [mergedTagGraphLayers.hidden]
-  );
-
-  const tagGraphLayersOrderKey = useMemo(
-    () => (mergedTagGraphLayers.order ?? []).join('\u0001'),
-    [mergedTagGraphLayers.order]
   );
 
   const tagGraphLayersWeightsKey = useMemo(
@@ -435,20 +433,19 @@ export const GraphView: React.FC<GraphViewProps> = ({
     [mergedFrameGraphLayers.hidden]
   );
 
-  const frameGraphLayersOrderKey = useMemo(
-    () => (mergedFrameGraphLayers.order ?? []).join('\u0001'),
-    [mergedFrameGraphLayers.order]
+  const frameGraphLayersWeightsKey = useMemo(
+    () =>
+      Object.entries(mergedFrameGraphLayers.weights ?? {})
+        .sort(([a], [b]) => a.localeCompare(b, 'zh-Hans-CN'))
+        .map(([k, v]) => `${k}:${v}`)
+        .join('\u0001'),
+    [mergedFrameGraphLayers.weights]
   );
 
-  /** 首标签 / 簇归属变化时重跑时间线分层 */
-  const notesClusterKeySig = useMemo(
-    () =>
-      notes
-        .map((n) => `${n.id}:${resolveNoteClusterGroupKey(n, clusterBasis)}`)
-        .sort()
-        .join('\u0001'),
-    [notes, clusterBasis]
-  );
+  /** 只有当前时间线分层的顺序 / 权重发生变化，才属于需要重排的显式布局设置。 */
+  const graphLayersWeightsKey = isFrameClusterBasis(clusterBasis)
+    ? frameGraphLayersWeightsKey
+    : tagGraphLayersWeightsKey;
 
   const selectedConn = useMemo(
     () =>
@@ -505,6 +502,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
     }
     const cy = cyRef.current;
     setFocusedNodeId(null);
+    setSelectedNodeIds(new Set());
     setHoveredNote(null);
     setHoveredConnectionId(null);
     setSelectedConnectionId(null);
@@ -521,6 +519,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const closeGraphNoteEditor = useCallback(() => {
     const cy = cyRef.current;
     setFocusedNodeId(null);
+    setSelectedNodeIds(new Set());
     setNoteEditorSuppressedForGraphConnection(false);
     if (cy) {
       cy.elements().unselect();
@@ -529,6 +528,30 @@ export const GraphView: React.FC<GraphViewProps> = ({
     }
     onToggleEditor?.(false);
   }, [onToggleEditor, syncDualLayerVisibility]);
+
+  /** 设置图节点选中：ids 为多选集合，primary 为主焦点（面板/编辑器用） */
+  const setGraphNodeSelection = useCallback((ids: Set<string>, primary?: string | null) => {
+    setSelectedNodeIds(ids);
+    if (primary !== undefined) {
+      setFocusedNodeId(primary);
+      return;
+    }
+    if (ids.size === 0) {
+      setFocusedNodeId(null);
+      return;
+    }
+    setFocusedNodeId((prev) => (prev && ids.has(prev) ? prev : Array.from(ids)[0]));
+  }, []);
+
+  const selectedNodeIdsSig = useMemo(
+    () => Array.from(selectedNodeIds).sort().join('\u0001'),
+    [selectedNodeIds]
+  );
+
+  const highlightCenterIds = useMemo(
+    () => (selectedNodeIds.size > 0 ? Array.from(selectedNodeIds) : null),
+    [selectedNodeIds]
+  );
 
   const focusedNote = useMemo(
     () => (focusedNodeId ? noteById.get(focusedNodeId) ?? null : null),
@@ -583,14 +606,19 @@ export const GraphView: React.FC<GraphViewProps> = ({
   }, []);
 
   const applyNeighborHighlightNow = useCallback(
-    (cy: Core, noteId: string | null, keys?: Set<string> | null) => {
-      if (!noteId) {
+    (cy: Core, noteId: string | null | readonly string[], keys?: Set<string> | null) => {
+      if (!noteId || (Array.isArray(noteId) && noteId.length === 0)) {
         applyGraphNeighborHighlight(cy, null, chainLengthRef.current, null);
         syncDualLayerVisibility(cy);
         return;
       }
+      const singleId = typeof noteId === 'string' ? noteId : noteId.length === 1 ? noteId[0] : null;
       const allow =
-        keys !== undefined ? keys : relatedHighlightLabelKeysRef.current;
+        keys !== undefined
+          ? keys
+          : singleId
+            ? relatedHighlightLabelKeysRef.current
+            : null;
       applyGraphNeighborHighlight(cy, noteId, chainLengthRef.current, allow);
       // 高亮后再同步显隐：临时显示被高亮的隐藏节点；取消勾选后恢复隐藏
       syncDualLayerVisibility(cy);
@@ -679,6 +707,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
     setSelectedConnectionId(null);
     setEdgeLabelDraft('');
     setFocusedNodeId(null);
+    setSelectedNodeIds(new Set());
     setHoveredNote(null);
     setPickTarget(null);
     setNoteEditorSuppressedForGraphConnection(false);
@@ -706,6 +735,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
     setSelectedConnectionId(null);
     setEdgeLabelDraft('');
     setFocusedNodeId(null);
+    setSelectedNodeIds(new Set());
     setHoveredNote(null);
     setPickTarget(null);
     setNoteEditorSuppressedForGraphConnection(false);
@@ -724,6 +754,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
     setSelectedConnectionId(null);
     setEdgeLabelDraft('');
     setFocusedNodeId(null);
+    setSelectedNodeIds(new Set());
     setHoveredNote(null);
     setPickTarget(null);
     setNoteEditorSuppressedForGraphConnection(false);
@@ -739,19 +770,19 @@ export const GraphView: React.FC<GraphViewProps> = ({
   /** 关联面板内点击已选便签标题：图中定位并高亮，不打开便签编辑器 */
   const focusNoteOnGraphFromPanel = useCallback((noteId: string) => {
     const cy = cyRef.current;
-    setFocusedNodeId(noteId);
+    setGraphNodeSelection(new Set([noteId]), noteId);
     setNoteEditorSuppressedForGraphConnection(true);
     if (cy) {
       applyNeighborHighlightNow(cy, noteId, allRelatedLabelKeysFor(noteId));
       requestAnimationFrame(() => animateGraphCenterOnNode(cy, noteId));
     }
-  }, [allRelatedLabelKeysFor, applyNeighborHighlightNow]);
+  }, [allRelatedLabelKeysFor, applyNeighborHighlightNow, setGraphNodeSelection]);
 
   /** 属性面板「编辑便签」：解除图谱单选节点时的编辑器抑制，以便打开全文编辑器 */
   const openInspectorNoteEditor = useCallback((noteId: string) => {
     setNoteEditorSuppressedForGraphConnection(false);
-    setFocusedNodeId(noteId);
-  }, []);
+    setGraphNodeSelection(new Set([noteId]), noteId);
+  }, [setGraphNodeSelection]);
 
   /** 浏览态详情卡：打开全文编辑器（不进入视图编辑模式） */
   const openPreviewNoteEditor = useCallback((noteId: string) => {
@@ -759,8 +790,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
     setEdgeLabelDraft('');
     setHoveredNote(null);
     setNoteEditorSuppressedForGraphConnection(false);
-    setFocusedNodeId(noteId);
-  }, []);
+    setGraphNodeSelection(new Set([noteId]), noteId);
+  }, [setGraphNodeSelection]);
 
   /** 非点选状态下点加号：一键把当前图中选中节点写入起点/终点 */
   const addEndpointFromFocusedGraphNode = useCallback((which: 'from' | 'to', noteId: string) => {
@@ -770,14 +801,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
     setEdgeLabelDraft('');
     setConnectionDraft((d) => ({ ...d, [field]: noteId }));
     setPickTarget(null);
-    setFocusedNodeId(noteId);
+    setGraphNodeSelection(new Set([noteId]), noteId);
     setNoteEditorSuppressedForGraphConnection(true);
     setGraphPickNonce((n) => n + 1);
     if (cy) {
       applyNeighborHighlightNow(cy, noteId, allRelatedLabelKeysFor(noteId));
       requestAnimationFrame(() => animateGraphCenterOnNode(cy, noteId));
     }
-  }, [allRelatedLabelKeysFor, applyNeighborHighlightNow]);
+  }, [allRelatedLabelKeysFor, applyNeighborHighlightNow, setGraphNodeSelection]);
 
   const handleInspectorNewConnection = useCallback(() => {
     if (connectionSaveResetTimerRef.current) {
@@ -897,13 +928,26 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
   const bindCyEvents = useCallback(
     (cy: Core) => {
+      const isShiftEvent = (evt: cytoscape.EventObject) => {
+        const oe = evt.originalEvent;
+        return !!(oe && typeof oe === 'object' && 'shiftKey' in oe && (oe as MouseEvent).shiftKey);
+      };
+
+      const isMetaNode = (n: NodeSingular) =>
+        n.hasClass('frame-cluster-label') || n.hasClass('frame-cluster-halo');
+
       const onNodeTap = (evt: cytoscape.EventObject) => {
         const n = evt.target as NodeSingular;
+        if (isMetaNode(n)) {
+          cy.elements().unselect();
+          return;
+        }
         const id = n.id();
+        const shift = isShiftEvent(evt);
 
-        cy.elements().unselect();
         const ui = graphUiRef.current;
         if (ui.showConnectionPanel && ui.isGraphToolbarEditMode && ui.pickTarget) {
+          cy.elements().unselect();
           const field = ui.pickTarget === 'from' ? 'fromNoteId' : 'toNoteId';
           setSelectedConnectionId(null);
           setEdgeLabelDraft('');
@@ -914,9 +958,9 @@ export const GraphView: React.FC<GraphViewProps> = ({
             [field]: id
           }));
           setPickTarget(null);
-          setFocusedNodeId(id);
+          setGraphNodeSelection(new Set([id]), id);
           setNoteEditorSuppressedForGraphConnection(true);
-          setGraphPickNonce((n) => n + 1);
+          setGraphPickNonce((x) => x + 1);
           applyGraphNeighborHighlight(
             cy,
             id,
@@ -937,6 +981,26 @@ export const GraphView: React.FC<GraphViewProps> = ({
           });
           return;
         }
+
+        if (shift) {
+          if (graphNodeTapTimerRef.current) {
+            clearTimeout(graphNodeTapTimerRef.current);
+            graphNodeTapTimerRef.current = null;
+          }
+          cy.elements().unselect();
+          const next = new Set(selectedNodeIdsRef.current);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          const primary =
+            next.size === 0 ? null : next.has(id) ? id : Array.from(next)[0];
+          setSelectedConnectionId(null);
+          setEdgeLabelDraft('');
+          setNoteEditorSuppressedForGraphConnection(true);
+          setGraphNodeSelection(next, primary);
+          return;
+        }
+
+        cy.elements().unselect();
         if (graphNodeTapTimerRef.current) {
           clearTimeout(graphNodeTapTimerRef.current);
           graphNodeTapTimerRef.current = null;
@@ -946,7 +1010,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
           setSelectedConnectionId(null);
           setEdgeLabelDraft('');
           setNoteEditorSuppressedForGraphConnection(true);
-          setFocusedNodeId((prev) => (prev === id ? null : id));
+          setFocusedNodeId((prev) => {
+            const nextId = prev === id ? null : id;
+            setSelectedNodeIds(nextId ? new Set([nextId]) : new Set());
+            return nextId;
+          });
         }, 280);
       };
 
@@ -961,14 +1029,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
         }
         cy.elements().unselect();
         const n = evt.target as NodeSingular;
-        if (n.hasClass('frame-cluster-label') || n.hasClass('frame-cluster-halo')) {
+        if (isMetaNode(n)) {
           return;
         }
         const id = n.id();
         setSelectedConnectionId(null);
         setEdgeLabelDraft('');
         setNoteEditorSuppressedForGraphConnection(false);
-        setFocusedNodeId(id);
+        setGraphNodeSelection(new Set([id]), id);
         applyGraphNeighborHighlight(
           cy,
           id,
@@ -996,6 +1064,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         const id = e.id();
         const c = connectionsRef.current.find((x) => x.id === id);
         setFocusedNodeId(null);
+        setSelectedNodeIds(new Set());
         setHoveredConnectionId(null);
         setNoteEditorSuppressedForGraphConnection(false);
         applyGraphNeighborHighlight(cy, null, chainLengthRef.current, null);
@@ -1017,6 +1086,15 @@ export const GraphView: React.FC<GraphViewProps> = ({
 
       const onBgTap = (evt: cytoscape.EventObject) => {
         if (evt.target !== cy) return;
+        if (ignoreNextGraphBgTapRef.current) {
+          ignoreNextGraphBgTapRef.current = false;
+          return;
+        }
+        // 与 Map/Board 一致：按住 Shift 点空白不取消多选
+        if (isShiftEvent(evt)) {
+          cy.elements().unselect();
+          return;
+        }
         cy.elements().unselect();
         clearSelection();
       };
@@ -1035,9 +1113,27 @@ export const GraphView: React.FC<GraphViewProps> = ({
         clearSelection();
       };
 
+      const onBoxEnd = () => {
+        const boxed = cy
+          .nodes(':selected')
+          .filter((n) => !isMetaNode(n as NodeSingular))
+          .map((n) => n.id());
+        cy.elements().unselect();
+        if (boxed.length === 0) return;
+        ignoreNextGraphBgTapRef.current = true;
+        // Shift 框选：在已有选中上并集（与 Board/Map 一致）
+        const next = new Set(selectedNodeIdsRef.current);
+        boxed.forEach((id) => next.add(id));
+        const primary = boxed[boxed.length - 1];
+        setSelectedConnectionId(null);
+        setEdgeLabelDraft('');
+        setNoteEditorSuppressedForGraphConnection(true);
+        setGraphNodeSelection(next, primary);
+      };
+
       const onNodeOver = (evt: cytoscape.EventObject) => {
         const n = evt.target as NodeSingular;
-        if (n.hasClass('frame-cluster-label') || n.hasClass('frame-cluster-halo')) {
+        if (isMetaNode(n)) {
           setHoveredNote(null);
           setPreviewImageIndex(0);
           return;
@@ -1065,6 +1161,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
       cy.on('tap', 'edge', onEdgeTap);
       cy.on('tap', onBgTap);
       cy.on('dbltap', onBgDblTap);
+      cy.on('boxend', onBoxEnd);
       cy.on('mouseover', 'node', onNodeOver);
       cy.on('mouseout', 'node', onNodeOut);
       cy.on('mouseover', 'edge', onEdgeOver);
@@ -1080,18 +1177,20 @@ export const GraphView: React.FC<GraphViewProps> = ({
         cy.removeListener('tap', 'edge', onEdgeTap);
         cy.removeListener('tap', onBgTap);
         cy.removeListener('dbltap', onBgDblTap);
+        cy.removeListener('boxend', onBoxEnd);
         cy.removeListener('mouseover', 'node', onNodeOver);
         cy.removeListener('mouseout', 'node', onNodeOut);
         cy.removeListener('mouseover', 'edge', onEdgeOver);
         cy.removeListener('mouseout', 'edge', onEdgeOut);
       };
     },
-    [clearSelection, emptyConnectionDraft, syncDualLayerVisibility]
+    [clearSelection, setGraphNodeSelection, syncDualLayerVisibility]
   );
 
   useEffect(() => {
-    // 仅在节点/连线 id 集合变化时重建；便签内容与主题色由下一 effect 同步
+    // 仅在节点 id 集合变化时重建；便签内容、连线与主题色由后续 effect 增量同步
     setFocusedNodeId(null);
+    setSelectedNodeIds(new Set());
     setNoteEditorSuppressedForGraphConnection(false);
     setHoveredNote(null);
     const el = containerRef.current;
@@ -1230,22 +1329,6 @@ export const GraphView: React.FC<GraphViewProps> = ({
       });
     });
 
-    updateGraphStylesheet(
-      cy,
-      getGraphStylesheet(
-        themeColor,
-        graphStylesheetSizing,
-        {
-          opacity: mapUiChromeOpacity,
-          blurPx: mapUiChromeBlurPx
-        },
-        { edgeCurve: graphEdgeCurve }
-      )
-    );
-    applyGraphHighlightLabelScreenSize(cy, graphStylesheetSizing, {
-      opacity: mapUiChromeOpacity,
-      blurPx: mapUiChromeBlurPx
-    });
     patchGraphElementsData(cy, elements);
     // 数据同步会按 clusterBasis 重写颜色；若正在用预设图例覆盖，把预设色写回
     if (presetLegendOverride && graphPresetsStore.activePresetId) {
@@ -1265,28 +1348,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
       }
     }
     if (graphEdgeCurve) syncGraphEdgeCurveDistances(cy);
-    applyGraphNeighborHighlight(
-      cy,
-      focusedNodeId,
-      chainLength,
-      focusedNodeId ? relatedHighlightLabelKeysRef.current : null
-    );
     syncDualLayerVisibility(cy);
-    applyGraphHoverHighlight(cy, hoveredNote?.id ?? null);
-    requestAnimationFrame(() => {
-      cy.resize();
-    });
   }, [
     notes,
     connections,
     themeColor,
-    focusedNodeId,
-    hoveredNote?.id,
-    graphStylesheetSizing,
+    graphStylesheetSizing.edgeWeight,
+    graphStylesheetSizing.nodeSize,
     graphEdgeCurve,
-    chainLength,
-    mapUiChromeOpacity,
-    mapUiChromeBlurPx,
     tagGraphLayersWeightsKey,
     syncDualLayerVisibility,
     clusterBasis,
@@ -1296,22 +1365,66 @@ export const GraphView: React.FC<GraphViewProps> = ({
     graphPresetsStore.presets
   ]);
 
+  /**
+   * 样式设置单独同步：便签正文、Emoji、Weight、标签等数据编辑不再重建 stylesheet。
+   * 这里只重绘样式，不运行任何 layout。
+   */
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || cy.destroyed?.()) return;
+    updateGraphStylesheet(
+      cy,
+      getGraphStylesheet(
+        themeColor,
+        graphStylesheetSizing,
+        {
+          opacity: mapUiChromeOpacity,
+          blurPx: mapUiChromeBlurPx
+        },
+        { edgeCurve: graphEdgeCurve }
+      )
+    );
+    applyGraphHighlightLabelScreenSize(cy, graphStylesheetSizing, {
+      opacity: mapUiChromeOpacity,
+      blurPx: mapUiChromeBlurPx
+    });
+    if (graphEdgeCurve) syncGraphEdgeCurveDistances(cy);
+  }, [
+    graphCyEpoch,
+    themeColor,
+    graphStylesheetSizing,
+    graphEdgeCurve,
+    mapUiChromeOpacity,
+    mapUiChromeBlurPx
+  ]);
+
+  /** 悬停只改 class / z-index，不触发整图数据同步或布局。 */
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || cy.destroyed?.()) return;
+    applyGraphHoverHighlight(cy, hoveredNote?.id ?? null);
+  }, [graphCyEpoch, hoveredNote?.id]);
+
   /** 边标签筛选变化时单独刷新高亮（避免整图数据重同步） */
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || cy.destroyed?.()) return;
     applyGraphNeighborHighlight(
       cy,
-      focusedNodeId,
+      highlightCenterIds,
       chainLength,
-      focusedNodeId ? relatedHighlightLabelKeys : null
+      selectedNodeIds.size === 1 && focusedNodeId ? relatedHighlightLabelKeys : null
     );
     syncDualLayerVisibility(cy);
   }, [
     focusedNodeId,
+    highlightCenterIds,
+    selectedNodeIds.size,
+    selectedNodeIdsSig,
     chainLength,
     relatedHighlightKeysSig,
     relatedHighlightLabelKeys,
+    connections,
     graphCyEpoch,
     syncDualLayerVisibility
   ]);
@@ -1359,7 +1472,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    const hasSelection = !!focusedNodeId || !!selectedConnectionId;
+    const hasSelection = selectedNodeIds.size > 0 || !!selectedConnectionId;
     const keepSel =
       'node.focus-core, node.focus-nh, node.focus-hover, node.focus-edge-endpoint, node:selected,' +
       'edge.focus-e, edge.focus-edge-hover, edge.focus-edge-selected, edge:selected';
@@ -1369,9 +1482,13 @@ export const GraphView: React.FC<GraphViewProps> = ({
       const keep = cy.elements(keepSel);
       cy.elements().not(keep).addClass('graph-dim');
     });
-  }, [focusedNodeId, selectedConnectionId, hoveredConnectionId, hoveredNote?.id, edgeStructureKey, nodeStructureKey, relatedHighlightKeysSig]);
+  }, [focusedNodeId, selectedNodeIdsSig, selectedNodeIds.size, selectedConnectionId, hoveredConnectionId, hoveredNote?.id, edgeStructureKey, nodeStructureKey, relatedHighlightKeysSig]);
 
-  /** 时间线布局下：图层面板权重或牵引强度变更时重跑时间线 preset */
+  /**
+   * 时间线只响应显式布局设置：牵引强度、聚类依据、分层顺序和分层权重。
+   * 不响应 notes / layer 对象身份、显隐、标题、Emoji、Weight、时间或 Frame 归属编辑；
+   * 这些编辑仅更新节点数据，用户可在需要时再次点击「时间线」主动整理位置。
+   */
   useEffect(() => {
     if (activeGraphLayout !== 'time' || graphPresetsStore.activePresetId) return;
     const cy = cyRef.current;
@@ -1382,7 +1499,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
       cy,
       () => {},
       timeLayoutOpts,
-      timeClusterLayers,
+      timeClusterLayersRef.current,
       isFrameClusterBasis(clusterBasis) ? 'frame' : 'tag'
     );
   }, [
@@ -1390,10 +1507,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
     graphPresetsStore.activePresetId,
     timeLayoutOpts,
     graphLayersOrderKey,
-    graphLayersHiddenKey,
-    timeClusterLayers,
-    clusterBasis,
-    notesClusterKeySig
+    graphLayersWeightsKey,
+    clusterBasis
   ]);
 
   /** 力导布局下：同步 X 轴时间分布权重；用户改百分比时重跑 fcose */
@@ -1715,49 +1830,6 @@ export const GraphView: React.FC<GraphViewProps> = ({
   );
 
   useEffect(() => {
-    if (!isUIVisible) return;
-    let raf: number | null = null;
-    const GAP = 12;
-    const measure = () => {
-      raf = null;
-      let bottom = 0;
-      const host = graphTopLeftChromeRef.current;
-      if (host) {
-        bottom = Math.max(bottom, host.getBoundingClientRect().bottom);
-      }
-      document.querySelectorAll('[data-graph-top-left-panel]').forEach((node) => {
-        if (!(node instanceof HTMLElement)) return;
-        const r = node.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) return;
-        bottom = Math.max(bottom, r.bottom);
-      });
-      // 无工具栏时仍至少留出「按钮行」下方空隙的近似值
-      const minTop = window.matchMedia('(min-width: 640px)').matches ? 16 + 48 + GAP : 8 + 40 + GAP;
-      setPreviewOffsetTopPx(Math.max(minTop, Math.round(bottom + GAP)));
-    };
-    const schedule = () => {
-      if (raf != null) return;
-      raf = requestAnimationFrame(measure);
-    };
-    schedule();
-    const t = window.setTimeout(schedule, 50);
-    const ro =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null;
-    const host = graphTopLeftChromeRef.current;
-    if (host && ro) ro.observe(host);
-    document.querySelectorAll('[data-graph-top-left-panel]').forEach((node) => {
-      if (node instanceof HTMLElement && ro) ro.observe(node);
-    });
-    window.addEventListener('resize', schedule);
-    return () => {
-      if (raf != null) cancelAnimationFrame(raf);
-      window.clearTimeout(t);
-      ro?.disconnect();
-      window.removeEventListener('resize', schedule);
-    };
-  }, [isUIVisible, showTagLayerPanel, showFrameLayerPanel, showSettingsPanel, isGraphToolbarEditMode]);
-
-  useEffect(() => {
     if (!isUIVisible) onWorkspaceEditModeChange(false);
   }, [isUIVisible, onWorkspaceEditModeChange]);
 
@@ -1822,7 +1894,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
           themeColor={themeColor}
           nodeSize={graphStylesheetSizing.nodeSize}
           labelFontPx={graphStylesheetSizing.labelFontPx}
-          highlightKey={`${graphCyEpoch}\u0001${focusedNodeId ?? ''}\u0001${hoveredNote?.id ?? ''}\u0001${selectedConnectionId ?? ''}\u0001${hoveredConnectionId ?? ''}\u0001${chainLength}\u0001${relatedHighlightKeysSig}\u0001${graphStylesheetSizing.labelFontPx}\u0001${nodeStructureKey}\u0001${tagGraphLayersHiddenKey}\u0001${frameGraphLayersHiddenKey}\u0001${notesLayerVisualKey}\u0001${mergedTagGraphLayers.tagVisibilityLogic ?? 'or'}`}
+          highlightKey={`${graphCyEpoch}\u0001${focusedNodeId ?? ''}\u0001${selectedNodeIdsSig}\u0001${hoveredNote?.id ?? ''}\u0001${selectedConnectionId ?? ''}\u0001${hoveredConnectionId ?? ''}\u0001${chainLength}\u0001${relatedHighlightKeysSig}\u0001${graphStylesheetSizing.labelFontPx}\u0001${nodeStructureKey}\u0001${tagGraphLayersHiddenKey}\u0001${frameGraphLayersHiddenKey}\u0001${notesLayerVisualKey}\u0001${mergedTagGraphLayers.tagVisibilityLogic ?? 'or'}`}
         />
       </div>
 
@@ -1888,8 +1960,47 @@ export const GraphView: React.FC<GraphViewProps> = ({
         onUpdateFrame={handleUpdateFrame}
         projectId={projectId}
         onActivateNoteFromLayer={(n) => focusNoteOnGraphFromPanel(n.id)}
-        chromeHostRef={graphTopLeftChromeRef}
+        belowToolbar={
+          isUIVisible && previewNote && !selectedConn && !isGraphToolbarEditMode && !graphEditorOpen ? (
+            <div className="flex flex-col gap-2 sm:gap-3 pointer-events-none">
+              <NotePreviewCard
+                note={previewNote}
+                currentImageIndex={previewImageIndex}
+                onImageIndexChange={setPreviewImageIndex}
+                chromeSurfaceStyle={panelChromeStyle}
+                passThrough={Boolean(hoveredNote && hoveredNote.id !== focusedNodeId)}
+                embedded
+                themeColor={themeColor}
+                onOpenEditor={openPreviewNoteEditor}
+              />
+              {focusedNote ? (
+                <GraphRelatedHighlightPanel
+                  groups={relatedEdgeLabelGroups}
+                  selectedKeys={relatedHighlightLabelKeys}
+                  onToggleKey={toggleRelatedLabelKey}
+                  onToggleColumn={toggleRelatedColumn}
+                  onSelectAll={selectAllRelatedLabels}
+                  onClearAll={clearAllRelatedLabels}
+                  themeColor={themeColor}
+                  chromeSurfaceStyle={panelChromeStyle}
+                  embedded
+                />
+              ) : null}
+            </div>
+          ) : null
+        }
       />
+
+      {!isUIVisible && previewNote && !selectedConn ? (
+        <NotePreviewCard
+          note={previewNote}
+          currentImageIndex={previewImageIndex}
+          onImageIndexChange={setPreviewImageIndex}
+          chromeSurfaceStyle={panelChromeStyle}
+          passThrough={Boolean(hoveredNote && hoveredNote.id !== focusedNodeId)}
+          themeColor={themeColor}
+        />
+      ) : null}
 
       <GraphTopCenterConnectionButton
         visible={isUIVisible && isGraphToolbarEditMode && !!onUpdateConnections}
@@ -1928,40 +2039,6 @@ export const GraphView: React.FC<GraphViewProps> = ({
         onRenameGraphPreset={handleRenameGraphPreset}
         onDeleteGraphPreset={handleDeleteGraphPreset}
       />
-
-      {previewNote && !selectedConn && !isGraphToolbarEditMode && !graphEditorOpen && (
-        <div
-          className="fixed ui-workspace-left z-[1000] flex flex-col gap-3 pointer-events-none"
-          style={{
-            top: previewOffsetTopPx,
-            maxHeight: `calc(100dvh - ${previewOffsetTopPx}px - 1rem)`
-          }}
-        >
-          <NotePreviewCard
-            note={previewNote}
-            currentImageIndex={previewImageIndex}
-            onImageIndexChange={setPreviewImageIndex}
-            chromeSurfaceStyle={panelChromeStyle}
-            passThrough={Boolean(hoveredNote && hoveredNote.id !== focusedNodeId)}
-            embedded
-            themeColor={themeColor}
-            onOpenEditor={isUIVisible ? openPreviewNoteEditor : undefined}
-          />
-          {focusedNote ? (
-            <GraphRelatedHighlightPanel
-              groups={relatedEdgeLabelGroups}
-              selectedKeys={relatedHighlightLabelKeys}
-              onToggleKey={toggleRelatedLabelKey}
-              onToggleColumn={toggleRelatedColumn}
-              onSelectAll={selectAllRelatedLabels}
-              onClearAll={clearAllRelatedLabels}
-              themeColor={themeColor}
-              chromeSurfaceStyle={panelChromeStyle}
-              embedded
-            />
-          ) : null}
-        </div>
-      )}
 
       {graphEditorOpen && editorInitialNote && (
         <NoteEditor
@@ -2022,6 +2099,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
           onClearToSelection={clearConnectionToOnly}
           showClearSelection={
             !!selectedConnectionId ||
+            selectedNodeIds.size > 0 ||
             !!focusedNodeId ||
             !!connectionDraft.fromNoteId ||
             !!connectionDraft.toNoteId ||
@@ -2045,26 +2123,30 @@ export const GraphView: React.FC<GraphViewProps> = ({
         />
       )}
 
-      {isUIVisible && isGraphToolbarEditMode && (
-        <EditInspectorPanel
-          note={focusedNote}
-          inspectorConnection={focusedNote ? null : selectedConn}
-          groupContext={null}
-          coordMode="graph"
-          themeColor={themeColor}
-          panelChromeStyle={panelChromeStyle}
-          frames={project.frames ?? []}
-          connections={connections}
-          notes={notes}
-          hasConnectionWrite={!!onUpdateConnections}
-          onUpdateNote={onUpdateNote}
-          onOpenFullNoteEditor={openInspectorNoteEditor}
-          onEditConnection={handleInspectorEditConnection}
-          onNewConnection={handleInspectorNewConnection}
-          onFocusPeerInView={focusNoteOnGraphFromPanel}
-          onUpdateFrames={onUpdateProject ? handleUpdateFrames : undefined}
-        />
-      )}
+      <AnimatedEditInspectorPanel
+        payload={
+          isUIVisible && isGraphToolbarEditMode
+            ? {
+                note: focusedNote,
+                inspectorConnection: focusedNote ? null : selectedConn,
+                groupContext: null,
+                coordMode: 'graph',
+                themeColor,
+                panelChromeStyle,
+                frames: project.frames ?? [],
+                connections,
+                notes,
+                hasConnectionWrite: !!onUpdateConnections,
+                onUpdateNote,
+                onOpenFullNoteEditor: openInspectorNoteEditor,
+                onEditConnection: handleInspectorEditConnection,
+                onNewConnection: handleInspectorNewConnection,
+                onFocusPeerInView: focusNoteOnGraphFromPanel,
+                onUpdateFrames: onUpdateProject ? handleUpdateFrames : undefined
+              }
+            : null
+        }
+      />
 
       <SettingsPanel
         isOpen={showSettingsPanel}

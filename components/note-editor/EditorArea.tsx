@@ -1,6 +1,8 @@
 import React from 'react';
 import type { Editor } from '@tiptap/core';
 import { EditorContent } from '@tiptap/react';
+import { EditorBubbleMenu } from './EditorBubbleMenu';
+import { EditorSlashMenu } from './EditorSlashMenu';
 
 interface EditorAreaProps {
   isPreviewMode: boolean;
@@ -29,7 +31,7 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
 }) => {
   return (
     <div
-      className={`flex-1 min-h-0 relative group flex flex-col overflow-y-auto custom-scrollbar ${
+      className={`flex-1 min-h-0 relative group flex flex-col overflow-hidden ${
         isProcessingImages ? 'ring-2 ring-blue-400 ring-opacity-50 bg-blue-50 bg-opacity-30' : ''
       }`}
       onDragOver={(e) => {
@@ -66,6 +68,8 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
         ) : (
           <div className="note-editor-tiptap-wrap cursor-text w-full h-full bg-transparent overflow-y-auto py-2 px-4 min-h-0">
             <EditorContent editor={editor as any} />
+            {editor ? <EditorBubbleMenu editor={editor} /> : null}
+            {editor ? <EditorSlashMenu editor={editor} /> : null}
             <style>{`
               .tiptap-editor {
                 outline: none !important;
@@ -107,4 +111,3 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
     </div>
   );
 };
-

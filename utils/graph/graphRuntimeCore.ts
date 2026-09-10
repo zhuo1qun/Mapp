@@ -1911,10 +1911,10 @@ export function flattenRelatedEdgeLabelGroups(
   return [...groups.from, ...groups.to];
 }
 
-/** 点击节点：高亮自身、相邻节点及之间的连线（与 App 内 GraphView 一致） */
+/** 点击节点：高亮自身、相邻节点及之间的连线（与 App 内 GraphView 一致；支持多中心） */
 export function applyGraphNeighborHighlight(
   cy: Core,
-  centerId: string | null,
+  centerId: string | null | readonly string[],
   /** 关系链长度：通过连线连续扩展的层级数（1=当前实现） */
   chainLength: number = 1,
   /**
@@ -1923,10 +1923,15 @@ export function applyGraphNeighborHighlight(
    */
   allowedEdgeLabelKeys: Set<string> | null = null
 ): void {
+  const centerIds = (
+    !centerId ? [] : typeof centerId === 'string' ? [centerId] : [...centerId]
+  ).filter((id) => typeof id === 'string' && id.length > 0);
+  const centerSet = new Set(centerIds);
+
   const prevCores = cy.nodes('.focus-core').toArray();
   // 卸下 focus-core 前先 bypass 锁住当前直径，避免 stylesheet 瞬缩打断动画
   for (const n of prevCores) {
-    if (centerId && n.id() === centerId) continue;
+    if (centerSet.has(n.id())) continue;
     const w = graphNodeRenderedSizePx(n);
     n.stop(true);
     n.style({ width: w, height: w });
@@ -1934,17 +1939,15 @@ export function applyGraphNeighborHighlight(
 
   cy.batch(() => {
     cy.elements().removeClass([...HL]);
-    if (!centerId) return;
-    const el = cy.getElementById(centerId);
-    if (el.empty() || !el.isNode()) return;
+    if (centerIds.length === 0) return;
 
     const depth = Math.max(1, Math.floor(Number.isFinite(chainLength) ? chainLength : 1));
 
-    const nodeIds = new Set<string>([centerId]);
+    const nodeIds = new Set<string>(centerIds);
     const edgeIds = new Set<string>();
 
-    // BFS：按“经过的边数”扩展到 depth 层（distance = number of edges from center）
-    let frontier = new Set<string>([centerId]);
+    // BFS：从全部中心出发，按“经过的边数”扩展到 depth 层
+    let frontier = new Set<string>(centerIds);
     for (let dist = 0; dist < depth; dist += 1) {
       const nextFrontier = new Set<string>();
       for (const nodeId of frontier) {
@@ -1979,9 +1982,12 @@ export function applyGraphNeighborHighlight(
       if (frontier.size === 0) break;
     }
 
-    el.addClass('focus-core');
+    for (const id of centerIds) {
+      const el = cy.getElementById(id);
+      if (!el.empty() && el.isNode()) el.addClass('focus-core');
+    }
     nodeIds.forEach((id) => {
-      if (id === centerId) return;
+      if (centerSet.has(id)) return;
       const n = cy.getElementById(id);
       if (!n.empty() && n.isNode()) n.addClass('focus-nh');
     });
@@ -1992,22 +1998,20 @@ export function applyGraphNeighborHighlight(
   });
   applyGraphNodeStackZIndex(cy);
 
-  // 选中焦点：直径放大；取消/切换：旧焦点缩回（单节点，开销很小）
+  // 选中焦点：直径放大；取消/切换：旧焦点缩回
+  const prevCoreIds = new Set(prevCores.map((n) => n.id()));
   for (const n of prevCores) {
-    if (centerId && n.id() === centerId) continue;
+    if (centerSet.has(n.id())) continue;
     animateGraphNodeDiameter(n, graphNodeBaseSizePx(n), false);
   }
-  if (centerId) {
-    const el = cy.getElementById(centerId);
-    if (!el.empty() && el.isNode()) {
-      const alreadyCore = prevCores.some((n) => n.id() === centerId);
-      if (!alreadyCore) {
-        const base = graphNodeBaseSizePx(el);
-        el.stop(true);
-        el.style({ width: base, height: base });
-        animateGraphNodeDiameter(el, graphNodeFocusCoreSizePx(el), true);
-      }
-    }
+  for (const id of centerIds) {
+    const el = cy.getElementById(id);
+    if (el.empty() || !el.isNode()) continue;
+    if (prevCoreIds.has(id)) continue;
+    const base = graphNodeBaseSizePx(el);
+    el.stop(true);
+    el.style({ width: base, height: base });
+    animateGraphNodeDiameter(el, graphNodeFocusCoreSizePx(el), true);
   }
 }
 

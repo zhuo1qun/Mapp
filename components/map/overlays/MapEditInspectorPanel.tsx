@@ -19,8 +19,13 @@ import { TAG_COLORS } from '../../../constants';
 import type { Connection, Coordinates, Frame, Note, Tag } from '../../../types';
 import { chromePanelGhostIconButtonClass } from '../../ui/chromePanelIconButton';
 import { TagAddPanel } from '../../ui/TagAddPanel';
-import { connectionToGraphDirection } from '../../../utils/graph/graphData';
+import {
+  clampNoteWeight,
+  connectionToGraphDirection,
+  DEFAULT_NOTE_WEIGHT
+} from '../../../utils/graph/graphData';
 import { generateId, parseNoteContent } from '../../../utils';
+import { SettingsCompactSlider } from '../../ui/SettingsCompactSlider';
 
 export type EditInspectorCoordMode = 'map' | 'board' | 'graph';
 
@@ -73,7 +78,7 @@ function patchNoteFrameMembership(note: Note, frameIds: string[], frames: Frame[
 }
 
 const asideShellClass =
-  'fixed right-0 top-0 z-[450] hidden h-full w-80 flex-col border-l border-gray-200/90 bg-white/95 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] backdrop-blur-md lg:flex';
+  'pointer-events-auto fixed right-0 top-0 z-[450] hidden h-full w-80 flex-col border-l border-gray-200/90 bg-white/95 shadow-[-4px_0_24px_rgba(0,0,0,0.06)] backdrop-blur-md lg:flex';
 
 /** 侧栏内折叠块与卡片：轻微投影 + 细描边，与浅底区分层 */
 const inspectorSectionSurfaceClass =
@@ -997,9 +1002,40 @@ function EditInspectorPanelInner({
         ) : null}
 
         {coordMode === 'graph' ? (
-          <InspectorCollapsibleSection title="图谱位置" themeColor={themeColor} defaultOpen={false}>
-            <p className="text-xs text-gray-400">节点位置由当前布局与拖拽决定。</p>
-          </InspectorCollapsibleSection>
+          <>
+            <InspectorCollapsibleSection title="Weight" themeColor={themeColor}>
+              <SettingsCompactSlider
+                label="节点权重"
+                hint={<span className="text-[10px] text-gray-400">1 为默认</span>}
+                themeColor={themeColor}
+                value={clampNoteWeight(note.weight)}
+                min={0.1}
+                max={10}
+                step={0.1}
+                onChange={(weight) =>
+                  onUpdateNote({ ...note, weight: clampNoteWeight(weight) })
+                }
+                formatValue={(weight) => weight.toFixed(1)}
+                minCaption="轻"
+                maxCaption="重"
+              />
+              {note.weight != null && clampNoteWeight(note.weight) !== DEFAULT_NOTE_WEIGHT ? (
+                <button
+                  type="button"
+                  onClick={() => onUpdateNote({ ...note, weight: DEFAULT_NOTE_WEIGHT })}
+                  className="mt-2 text-[10px] font-medium text-gray-500 hover:text-gray-800"
+                >
+                  重置为 1.0
+                </button>
+              ) : null}
+              <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+                调整节点自身的视觉大小；不影响连线权重。
+              </p>
+            </InspectorCollapsibleSection>
+            <InspectorCollapsibleSection title="图谱位置" themeColor={themeColor} defaultOpen={false}>
+              <p className="text-xs text-gray-400">节点位置由当前布局与拖拽决定。</p>
+            </InspectorCollapsibleSection>
+          </>
         ) : null}
 
         <InspectorCollapsibleSection title="Frame" icon={<Layers size={14} className="text-gray-500" />} themeColor={themeColor}>

@@ -29,7 +29,8 @@ type Props = {
   onUpdateFrame?: (frame: Frame) => void;
   projectId: string;
   onActivateNoteFromLayer?: (note: Note) => void;
-  chromeHostRef?: React.RefObject<HTMLDivElement | null>;
+  /** 与按钮行共用左上定位容器、自然排在按钮下方的内容（如节点详情卡）。 */
+  belowToolbar?: React.ReactNode;
 };
 
 export const GraphTopLeftToolbar: React.FC<Props> = ({
@@ -57,7 +58,7 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
   onUpdateFrame,
   projectId,
   onActivateNoteFromLayer,
-  chromeHostRef
+  belowToolbar
 }) => {
   const tagBtnWrapRef = useRef<HTMLDivElement>(null);
   const frameBtnWrapRef = useRef<HTMLDivElement>(null);
@@ -71,10 +72,9 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
 
   return (
     <div
-      ref={chromeHostRef}
       data-allow-context-menu
       data-graph-top-left-chrome
-      className="fixed top-2 sm:top-4 ui-workspace-left z-[500] pointer-events-none flex flex-col gap-2"
+      className="fixed top-2 sm:top-4 ui-workspace-left z-[1000] pointer-events-none flex flex-col items-start gap-2 sm:gap-3"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2">
@@ -141,6 +141,7 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
           </>
         ) : null}
       </div>
+      {belowToolbar}
       {showTagLayerPanel ? (
         <div className="pointer-events-auto">
           <ProjectNotesLayerPanel

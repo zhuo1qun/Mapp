@@ -70,7 +70,7 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
   const dismiss = onDismissOverlays ?? (() => {});
 
   return (
-    <section className="flex flex-col shrink-0 border-t border-gray-100/80" aria-label="属性">
+    <section className="flex flex-col shrink-0 border-t border-gray-400/50" aria-label="属性">
       <div className="px-4 pt-2 pb-1 flex items-center justify-between gap-2">
         <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide shrink-0">
           属性

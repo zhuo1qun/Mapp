@@ -1,12 +1,12 @@
 import React from 'react';
-import { Code, Zap, Star, ArrowUp, Locate, Check, Navigation } from 'lucide-react';
+import { Star, ArrowUp, Locate, Check, Navigation } from 'lucide-react';
 import { NoteIconButton } from './NoteIconButton';
+import { NoteEditorAddPillLabel } from './addPillStyles';
 
 interface NoteHeaderProps {
   themeColor: string;
-  panelChromeStyle?: React.CSSProperties;
-  isPreviewMode: boolean;
-  onSetPreviewMode: (preview: boolean) => void;
+  /** 从 Markdown 派生的标题，固定放在原模式切换控件的位置。 */
+  title?: string;
   isFavorite: boolean;
   onToggleFavorite: () => void;
 
@@ -28,15 +28,11 @@ interface NoteHeaderProps {
 
   onSave: () => void;
 
-  /** 中间区域（如起止时间），与左右工具条同一行 */
-  centerSlot: React.ReactNode;
 }
 
 export const NoteHeader: React.FC<NoteHeaderProps> = ({
   themeColor,
-  panelChromeStyle,
-  isPreviewMode,
-  onSetPreviewMode,
+  title,
   isFavorite,
   onToggleFavorite,
   showUpgrade,
@@ -50,48 +46,15 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   showLocateGraph = false,
   onLocateGraph,
   onSave,
-  centerSlot,
 }) => {
   return (
     <div className="flex items-center gap-2 p-4 pb-2 flex-shrink-0 relative">
-      <div className="flex items-center gap-0.5 bg-gray-100 rounded-xl p-1 shrink-0">
-        <button
-          type="button"
-          onClick={() => onSetPreviewMode(true)}
-          className={`p-2 rounded-lg transition-all ${
-            isPreviewMode
-              ? panelChromeStyle
-                ? 'shadow-sm text-gray-900'
-                : 'bg-white shadow-sm text-gray-900'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          style={isPreviewMode && panelChromeStyle ? panelChromeStyle : undefined}
-          title="即时模式 (飞书感)"
-        >
-          <Zap size={18} strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          onClick={() => onSetPreviewMode(false)}
-          className={`p-2 rounded-lg transition-all ${
-            !isPreviewMode
-              ? panelChromeStyle
-                ? 'shadow-sm text-gray-900'
-                : 'bg-white shadow-sm text-gray-900'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          style={!isPreviewMode && panelChromeStyle ? panelChromeStyle : undefined}
-          title="源码模式 (Markdown)"
-        >
-          <Code size={18} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div
-        className="flex-1 min-w-0 flex justify-center items-center px-2 pointer-events-auto min-h-9"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {centerSlot}
+      <div className="flex-1 min-w-0 min-h-9 flex items-center" onClick={(e) => e.stopPropagation()}>
+        {title ? (
+          <div className="min-w-0 truncate text-sm font-medium text-gray-400" title={title}>
+            {title}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0 relative z-10">
@@ -99,47 +62,48 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           type="button"
           onClick={onToggleFavorite}
           title={isFavorite ? '取消收藏' : '收藏'}
-          className={`rounded-full p-2 min-h-9 min-w-9 box-border inline-flex items-center justify-center transition-colors active:scale-95 ${
+          className={`group gap-0 rounded-full p-2 min-h-9 min-w-9 box-border inline-flex items-center justify-center transition-colors active:scale-95 ${
             isFavorite
               ? 'bg-black/[0.06] hover:bg-black/[0.1]'
-              : 'text-gray-400 hover:text-gray-600 hover:bg-black/5'
+              : 'text-gray-700 hover:text-gray-900 hover:bg-black/5'
           }`}
           style={isFavorite ? { color: themeColor } : undefined}
         >
+          <NoteEditorAddPillLabel>{isFavorite ? '取消收藏' : '收藏'}</NoteEditorAddPillLabel>
           <Star size={22} strokeWidth={2} fill={isFavorite ? 'currentColor' : 'none'} />
         </button>
 
         {showUpgrade && onUpgrade && (
-          <NoteIconButton onClick={onUpgrade} variant="success" title="升级为标准便签">
+          <NoteIconButton onClick={onUpgrade} variant="success" label="升级" title="升级为标准便签">
             <ArrowUp size={22} strokeWidth={2} />
           </NoteIconButton>
         )}
 
         {showLocateBoard && onLocateBoard && (
-          <NoteIconButton onClick={onLocateBoard} variant="neutral" title="定位到看板">
-            <Locate size={22} strokeWidth={2} className="text-gray-400 hover:text-gray-600" />
+          <NoteIconButton onClick={onLocateBoard} variant="neutral" label="看板" title="定位到看板">
+            <Locate size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}
 
         {showLocateMap && onLocateMap && (
-          <NoteIconButton onClick={onLocateMap} variant="neutral" title="定位到地图">
-            <Locate size={22} strokeWidth={2} className="text-gray-400 hover:text-gray-600" />
+          <NoteIconButton onClick={onLocateMap} variant="neutral" label="地图" title="定位到地图">
+            <Locate size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}
 
         {showNavigateGo && onNavigateGo && (
-          <NoteIconButton onClick={onNavigateGo} variant="neutral" title="Go · 外部导航">
-            <Navigation size={22} strokeWidth={2} className="text-gray-400 hover:text-gray-600" />
+          <NoteIconButton onClick={onNavigateGo} variant="neutral" label="导航" title="Go · 外部导航">
+            <Navigation size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}
 
         {showLocateGraph && onLocateGraph && (
-          <NoteIconButton onClick={onLocateGraph} variant="neutral" title="定位到图谱">
-            <Locate size={22} strokeWidth={2} className="text-gray-400 hover:text-gray-600" />
+          <NoteIconButton onClick={onLocateGraph} variant="neutral" label="图谱" title="定位到图谱">
+            <Locate size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}
 
-        <NoteIconButton onClick={onSave} variant="neutral" title="保存">
+        <NoteIconButton onClick={onSave} variant="neutral" label="保存" title="保存">
           <Check size={22} strokeWidth={2.5} />
         </NoteIconButton>
       </div>
