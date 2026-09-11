@@ -3,6 +3,7 @@ import * as Matter from 'matter-js';
 import type { Note } from '../types';
 import { loadAllProjects, loadImage, loadSketch } from '../utils/persistence/storage';
 import { parseNoteContent } from '../utils';
+import { getThemeChromeForegroundHex } from '../utils/theme/themeChrome';
 
 type SpawnKind = 'emoji' | 'label' | 'project' | 'photo' | 'sketch';
 
@@ -449,6 +450,11 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
       const h = window.innerHeight;
       ctx.clearRect(0, 0, w, h);
 
+      // 与 .text-theme-chrome-fg 同源：跟主题色 Lab L* 写入的 --theme-chrome-fg
+      const chromeFg =
+        getComputedStyle(document.documentElement).getPropertyValue('--theme-chrome-fg').trim() ||
+        getThemeChromeForegroundHex(themeColor);
+
       // subtle background tint
       ctx.fillStyle = 'rgba(255,255,255,0.01)';
       ctx.fillRect(0, 0, w, h);
@@ -463,7 +469,7 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
         ctx.rotate(b.angle);
 
         if (meta.kind === 'emoji') {
-          ctx.fillStyle = 'rgba(10,10,10,0.92)';
+          ctx.fillStyle = chromeFg;
           ctx.font = '56px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -487,7 +493,8 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
               }
             } else {
               // media 仍在加载：用占位文字（不使用任何框）
-              ctx.fillStyle = 'rgba(10,10,10,0.35)';
+              ctx.globalAlpha = 0.4;
+              ctx.fillStyle = chromeFg;
               ctx.font = '700 22px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
@@ -497,7 +504,7 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
             const isHero = meta.kind === 'hero';
             // Text only (no background boxes)
             ctx.globalAlpha = isHero ? 0.92 : meta.kind === 'project' ? 0.9 : 0.88;
-            ctx.fillStyle = isHero ? 'rgba(10,10,10,0.92)' : 'rgba(10,10,10,0.86)';
+            ctx.fillStyle = chromeFg;
             ctx.font = isHero
               ? `900 ${computedHeroFontPx}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`
               : meta.kind === 'project'
@@ -550,7 +557,7 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
       Matter.Engine.clear(engine);
       // World bodies will be GC'd with engine
     };
-  }, [enabled, easterEggMode, gravityY, mouseConstraintStiffness, spawnCandidates, themeColor]);
+  }, [enabled, easterEggMode, gravityY, mouseConstraintStiffness, spawnCandidates]);
 
   if (!enabled) return null;
 
