@@ -265,6 +265,8 @@ export interface GraphLayerState {
 export interface Project {
   id: string;
   name: string;
+  /** 内置示例的稳定来源标识；普通项目和用户导入项目不会保留此字段。 */
+  builtinExampleId?: string;
   /** 历史字段：图片背景模式已移除，固定为 map；业务类型见 projectKind */
   type: 'map';
   /**

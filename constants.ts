@@ -12,9 +12,14 @@ export const EMOJI_CATEGORIES = {
 // Legacy support - flat list for backward compatibility
 export const EMOJI_LIST = EMOJI_CATEGORIES['Recent'];
 
-export const MAP_TILE_URL = "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png";
+// CARTO raster basemaps now watermark unauthenticated requests with “API key required”.
+// Keep the default map keyless and dependable for a standalone deployment.
+export const MAP_TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}";
 export const MAP_TILE_URL_FALLBACK = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 export const MAP_SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+export const MAP_LIGHT_GRAY_URL = MAP_TILE_URL;
+export const MAP_DARK_GRAY_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+export const MAP_TOPO_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}";
 /** Esri World Imagery 高缩放下常返回 “Map data not yet available” 占位图；超过此级别用较低清晰度瓦片拉伸，避免空图。 */
 export const MAP_SATELLITE_MAX_NATIVE_ZOOM = 17;
 export const MAP_MAX_ZOOM = 19;
@@ -22,7 +27,7 @@ export const MAP_MAX_ZOOM = 19;
 // Leaflet will request it for each tile, but the image itself is empty.
 export const MAP_BLANK_TILE_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+Xx7wAAAAASUVORK5CYII=';
-export const MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+export const MAP_ATTRIBUTION = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ';
 export const MAP_SATELLITE_ATTRIBUTION =
   'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
 
@@ -32,6 +37,8 @@ export interface MapStyleOption {
   name: string;
   url: string;
   attribution: string;
+  /** 只请求图源实际提供的级别；更高缩放由 Leaflet 复用已有瓦片。 */
+  maxNativeZoom?: number;
   preview?: string; // Preview color or description
 }
 
@@ -47,27 +54,31 @@ export const MAP_STYLE_OPTIONS: MapStyleOption[] = [
     name: '卫星背景',
     url: MAP_SATELLITE_URL,
     attribution: MAP_SATELLITE_ATTRIBUTION,
+    maxNativeZoom: MAP_SATELLITE_MAX_NATIVE_ZOOM,
   },
   {
     id: 'carto-light-nolabels',
-    name: 'Carto Light (No Labels)',
-    url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    preview: 'https://a.basemaps.cartocdn.com/light_nolabels/10/512/512.png'
+    // 保留旧 id，已保存的用户设置无需迁移。
+    name: '浅色背景（无标签）',
+    url: MAP_LIGHT_GRAY_URL,
+    attribution: MAP_ATTRIBUTION,
+    maxNativeZoom: 16,
+    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/10/512/512'
   },
   {
     id: 'carto-light',
-    name: 'Carto Light (With Labels)',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    preview: 'https://a.basemaps.cartocdn.com/light_all/10/512/512.png'
+    name: '地形背景（含标签）',
+    url: MAP_TOPO_URL,
+    attribution: MAP_ATTRIBUTION,
+    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/10/512/512'
   },
   {
     id: 'carto-dark',
-    name: 'Carto Dark Matter',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    preview: 'https://a.basemaps.cartocdn.com/dark_all/10/512/512.png'
+    name: '深色背景（无标签）',
+    url: MAP_DARK_GRAY_URL,
+    attribution: MAP_ATTRIBUTION,
+    maxNativeZoom: 16,
+    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/10/512/512'
   },
   {
     id: 'osm-standard',

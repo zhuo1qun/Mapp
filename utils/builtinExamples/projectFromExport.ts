@@ -15,6 +15,8 @@ export function buildFreshProjectFromExportedProject(
     ...importedProject,
     id: newProjectId,
     name: displayName,
+    // 导入始终是用户自己的新项目，不应继续被识别为内置示例。
+    builtinExampleId: undefined,
     type: 'map',
     // 保留合法 projectKind；无效/缺失 → undefined，首次打开时询问
     projectKind: sanitizeProjectKind(importedProject.projectKind),

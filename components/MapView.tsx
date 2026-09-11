@@ -1212,6 +1212,8 @@ export const MapView: React.FC<MapViewProps> = ({
         maxZoom={MAP_MAX_ZOOM}
         zoomSnap={0}
         zoomDelta={0.5}
+        // Avoid the opacity transition that can expose a blank layer on slower mobile loads.
+        fadeAnimation={false}
         scrollWheelZoom={false}
         touchZoom={false}
         crs={L.CRS.EPSG3857}

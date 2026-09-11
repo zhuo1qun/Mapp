@@ -14,7 +14,9 @@ export default defineConfig(({ mode }) => {
       plugins: [
         react(),
         VitePWA({
-          registerType: 'autoUpdate',
+          // 由应用代码注册，以便新版就绪时明确提示当前用户刷新。
+          injectRegister: false,
+          registerType: 'prompt',
           manifest: false,
           workbox: {
             // Workbox 默认最多只会预缓存 2MiB 的资源；你的构建产物有超过该大小的 chunk，
@@ -31,12 +33,15 @@ export default defineConfig(({ mode }) => {
             cleanupOutdatedCaches: true,
             runtimeCaching: [
               {
-                urlPattern: /^https:\/\/.*\.tile\.openstreetmap\.org\/.*/i,
-                handler: 'CacheFirst',
+                // OSM + Esri are the keyless raster sources used by the map. Return the
+                // last tile immediately, then refresh it in the background to prevent
+                // white gaps while keeping long-lived maps current.
+                urlPattern: /^https:\/(?:\/.*\.tile\.openstreetmap\.org|\/server\.arcgisonline\.com\/ArcGIS\/rest\/services)\/.*/i,
+                handler: 'StaleWhileRevalidate',
                 options: {
-                  cacheName: 'openstreetmap-tiles',
+                  cacheName: 'map-tiles',
                   expiration: {
-                    maxEntries: 500,
+                    maxEntries: 800,
                     maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
                   },
                   cacheableResponse: {

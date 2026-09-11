@@ -495,7 +495,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     } catch {
       return new Set<string>();
     }
-  }, []);
+  }, [projects]);
 
   const displayProjects = useMemo(() => {
     const list = exampleDevMaintenanceMode

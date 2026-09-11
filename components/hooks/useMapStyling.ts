@@ -50,7 +50,7 @@ export const useMapStyling = ({ mapStyleId, onMapStyleChange }: UseMapStylingPro
       return {
         url: styleOption.url,
         attribution: styleOption.attribution,
-        maxNativeZoom: MAP_MAX_ZOOM,
+        maxNativeZoom: styleOption.maxNativeZoom ?? MAP_MAX_ZOOM,
         maxZoom: MAP_MAX_ZOOM
       };
     }

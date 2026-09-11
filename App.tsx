@@ -67,8 +67,7 @@ import { useDataImport } from './components/hooks/useDataImport';
 import { useCsvImport } from './components/hooks/useCsvImport';
 import { useFileDrop } from './components/hooks/useFileDrop';
 import { EditInspectorProvider } from './components/editInspector/EditInspectorProvider';
-import { fetchBuiltinExamplesManifest } from './utils/builtinExamples/manifest';
-import { buildFreshProjectFromExportedProject, parseExportPayload } from './utils/builtinExamples/projectFromExport';
+import { installBuiltinExamples } from './utils/builtinExamples/install';
 
 export default function App() {
   const emptyNotes = useMemo(() => [], []);
@@ -195,47 +194,20 @@ export default function App() {
     setProjectEnterCollapsing(false);
   }, [setCurrentProjectId, setActiveProject]);
 
-  // 安装内置示例项目（首次打开/未安装时）
+  // 安装内置示例项目。安装器会去重并串行化多标签页/StrictMode 下的并发调用。
   useEffect(() => {
-    let cancelled = false;
-    const keyInstalled = 'mapp-builtin-examples-installed';
-    const keyIds = 'mapp-builtin-example-project-ids';
-    const run = async () => {
-      try {
-        if (localStorage.getItem(keyInstalled) === '1') return;
-        const manifest = await fetchBuiltinExamplesManifest();
-        if (manifest.length === 0) return;
-
-        const createdIds: string[] = [];
-        for (const ex of manifest) {
-          const res = await fetch(`/examples/${ex.file}`, { cache: 'no-cache' });
-          if (!res.ok) continue;
-          const text = await res.text();
-          const { project } = parseExportPayload(text);
-          const nameFromProject =
-            typeof project.name === 'string' && project.name.trim().length > 0
-              ? project.name.trim()
-              : ex.title;
-          const fresh = buildFreshProjectFromExportedProject(project, nameFromProject);
-          await saveProject(fresh);
-          createdIds.push(fresh.id);
-        }
-
-        if (cancelled) return;
-        if (createdIds.length > 0) {
-          localStorage.setItem(keyIds, JSON.stringify(createdIds));
-        }
-        localStorage.setItem(keyInstalled, '1');
-        await projectState.loadProjects();
-      } catch {
-        // 忽略：示例项目是增强功能，不阻塞主流程
-      }
-    };
-    void run();
+    let disposed = false;
+    void installBuiltinExamples()
+      .catch(() => {
+        // 示例项目是增强功能，不阻塞主流程。
+      })
+      .finally(() => {
+        if (!disposed) void projectState.loadProjects();
+      });
     return () => {
-      cancelled = true;
+      disposed = true;
     };
-  }, [projectState]);
+  }, [projectState.loadProjects]);
 
   // 保存board位置（现在只在拖拽结束时调用，类似MapPositionTracker的moveend事件）
   const saveBoardPositionDirect = useCallback((projectId: string, x: number, y: number, scale: number) => {

@@ -1,5 +1,5 @@
 import type { Map as LeafletMap } from 'leaflet';
-import { MAP_MAX_ZOOM, MAP_SATELLITE_MAX_NATIVE_ZOOM, MAP_STYLE_OPTIONS } from '../../constants';
+import { MAP_MAX_ZOOM, MAP_STYLE_OPTIONS } from '../../constants';
 import type { Connection, Note, Project } from '../../types';
 import { parseNoteContent } from '../../utils';
 
@@ -127,7 +127,7 @@ export async function buildMapTabExportPayload(
     mapStyleId,
     tileUrl: style.url,
     tileAttribution: style.attribution,
-    maxNativeZoom: mapStyleId === 'satellite' ? MAP_SATELLITE_MAX_NATIVE_ZOOM : MAP_MAX_ZOOM,
+    maxNativeZoom: style.maxNativeZoom ?? MAP_MAX_ZOOM,
     maxZoom: MAP_MAX_ZOOM,
     center: [c.lat, c.lng],
     zoom: map.getZoom(),
