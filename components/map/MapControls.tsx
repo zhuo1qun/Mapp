@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import { Note } from '../../types';
 import { THEME_COLOR } from '../../constants';
 import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
+import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface MapControlsProps {
   onLocateCurrentPosition: () => void;
@@ -12,6 +13,9 @@ interface MapControlsProps {
   themeColor?: string;
   /** 非主题色浮层面板：半透明白底 + backdrop-filter */
   chromeSurfaceStyle?: React.CSSProperties;
+  /** 图标工具栏可按底图使用深/浅玻璃；展开菜单仍使用稳定的常规面板。 */
+  menuChromeSurfaceStyle?: React.CSSProperties;
+  menuChromeAppearance?: MapChromeAppearance;
   chromeHoverBackground?: string;
   onOpenSettings: () => void;
   /** 设置按钮是否处于打开态（高亮） */
@@ -21,6 +25,11 @@ interface MapControlsProps {
   onCreateAtCurrentLocation: () => void;
   onImportFromPhotos: () => void;
   isCreatingAtLocation?: boolean;
+  showLocateMenu: boolean;
+  showCreateMenu: boolean;
+  onToggleLocateMenu: () => void;
+  onToggleCreateMenu: () => void;
+  onCloseMenus: () => void;
 }
 
 export const MapControls: React.FC<MapControlsProps> = ({
@@ -29,19 +38,24 @@ export const MapControls: React.FC<MapControlsProps> = ({
   mapNotes,
   themeColor = THEME_COLOR,
   chromeSurfaceStyle,
+  menuChromeSurfaceStyle,
+  menuChromeAppearance = 'light',
   chromeHoverBackground,
   onOpenSettings,
   settingsOpen = false,
   settingsButtonRef,
   onCreateAtCurrentLocation,
   onImportFromPhotos,
-  isCreatingAtLocation = false
+  isCreatingAtLocation = false,
+  showLocateMenu,
+  showCreateMenu,
+  onToggleLocateMenu,
+  onToggleCreateMenu,
+  onCloseMenus
 }) => {
   const neutralStyle = chromeSurfaceStyle;
   const neutralHover = chromeHoverBackground;
   const map = useMap();
-  const [showLocateMenu, setShowLocateMenu] = useState(false);
-  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const controlsRef = useRef<HTMLDivElement>(null);
   const locateMenuRef = useRef<HTMLDivElement>(null);
 
@@ -56,15 +70,14 @@ export const MapControls: React.FC<MapControlsProps> = ({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (controlsRef.current && !controlsRef.current.contains(event.target as Node)) {
-        setShowLocateMenu(false);
-        setShowCreateMenu(false);
+        onCloseMenus();
       }
     };
     if (showLocateMenu || showCreateMenu) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showLocateMenu, showCreateMenu]);
+  }, [showLocateMenu, showCreateMenu, onCloseMenus]);
 
   // Block map container from receiving pointer down events when pointer is in UI area
   useEffect(() => {
@@ -116,8 +129,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
         active={settingsOpen}
         pressThemeFlash
         onClick={() => {
-          setShowCreateMenu(false);
-          setShowLocateMenu(false);
+          onCloseMenus();
           onOpenSettings();
         }}
         onPointerMove={(e) => e.stopPropagation()}
@@ -132,10 +144,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
         chromeSurfaceStyle={neutralStyle}
         chromeHoverBackground={neutralHover}
         active={showCreateMenu}
-        onClick={() => {
-          setShowLocateMenu(false);
-          setShowCreateMenu((v) => !v);
-        }}
+        onClick={onToggleCreateMenu}
         onPointerMove={(e) => e.stopPropagation()}
         tooltip="新建节点"
       >
@@ -153,10 +162,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           chromeSurfaceStyle={neutralStyle}
           chromeHoverBackground={neutralHover}
           active={showLocateMenu}
-          onClick={() => {
-            setShowCreateMenu(false);
-            setShowLocateMenu(!showLocateMenu);
-          }}
+          onClick={onToggleLocateMenu}
           onPointerMove={(e) => e.stopPropagation()}
           tooltip="定位"
         >
@@ -168,8 +174,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
       {showLocateMenu && (
         <div
           data-locate-menu
-          className={`absolute left-0 top-full mt-2 w-48 rounded-xl shadow-xl border border-gray-100 py-1 z-[2000] ${neutralStyle ? '' : 'bg-white'}`}
-          style={neutralStyle}
+          className={`map-chrome-content-${menuChromeAppearance} absolute left-0 top-full mt-2 w-48 rounded-xl shadow-xl border border-gray-100 py-1 z-[2000] ${neutralStyle ? '' : 'bg-white'}`}
+          style={menuChromeSurfaceStyle ?? neutralStyle}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
@@ -180,7 +186,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
             onClick={(e) => {
               e.stopPropagation();
               onLocateCurrentPosition();
-              setShowLocateMenu(false);
+              onCloseMenus();
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerMove={(e) => e.stopPropagation()}
@@ -198,7 +204,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
             onClick={(e) => {
               e.stopPropagation();
               locateToLatestPin();
-              setShowLocateMenu(false);
+              onCloseMenus();
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerMove={(e) => e.stopPropagation()}
@@ -213,8 +219,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
       {showCreateMenu && (
         <div
           data-create-node-menu
-          className={`absolute left-0 top-full mt-2 w-52 rounded-xl shadow-xl border border-gray-100 py-1 z-[2000] ${neutralStyle ? '' : 'bg-white'}`}
-          style={neutralStyle}
+          className={`map-chrome-content-${menuChromeAppearance} absolute left-0 top-full mt-2 w-52 rounded-xl shadow-xl border border-gray-100 py-1 z-[2000] ${neutralStyle ? '' : 'bg-white'}`}
+          style={menuChromeSurfaceStyle ?? neutralStyle}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
@@ -224,7 +230,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setShowCreateMenu(false);
+              onCloseMenus();
               onCreateAtCurrentLocation();
             }}
             onPointerDown={(e) => e.stopPropagation()}
@@ -242,7 +248,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setShowCreateMenu(false);
+              onCloseMenus();
               onImportFromPhotos();
             }}
             onPointerDown={(e) => e.stopPropagation()}

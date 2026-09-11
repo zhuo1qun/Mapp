@@ -5,6 +5,7 @@ import { THEME_COLOR } from '../../constants';
 import { TagChip } from '../ui/TagChip';
 import { TagAddPanel } from '../ui/TagAddPanel';
 import { computeAnchoredPanelPlacement } from '../ui/anchoredPanelPlacement';
+import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface TagPropertyEditorProps {
   tags: Tag[];
@@ -24,6 +25,7 @@ interface TagPropertyEditorProps {
   addTagAnchorRef?: React.RefObject<HTMLButtonElement | null>;
   themeColor?: string;
   panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
 }
 
 const TAG_PANEL_EST_W = 260;
@@ -46,7 +48,8 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
   onDismissOverlays,
   addTagAnchorRef,
   themeColor = THEME_COLOR,
-  panelChromeStyle
+  panelChromeStyle,
+  chromeAppearance = 'light'
 }) => {
   const dismiss = onDismissOverlays ?? (() => {});
   const tagsRowRef = useRef<HTMLDivElement>(null);
@@ -168,6 +171,7 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
         <TagAddPanel
           themeColor={themeColor}
           panelChromeStyle={panelChromeStyle}
+          chromeAppearance={chromeAppearance}
           title={editingTagId ? '编辑标签' : '添加标签'}
           label={newTagLabel}
           onLabelChange={setNewTagLabel}

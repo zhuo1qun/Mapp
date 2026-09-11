@@ -1,8 +1,10 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, Copy, Loader2 } from 'lucide-react';
+import { Search, Copy, Loader2 } from 'lucide-react';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
+import { ChromeSegmentedControl } from '../../ui/ChromeSegmentedControl';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
+import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
 export interface BorderSearchState {
   borderSearchQuery: string;
@@ -22,6 +24,9 @@ interface MapSearchPanelProps {
   onToggle: () => void;
   themeColor: string;
   chromeSurfaceStyle?: React.CSSProperties;
+  /** 展开检索面板使用更稳定的材质，避免深色图标玻璃影响正文对比度。 */
+  menuChromeSurfaceStyle?: React.CSSProperties;
+  menuChromeAppearance?: MapChromeAppearance;
   chromeHoverBackground?: string;
   borderSearch: BorderSearchState;
   borderGeoJSON: any;
@@ -34,6 +39,8 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
   onToggle,
   themeColor,
   chromeSurfaceStyle,
+  menuChromeSurfaceStyle,
+  menuChromeAppearance = 'light',
   chromeHoverBackground,
   borderSearch,
   borderGeoJSON,
@@ -56,65 +63,59 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuTop = useChromeMenuTop(isOpen, wrapRef, 8);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const onPointerDownCapture = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (wrapRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest('[data-map-search-chrome-panel]')) return;
+      onClose();
+    };
+    document.addEventListener('pointerdown', onPointerDownCapture, true);
+    return () => document.removeEventListener('pointerdown', onPointerDownCapture, true);
+  }, [isOpen, onClose]);
+
   const panel =
     isOpen && menuTop != null ? (
       <div
-        className={`fixed z-[2000] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-4 animate-in fade-in slide-in-from-top-4 ${chromeSurfaceStyle ? '' : 'bg-white'}`}
-        style={{ top: menuTop, ...chromeSurfaceStyle }}
+        data-map-search-chrome-panel
+        className={`map-chrome-content-${menuChromeAppearance} fixed z-[2000] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-4 animate-in fade-in slide-in-from-top-4 ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
+        style={{ top: menuTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-gray-800">Map Search</h3>
-          <div className="flex items-center gap-2">
-            {borderGeoJSON && (
-              <>
-                <button
-                  onClick={() => handleCopyBorder(borderGeoJSON)}
-                  className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors border border-gray-100"
-                  title="Copy Border GeoJSON"
-                >
-                  <Copy size={14} />
-                </button>
-                <button
-                  onClick={onClearBorder}
-                  className="text-[10px] font-bold px-2 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors border border-red-100"
-                >
-                  Clear Border
-                </button>
-              </>
-            )}
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <X size={16} />
-            </button>
-          </div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-xs font-medium text-gray-500">检索</h3>
+          {borderGeoJSON ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleCopyBorder(borderGeoJSON)}
+                className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors border border-gray-100"
+                title="Copy Border GeoJSON"
+              >
+                <Copy size={14} />
+              </button>
+              <button
+                onClick={onClearBorder}
+                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors border border-red-100"
+              >
+                Clear Border
+              </button>
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex p-1 bg-gray-100 rounded-xl mb-4 relative overflow-hidden">
-          <div
-            className="absolute inset-y-1 rounded-lg bg-white shadow-sm transition-all duration-200"
-            style={{
-              width: 'calc(50% - 4px)',
-              left: borderSearchMode === 'region' ? '4px' : 'calc(50%)'
-            }}
-          />
-          <button
-            onClick={() => setBorderSearchMode('region')}
-            className={`flex-1 py-1.5 text-xs font-bold relative z-10 transition-colors ${
-              borderSearchMode === 'region' ? 'text-gray-800' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Region Border
-          </button>
-          <button
-            onClick={() => setBorderSearchMode('place')}
-            className={`flex-1 py-1.5 text-xs font-bold relative z-10 transition-colors ${
-              borderSearchMode === 'place' ? 'text-gray-800' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Place
-          </button>
-        </div>
+        <ChromeSegmentedControl
+          className="mb-4"
+          aria-label="检索模式"
+          value={borderSearchMode}
+          onChange={setBorderSearchMode}
+          options={[
+            { id: 'region', label: 'Region Border' },
+            { id: 'place', label: 'Place' }
+          ]}
+        />
 
         <div className="flex gap-2 mb-3">
           <div className="relative flex-1">

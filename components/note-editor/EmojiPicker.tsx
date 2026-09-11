@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { EMOJI_CATEGORIES, THEME_COLOR } from '../../constants';
 import { computeAnchoredPanelPlacement } from '../ui/anchoredPanelPlacement';
+import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 export const EMOJI_PICKER_EST_W = 320;
 export const EMOJI_PICKER_EST_H = 400;
@@ -14,6 +15,7 @@ interface EmojiPickerProps {
   onClose: () => void;
   onSelectEmoji: (emoji: string) => void;
   panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
 }
 
 export const EmojiPicker: React.FC<EmojiPickerProps> = ({
@@ -21,7 +23,8 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   anchorRef,
   onClose,
   onSelectEmoji,
-  panelChromeStyle
+  panelChromeStyle,
+  chromeAppearance = 'light'
 }) => {
   const [selectedCategory, setSelectedCategory] =
     useState<keyof typeof EMOJI_CATEGORIES>('Recent');
@@ -123,7 +126,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
       <div className="fixed inset-0" style={{ zIndex: 9999 }} onClick={onClose} />
       <div
         ref={panelRef}
-        className={`fixed rounded-xl border border-gray-100/80 shadow-lg overflow-hidden ${
+        className={`fixed map-chrome-content-${chromeAppearance} rounded-xl border border-gray-100/80 shadow-lg overflow-hidden ${
           panelChromeStyle ? '' : 'bg-white'
         }`}
         style={{

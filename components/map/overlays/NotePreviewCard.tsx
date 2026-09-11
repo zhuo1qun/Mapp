@@ -10,12 +10,14 @@ import { loadNoteImages } from '../../../utils/persistence/storage';
 import { chromePanelGhostIconButtonClass } from '../../ui/chromePanelIconButton';
 import { PortalTooltip } from '../../ui/PortalTooltip';
 import { ExternalNavigationSheet } from './ExternalNavigationSheet';
+import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
 interface NotePreviewCardProps {
   note: Note;
   currentImageIndex: number;
   onImageIndexChange: (index: number) => void;
   chromeSurfaceStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
   /** 为 true 时不拦截指针（悬停预览穿透到底层，仅选中展示时可交互） */
   passThrough?: boolean;
   /** 相对视口顶部的偏移（px）；用于避开左上角按钮/已展开面板 */
@@ -36,6 +38,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   currentImageIndex,
   onImageIndexChange,
   chromeSurfaceStyle,
+  chromeAppearance = 'light',
   passThrough = false,
   offsetTopPx,
   embedded = false,
@@ -138,7 +141,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
     <>
     <div
       data-allow-context-menu
-      className={`mapping-preview-selectable ${
+      className={`mapping-preview-selectable map-chrome-content-${chromeAppearance} ${
         embedded
           ? 'relative w-72 sm:w-80 shrink-0'
           : 'fixed ui-workspace-left z-[1000] w-72 sm:w-80'

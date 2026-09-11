@@ -32,9 +32,11 @@ export const useMapLayers = ({ notes, projectFrames }: UseMapLayersProps) => {
     }
   }, [projectFrames, frameLayerVisibility]);
 
-  // Close frame layer panel when clicking outside (panel is portaled to body)
+  // 必须用捕获阶段：MapControls 会在容器上 capture + stopPropagation，
+  // 冒泡 mousedown 到不了 document，点定位/新建时图层不会关。设置面板同理。
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    if (!showFrameLayerPanel) return;
+    const handlePointerDownCapture = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (frameLayerRef.current?.contains(target)) return;
@@ -51,11 +53,8 @@ export const useMapLayers = ({ notes, projectFrames }: UseMapLayersProps) => {
       }
       setShowFrameLayerPanel(false);
     };
-
-    if (showFrameLayerPanel) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
+    document.addEventListener('pointerdown', handlePointerDownCapture, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDownCapture, true);
   }, [showFrameLayerPanel]);
 
   // Filter notes based on frame layer visibility

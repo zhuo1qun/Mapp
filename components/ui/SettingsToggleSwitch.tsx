@@ -23,13 +23,13 @@ export function SettingsToggleSwitch({
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors border-0 cursor-pointer ${
-          checked ? '' : 'bg-gray-200'
+        className={`relative h-5 w-9 shrink-0 rounded-full border-0 cursor-pointer transition-colors ${
+          checked ? '' : 'chrome-inset'
         }`}
         style={checked ? { backgroundColor: themeColor } : undefined}
       >
         <span
-          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+          className={`chrome-raised absolute top-0.5 left-0.5 h-4 w-4 rounded-full transition-transform ${
             checked ? 'translate-x-4' : 'translate-x-0'
           }`}
         />

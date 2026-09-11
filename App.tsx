@@ -61,7 +61,11 @@ import {
   saveProject,
   ProjectSummary
 } from './utils/persistence/storage';
-import { mapChromeSurfaceStyle, mapChromeHoverBackground } from './utils/map/mapChromeStyle';
+import {
+  mapChromeSurfaceStyle,
+  mapChromeHoverBackground,
+  mapChromeControlStyle
+} from './utils/map/mapChromeStyle';
 import { applyThemeChromeCssVars } from './utils/theme/themeChrome';
 import { useDataImport } from './components/hooks/useDataImport';
 import { useCsvImport } from './components/hooks/useCsvImport';
@@ -194,15 +198,15 @@ export default function App() {
     setProjectEnterCollapsing(false);
   }, [setCurrentProjectId, setActiveProject]);
 
-  // 安装内置示例项目。安装器会去重并串行化多标签页/StrictMode 下的并发调用。
+  // 安装内置示例项目。正常已安装场景只读本地标记，不会阻塞项目列表加载。
   useEffect(() => {
     let disposed = false;
     void installBuiltinExamples()
+      .then((changed) => {
+        if (!disposed && changed) void projectState.loadProjects();
+      })
       .catch(() => {
         // 示例项目是增强功能，不阻塞主流程。
-      })
-      .finally(() => {
-        if (!disposed) void projectState.loadProjects();
       });
     return () => {
       disposed = true;
@@ -714,6 +718,28 @@ export default function App() {
 
   // UI Visibility State (Tab key toggle)
   const [isUIVisible, setIsUIVisible] = useState(true);
+  /** 手机端视图切换器：切换后展开名称，点到其它区域后收回为图标。 */
+  const [isMobileViewSwitcherExpanded, setIsMobileViewSwitcherExpanded] = useState(true);
+  const mobileViewSwitcherRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const collapseMobileViewSwitcher = (event: PointerEvent) => {
+      if (!mobileViewSwitcherRef.current?.contains(event.target as Node)) {
+        setIsMobileViewSwitcherExpanded(false);
+      }
+    };
+    document.addEventListener('pointerdown', collapseMobileViewSwitcher);
+    return () => document.removeEventListener('pointerdown', collapseMobileViewSwitcher);
+  }, []);
+
+  const handleWorkspaceViewTabClick = useCallback(
+    (nextViewMode: ViewMode) => {
+      if (isImportDialogOpen) return;
+      setViewMode(nextViewMode);
+      setIsMobileViewSwitcherExpanded(true);
+    },
+    [isImportDialogOpen, setViewMode]
+  );
 
   /** 侧栏打开且非全宽时，工作区 UI 以侧栏右缘为左界（CSS --workspace-ui-left-inset） */
   useEffect(() => {
@@ -785,6 +811,15 @@ export default function App() {
     () => mapChromeHoverBackground(mapUiChromeOpacity),
     [mapUiChromeOpacity]
   );
+
+  // 底部页签在地图视图中属于小型悬浮控件，随底图切换前景；其他视图继续使用普通面板。
+  const mapViewSwitcherUsesMapChrome = projectKind === 'mapping' && viewMode === 'map';
+  const mapViewSwitcherChromeStyle = mapViewSwitcherUsesMapChrome
+    ? mapChromeControlStyle(mapUiChromeOpacity, mapUiChromeBlurPx, mapStyle)
+    : panelChromeStyle;
+  const mapViewSwitcherInactiveStyle = mapViewSwitcherUsesMapChrome
+    ? { color: mapViewSwitcherChromeStyle.color }
+    : undefined;
 
   useEffect(() => {
     applyThemeChromeCssVars(document.documentElement, themeColor);
@@ -2060,16 +2095,19 @@ export default function App() {
         (!mappingWorkspaceEditMode || viewMode === 'board') &&
         isUIVisible && projectKind && (
         <div
+          ref={mobileViewSwitcherRef}
           data-allow-context-menu
-          className={`fixed bottom-4 ui-workspace-center-x ui-workspace-bottom-bar -translate-x-1/2 z-50 p-1.5 rounded-2xl shadow-xl border flex flex-wrap justify-center gap-1 animate-in slide-in-from-bottom-4 fade-in ${
+          data-mobile-expanded={isMobileViewSwitcherExpanded ? 'true' : 'false'}
+          className={`fixed bottom-4 ui-workspace-center-x ui-workspace-bottom-bar -translate-x-1/2 z-50 p-1.5 rounded-2xl shadow-xl border flex flex-nowrap justify-center gap-1 animate-in slide-in-from-bottom-4 fade-in ${
             panelChromeStyle ? 'border-gray-100/80' : 'border-white/50 map-chrome-surface-fallback'
           }`}
-          style={panelChromeStyle}
+          style={mapViewSwitcherChromeStyle}
         >
           {projectKind === 'mapping' ? (
             <button
-              onClick={() => !isImportDialogOpen && setViewMode('map')}
+              onClick={() => handleWorkspaceViewTabClick('map')}
               disabled={isImportDialogOpen}
+              data-active={viewMode === 'map' ? 'true' : 'false'}
               className={`
               flex items-center gap-2 ${viewMode === 'map' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'map' 
@@ -2077,16 +2115,17 @@ export default function App() {
                 : 'hover:bg-gray-100 text-gray-500'}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
-              style={viewMode === 'map' ? { backgroundColor: themeColor } : undefined}
+              style={viewMode === 'map' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
             >
               <MapIcon size={20} />
-              {viewMode === 'map' && 'Mapping'}
+              <span className="ui-workspace-view-tab-label">Mapping</span>
             </button>
           ) : null}
           {projectKind === 'graph' ? (
           <button
-            onClick={() => !isImportDialogOpen && setViewMode('graph')}
+            onClick={() => handleWorkspaceViewTabClick('graph')}
             disabled={isImportDialogOpen}
+            data-active={viewMode === 'graph' ? 'true' : 'false'}
             className={`
               flex items-center gap-2 ${viewMode === 'graph' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'graph' 
@@ -2094,19 +2133,16 @@ export default function App() {
                 : 'hover:bg-gray-100 text-gray-500'}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
-            style={viewMode === 'graph' ? { backgroundColor: themeColor } : undefined}
+            style={viewMode === 'graph' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
           >
             <GitBranch size={20} />
-            {viewMode === 'graph' && 'graph'}
+            <span className="ui-workspace-view-tab-label">Graph</span>
           </button>
           ) : null}
           <button
-            onClick={() => {
-              if (!isImportDialogOpen) {
-                setViewMode('board');
-              }
-            }}
+            onClick={() => handleWorkspaceViewTabClick('board')}
             disabled={isImportDialogOpen}
+            data-active={viewMode === 'board' ? 'true' : 'false'}
             className={`
               flex items-center gap-2 ${viewMode === 'board' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'board' 
@@ -2114,14 +2150,15 @@ export default function App() {
                 : 'hover:bg-gray-100 text-gray-500'}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
-            style={viewMode === 'board' ? { backgroundColor: themeColor } : undefined}
+            style={viewMode === 'board' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
           >
             <Grid size={20} />
-            {viewMode === 'board' && 'Board'}
+            <span className="ui-workspace-view-tab-label">Board</span>
           </button>
           <button
-            onClick={() => !isImportDialogOpen && setViewMode('table')}
+            onClick={() => handleWorkspaceViewTabClick('table')}
             disabled={isImportDialogOpen}
+            data-active={viewMode === 'table' ? 'true' : 'false'}
             className={`
               flex items-center gap-2 ${viewMode === 'table' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'table' 
@@ -2129,10 +2166,10 @@ export default function App() {
                 : 'hover:bg-gray-100 text-gray-500'}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
-            style={viewMode === 'table' ? { backgroundColor: themeColor } : undefined}
+            style={viewMode === 'table' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
           >
             <Table2 size={20} />
-            {viewMode === 'table' && 'Table'}
+            <span className="ui-workspace-view-tab-label">Table</span>
           </button>
         </div>
       )}

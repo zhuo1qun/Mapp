@@ -2179,38 +2179,30 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   };
 
-  // Create note at specified position (in board coordinates)
+  // 在指定位置创建便签（board 坐标；光标为中心，与预览框一致，不做网格吸附）
   const createNoteAtPosition = (boardX: number, boardY: number) => {
     const noteWidth = 256;
     const noteHeight = 256;
-    const boardNotes = notes.filter((n) => n.boardX !== undefined && n.boardY !== undefined);
-    const allocator = createGridAllocator({
-      existingNotes: boardNotes,
-      padding: PLACEMENT_PADDING,
-      gap: PLACEMENT_GAP,
-      cellSize: PLACEMENT_GRID_CELL
-    });
-    const anchorX = boardX - noteWidth / 2;
-    const anchorY = boardY - noteHeight / 2;
-    const placement = allocator.findAndOccupy(noteWidth, noteHeight, anchorX, anchorY);
+    const placeX = boardX - noteWidth / 2;
+    const placeY = boardY - noteHeight / 2;
 
     const newNote: Note = {
       id: generateId(),
       createdAt: Date.now(),
       coords: { lat: 0, lng: 0 },
-      emoji: '', // No emoji for board notes
+      emoji: '',
       text: '',
       fontSize: 3,
       images: [],
       tags: [],
-      boardX: placement.x,
-      boardY: placement.y,
+      boardX: placeX,
+      boardY: placeY,
       variant: 'standard',
       color: '#FFFDF5'
     };
     setEditingNote(newNote);
     onToggleEditor(true);
-    setIsSelectingNotePosition(false); // Exit position selection mode
+    setIsSelectingNotePosition(false);
   };
 
 const createNoteAtCenter = () => {

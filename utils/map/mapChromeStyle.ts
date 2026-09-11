@@ -25,6 +25,78 @@ export const DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
 export const DEFAULT_MAP_UI_CHROME_BLUR_PX = 8;
 
 /**
+ * 地图上的小型悬浮控件使用与底图相称的中性色。这里刻意按「底图类型」切换，
+ * 而非逐帧采样瓦片像素：后者在拖动地图时容易造成前景闪烁，也会增加合成成本。
+ */
+export function isDarkMapStyle(mapStyleId?: string): boolean {
+  return mapStyleId === 'carto-dark' || mapStyleId === 'satellite';
+}
+
+export type MapChromeAppearance = 'light' | 'dark';
+
+export function mapChromeAppearance(mapStyleId?: string): MapChromeAppearance {
+  return isDarkMapStyle(mapStyleId) ? 'dark' : 'light';
+}
+
+/**
+ * 仅用于图标优先的地图工具栏；边框也随深浅材质调整，避免深色地图上出现刺眼白框。
+ */
+export function mapChromeControlStyle(
+  opacity: number,
+  blurPx: number,
+  mapStyleId?: string
+): CSSProperties {
+  const o = Math.min(1, Math.max(0, opacity));
+  const b = Math.min(48, Math.max(0, blurPx));
+  const dark = isDarkMapStyle(mapStyleId);
+  const style: CSSProperties = {
+    backgroundColor: dark ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`,
+    // 内联 color 覆盖图标按钮的默认 Tailwind 前景色，让 SVG 图标与文字一同继承。
+    color: dark ? 'rgba(255, 255, 255, 0.92)' : '#374151',
+    // 深色玻璃保留一丝高光即可；默认 gray-100/80 在暗底上会显得像实线白框。
+    borderColor: dark ? 'rgba(255, 255, 255, 0.18)' : undefined
+  };
+  if (b > 0) {
+    const f = `blur(${b}px)`;
+    style.backdropFilter = f;
+    style.WebkitBackdropFilter = f;
+  }
+  return style;
+}
+
+/** 图标工具栏的悬停面，与 mapChromeControlStyle 保持同一亮暗语义。 */
+export function mapChromeControlHoverBackground(opacity: number, mapStyleId?: string): string {
+  const o = Math.min(1, Math.max(0, opacity) + 0.1);
+  return isDarkMapStyle(mapStyleId) ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`;
+}
+
+/**
+ * 文字密集的详情卡与编辑器使用的材质。
+ * 与小控件共用深/浅语义，并严格沿用用户设置的透明度与模糊半径。
+ */
+export function mapChromeContentStyle(
+  opacity: number,
+  blurPx: number,
+  mapStyleId?: string
+): CSSProperties {
+  const o = Math.min(1, Math.max(0, opacity));
+  const b = Math.min(48, Math.max(0, blurPx));
+  const dark = isDarkMapStyle(mapStyleId);
+  const style: CSSProperties = {
+    backgroundColor: dark ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`,
+    color: dark ? 'rgba(255, 255, 255, 0.92)' : '#1f2937',
+    // 面板根节点本身也必须覆盖原本的 gray-100 描边，不能只处理内部子元素。
+    borderColor: dark ? 'rgba(255, 255, 255, 0.16)' : undefined
+  };
+  if (b > 0) {
+    const f = `blur(${b}px)`;
+    style.backdropFilter = f;
+    style.WebkitBackdropFilter = f;
+  }
+  return style;
+}
+
+/**
  * 全局玻璃浮层描边：只用这一条细灰边，不要再叠 `ring-*`，否则会出现两种描边色。
  * gray-100/80 ≈ #f3f4f6 @ 80%，与 ChromeIconButton / canvas paint 一致。
  */

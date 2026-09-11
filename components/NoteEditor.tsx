@@ -24,7 +24,7 @@ import {
   NoteEditorAddPillLabel
 } from './note-editor/addPillStyles';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
-import { MODAL_BACKDROP_MASK_STYLE } from '../utils/map/mapChromeStyle';
+import { MODAL_BACKDROP_MASK_STYLE, type MapChromeAppearance } from '../utils/map/mapChromeStyle';
 import {
   hasNavigableGpsCoords
 } from '../utils/map/openExternalNavigation';
@@ -43,6 +43,8 @@ interface NoteEditorProps {
   themeColor?: string;
   /** 与全局「界面外观」一致：主面板及内嵌白底控件玻璃化 */
   panelChromeStyle?: React.CSSProperties;
+  /** 地图深色/卫星底图传入 dark；其它视图维持 regular 浅色编辑面。 */
+  chromeAppearance?: MapChromeAppearance;
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -55,7 +57,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onSwitchToBoardView,
   onSwitchToGraphView,
   themeColor = THEME_COLOR,
-  panelChromeStyle
+  panelChromeStyle,
+  chromeAppearance = 'light'
 }) => {
   const MotionDiv = (motion.div as unknown) as React.ComponentType<any>;
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -465,6 +468,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         onClose={() => setShowEmojiPicker(false)}
         onSelectEmoji={(e) => setEmoji(e)}
         panelChromeStyle={panelChromeStyle}
+        chromeAppearance={chromeAppearance}
       />
     </div>
   ) : null;
@@ -534,7 +538,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className={`note-editor-panel w-[500px] max-w-[min(95%,calc(100%-2rem))] flex flex-col relative transition-colors duration-300 max-h-[90vh] max-h-[90dvh] min-h-[300px] rounded-2xl border border-gray-100/80 ${panelChromeStyle ? '' : 'bg-white'} ${isSketching ? 'min-h-[500px]' : ''}`}
+          className={`note-editor-panel map-chrome-content-${chromeAppearance} w-[500px] max-w-[min(95%,calc(100%-2rem))] flex flex-col relative transition-colors duration-300 max-h-[90vh] max-h-[90dvh] min-h-[300px] rounded-2xl border border-gray-100/80 ${panelChromeStyle ? '' : 'bg-white'} ${isSketching ? 'min-h-[500px]' : ''}`}
           style={{
             ...(panelChromeStyle || {}),
             boxShadow: '0 25px 50px 12px rgba(0, 0, 0, 0.15)',
@@ -639,6 +643,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 }}
                 themeColor={themeColor}
                 panelChromeStyle={panelChromeStyle}
+                chromeAppearance={chromeAppearance}
                 active={isOpen}
                 onProvideTimeDismiss={registerTimeRangeDismiss}
                 tags={tags}

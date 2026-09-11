@@ -1,9 +1,11 @@
 import React from 'react';
 import { FileJson, Image as ImageIcon, Plus } from 'lucide-react';
+import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
 type Props = {
   open: boolean;
   chromeSurfaceStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
   onClose: () => void;
   onImportPhotos: () => void;
   onImportData: () => void;
@@ -14,6 +16,7 @@ type Props = {
 export const MapImportMenuModal: React.FC<Props> = ({
   open,
   chromeSurfaceStyle,
+  chromeAppearance = 'light',
   onClose,
   onImportPhotos,
   onImportData,
@@ -25,7 +28,7 @@ export const MapImportMenuModal: React.FC<Props> = ({
     <div className="fixed inset-0 z-[6000] flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={() => onClose()} />
       <div
-        className="relative z-[6001] rounded-xl shadow-xl border border-gray-100/80 py-2 w-48 mx-4"
+        className={`map-chrome-content-${chromeAppearance} relative z-[6001] rounded-xl shadow-xl border border-gray-100/80 py-2 w-48 mx-4`}
         style={chromeSurfaceStyle}
       >
         <button
@@ -76,4 +79,3 @@ export const MapImportMenuModal: React.FC<Props> = ({
     </div>
   );
 };
-

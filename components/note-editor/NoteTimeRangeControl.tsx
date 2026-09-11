@@ -8,6 +8,7 @@ import {
   NOTE_EDITOR_ADD_PILL_IDLE,
   NoteEditorAddPillLabel
 } from './addPillStyles';
+import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 export interface NoteTimeRangeChange {
   startYear?: number;
@@ -20,6 +21,7 @@ interface NoteTimeRangeControlProps {
   onChange: (next: NoteTimeRangeChange) => void;
   themeColor?: string;
   panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
   /** 为 false 时收起浮动面板（例如父级编辑器关闭） */
   active?: boolean;
   /** 父级在「关闭其它浮层」时调用，用于收起时间面板 */
@@ -40,6 +42,7 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
   onChange,
   themeColor = '#6366f1',
   panelChromeStyle,
+  chromeAppearance = 'light',
   active = true,
   onProvideDismiss,
   onBeforeOpen
@@ -186,7 +189,7 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
           <div
             ref={timePanelPortalRef}
             data-note-time-range-panel
-            className={`flex flex-nowrap items-center gap-1.5 rounded-xl border border-gray-100/80 p-2 shadow-lg whitespace-nowrap ${panelChromeStyle ? '' : 'bg-white'}`}
+            className={`map-chrome-content-${chromeAppearance} flex flex-nowrap items-center gap-1.5 rounded-xl border border-gray-100/80 p-2 shadow-lg whitespace-nowrap ${panelChromeStyle ? '' : 'bg-white'}`}
             style={{
               ...(panelChromeStyle || {}),
               position: 'fixed',

@@ -64,7 +64,10 @@ import { buildStandaloneMapTabHtml } from '../utils/map/mapTabExportHtml';
 import { downloadTextFile } from '../utils/graph/graphExportHtml';
 import {
   mapChromeSurfaceStyle,
-  mapChromeHoverBackground,
+  mapChromeControlStyle,
+  mapChromeControlHoverBackground,
+  mapChromeContentStyle,
+  mapChromeAppearance,
   DEFAULT_MAP_UI_CHROME_OPACITY,
   DEFAULT_MAP_UI_CHROME_BLUR_PX
 } from '../utils/map/mapChromeStyle';
@@ -83,6 +86,104 @@ const MapAttributionPrefix: React.FC = () => {
   useEffect(() => {
     map.attributionControl?.setPrefix(false);
   }, [map]);
+
+  return null;
+};
+
+/**
+ * A permanent, two-levels-lower tile layer beneath the real basemap.
+ *
+ * Leaflet already keeps tiles from the previous viewport during a zoom. This
+ * layer covers the complementary case: when zooming out reveals land that was
+ * never in the old viewport. It needs roughly one quarter as many requests as
+ * the target zoom, so it arrives quickly as a pixelated but complete backdrop.
+ */
+const MapTileZoomFallback: React.FC<{
+  url: string;
+  maxZoom: number;
+  maxNativeZoom?: number;
+}> = ({ url, maxZoom, maxNativeZoom }) => {
+  const map = useMap();
+  const layerRef = useRef<L.TileLayer | null>(null);
+
+  const updateFallbackZoom = useCallback(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+
+    const sourceMaxZoom = maxNativeZoom ?? maxZoom;
+    const fallbackZoom = Math.max(
+      map.getMinZoom(),
+      Math.min(sourceMaxZoom, Math.floor(map.getZoom()) - 2)
+    );
+
+    if (
+      layer.options.minNativeZoom === fallbackZoom &&
+      layer.options.maxNativeZoom === fallbackZoom
+    ) {
+      return;
+    }
+    // A one-level difference still makes a perfectly useful fallback. Avoid
+    // replacing it for tiny zoom adjustments; that keeps its coverage warm.
+    if (Math.abs((layer.options.maxNativeZoom ?? fallbackZoom) - fallbackZoom) < 2) {
+      return;
+    }
+    // Pin this layer to one parent zoom. `maxNativeZoom` alone only clamps
+    // zooming in; `minNativeZoom` also prevents it from jumping to a new grid
+    // while the user is zooming out.
+    layer.options.minNativeZoom = fallbackZoom;
+    layer.options.maxNativeZoom = fallbackZoom;
+    layer.redraw();
+  }, [map, maxNativeZoom, maxZoom]);
+
+  useEffect(() => {
+    const sourceMaxZoom = maxNativeZoom ?? maxZoom;
+    const initialFallbackZoom = Math.max(
+      map.getMinZoom(),
+      Math.min(sourceMaxZoom, Math.floor(map.getZoom()) - 2)
+    );
+    const layer = L.tileLayer(url, {
+      attribution: '',
+      // The normal TileLayer renders at z-index 1; this one is intentionally
+      // below it and remains visible only where high-detail tiles are absent.
+      zIndex: 0,
+      maxZoom,
+      minNativeZoom: initialFallbackZoom,
+      maxNativeZoom: initialFallbackZoom,
+      updateWhenZooming: false,
+      updateWhenIdle: false,
+      updateInterval: 80,
+      keepBuffer: 2
+    });
+
+    layerRef.current = layer;
+    layer.addTo(map);
+    // Keep the parent grid stable throughout a gesture. Replacing it at every
+    // integer zoom would briefly clear precisely the fallback we need. Once
+    // the gesture has settled, rebase it in the background for the next move.
+    let rebaseTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelRebase = () => {
+      if (!rebaseTimer) return;
+      clearTimeout(rebaseTimer);
+      rebaseTimer = null;
+    };
+    const scheduleRebase = () => {
+      cancelRebase();
+      rebaseTimer = setTimeout(() => {
+        rebaseTimer = null;
+        updateFallbackZoom();
+      }, 900);
+    };
+    map.on('zoomstart', cancelRebase);
+    map.on('zoomend', scheduleRebase);
+
+    return () => {
+      cancelRebase();
+      map.off('zoomstart', cancelRebase);
+      map.off('zoomend', scheduleRebase);
+      layer.remove();
+      layerRef.current = null;
+    };
+  }, [map, url, maxNativeZoom, maxZoom, updateFallbackZoom]);
 
   return null;
 };
@@ -129,6 +230,8 @@ interface MapViewProps {
   onUpdateConnections?: (connections: Connection[]) => void | Promise<void>;
 }
 
+type MapChromeId = 'settings' | 'layer' | 'search' | 'locate' | 'create';
+
 export const MapView: React.FC<MapViewProps> = ({
   project,
   workspaceEditMode,
@@ -172,7 +275,19 @@ export const MapView: React.FC<MapViewProps> = ({
   const connections = project.connections || [];
   const mapChromeSurface =
     panelChromeStyleProp ?? mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
-  const mapChromeHoverBg = mapChromeHoverBackground(mapUiChromeOpacity);
+  // 图标控件可随深/浅底图切换前景；文字密集的面板仍复用 mapChromeSurface。
+  const mapChromeControlSurface = mapChromeControlStyle(
+    mapUiChromeOpacity,
+    mapUiChromeBlurPx,
+    mapStyleId
+  );
+  const mapChromeContentSurface = mapChromeContentStyle(
+    mapUiChromeOpacity,
+    mapUiChromeBlurPx,
+    mapStyleId
+  );
+  const mapChromeTone = mapChromeAppearance(mapStyleId);
+  const mapChromeHoverBg = mapChromeControlHoverBackground(mapUiChromeOpacity, mapStyleId);
   const [editingNote, setEditingNote] = useState<Partial<Note> | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -461,6 +576,8 @@ export const MapView: React.FC<MapViewProps> = ({
   // Settings panel
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const [showLocateMenu, setShowLocateMenu] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
 
   // Location error retry tracking
   const [hasRetriedLocation, setHasRetriedLocation] = useState(false);
@@ -502,10 +619,6 @@ export const MapView: React.FC<MapViewProps> = ({
     setShowBorderPanel
   });
   const { pendingPlaceNote, setPendingPlaceNote, handleConvertPendingToNote } = borderSearchState;
-
-  const handleToggleBorderPanel = () => {
-    if (setShowBorderPanel) setShowBorderPanel(!showBorderPanel);
-  };
 
   // Auto-hide location error after 2 seconds
   useEffect(() => {
@@ -627,6 +740,44 @@ export const MapView: React.FC<MapViewProps> = ({
     notes,
     projectFrames: project.frames
   });
+
+  const closeMapChromeExcept = useCallback((keep?: MapChromeId) => {
+    if (keep !== 'settings') setShowSettingsPanel(false);
+    if (keep !== 'layer') setShowFrameLayerPanel(false);
+    if (keep !== 'search') setShowBorderPanel?.(false);
+    if (keep !== 'locate') setShowLocateMenu(false);
+    if (keep !== 'create') setShowCreateMenu(false);
+  }, [setShowBorderPanel, setShowFrameLayerPanel]);
+
+  const handleToggleSettings = useCallback(() => {
+    closeMapChromeExcept('settings');
+    setShowSettingsPanel((v) => !v);
+  }, [closeMapChromeExcept]);
+
+  const handleToggleLayerPanel = useCallback(() => {
+    closeMapChromeExcept('layer');
+    setShowFrameLayerPanel((v) => !v);
+  }, [closeMapChromeExcept, setShowFrameLayerPanel]);
+
+  const handleToggleBorderPanel = useCallback(() => {
+    closeMapChromeExcept('search');
+    setShowBorderPanel?.(!showBorderPanel);
+  }, [closeMapChromeExcept, setShowBorderPanel, showBorderPanel]);
+
+  const handleToggleLocateMenu = useCallback(() => {
+    closeMapChromeExcept('locate');
+    setShowLocateMenu((v) => !v);
+  }, [closeMapChromeExcept]);
+
+  const handleToggleCreateMenu = useCallback(() => {
+    closeMapChromeExcept('create');
+    setShowCreateMenu((v) => !v);
+  }, [closeMapChromeExcept]);
+
+  const handleCloseLocateAndCreateMenus = useCallback(() => {
+    setShowLocateMenu(false);
+    setShowCreateMenu(false);
+  }, []);
 
   const graphLayerStandard = (project.graphLayerStandard ?? 'tag') as GraphLayerGroupStandard;
   const mergedTagMapLayers = useMemo(
@@ -1212,8 +1363,11 @@ export const MapView: React.FC<MapViewProps> = ({
         maxZoom={MAP_MAX_ZOOM}
         zoomSnap={0}
         zoomDelta={0.5}
-        // Avoid the opacity transition that can expose a blank layer on slower mobile loads.
-        fadeAnimation={false}
+        // Keep the previous zoom level visible as a deliberately low-detail fallback.
+        // Leaflet retains its parent/child tiles during this fade, then replaces them
+        // one-by-one as the target zoom arrives — the same progressive pattern used by
+        // mature map apps to avoid an empty canvas while zooming out.
+        fadeAnimation
         scrollWheelZoom={false}
         touchZoom={false}
         crs={L.CRS.EPSG3857}
@@ -1249,6 +1403,13 @@ export const MapView: React.FC<MapViewProps> = ({
             onBoxCommit={handleMapBoxSelectCommit}
             onInteractionClaimed={handleMapShiftBoxSelectClaimed}
             themeColor={themeColor}
+          />
+        )}
+        {effectiveMapStyle !== 'blank' && (
+          <MapTileZoomFallback
+            url={tileLayerConfig.url}
+            maxZoom={tileLayerConfig.maxZoom}
+            maxNativeZoom={tileLayerConfig.maxNativeZoom}
           />
         )}
         <TileLayer 
@@ -1527,26 +1688,29 @@ export const MapView: React.FC<MapViewProps> = ({
                     isLocating={isLocating}
                     mapNotes={mapRenderedNotes}
                     themeColor={themeColor}
-                    chromeSurfaceStyle={mapChromeSurface}
+                    chromeSurfaceStyle={mapChromeControlSurface}
+                    menuChromeSurfaceStyle={mapChromeContentSurface}
+                    menuChromeAppearance={mapChromeTone}
                     chromeHoverBackground={mapChromeHoverBg}
                     settingsOpen={showSettingsPanel}
                     settingsButtonRef={settingsButtonRef}
-                    onOpenSettings={() => {
-                      setShowSettingsPanel((v) => !v);
-                      setShowFrameLayerPanel(false);
-                    }}
+                    onOpenSettings={handleToggleSettings}
                     onCreateAtCurrentLocation={handleCreateAtCurrentLocation}
                     onImportFromPhotos={handleImportFromPhotos}
                     isCreatingAtLocation={isCreatingAtLocation}
+                    showLocateMenu={showLocateMenu}
+                    showCreateMenu={showCreateMenu}
+                    onToggleLocateMenu={handleToggleLocateMenu}
+                    onToggleCreateMenu={handleToggleCreateMenu}
+                    onCloseMenus={handleCloseLocateAndCreateMenus}
                   />
                   <MapLayerControl
                     showPanel={showFrameLayerPanel}
-                    onTogglePanel={() => {
-                      setShowFrameLayerPanel(!showFrameLayerPanel);
-                      setShowSettingsPanel(false);
-                    }}
+                    onTogglePanel={handleToggleLayerPanel}
                     themeColor={themeColor}
-                    chromeSurfaceStyle={mapChromeSurface}
+                    chromeSurfaceStyle={mapChromeControlSurface}
+                    menuChromeSurfaceStyle={mapChromeContentSurface}
+                    menuChromeAppearance={mapChromeTone}
                     chromeHoverBackground={mapChromeHoverBg}
                     frames={project.frames}
                     frameLayerVisibility={frameLayerVisibility}
@@ -1560,7 +1724,8 @@ export const MapView: React.FC<MapViewProps> = ({
                       onUpdateProject ? (
                         <ProjectNotesLayerPanel
                           themeColor={themeColor}
-                          panelChromeStyle={mapChromeSurface}
+                          panelChromeStyle={mapChromeContentSurface}
+                          chromeAppearance={mapChromeTone}
                           variant="dock"
                           flow
                           dockAlign="start"
@@ -1595,7 +1760,9 @@ export const MapView: React.FC<MapViewProps> = ({
                     isOpen={!!showBorderPanel}
                     onToggle={handleToggleBorderPanel}
                     themeColor={themeColor}
-                    chromeSurfaceStyle={mapChromeSurface}
+                    chromeSurfaceStyle={mapChromeControlSurface}
+                    menuChromeSurfaceStyle={mapChromeContentSurface}
+                    menuChromeAppearance={mapChromeTone}
                     chromeHoverBackground={mapChromeHoverBg}
                     borderSearch={borderSearchState}
                     borderGeoJSON={borderGeoJSON}
@@ -1605,7 +1772,7 @@ export const MapView: React.FC<MapViewProps> = ({
                   <MapTopRightEditToggle
                     isEditMode={isMapToolbarEditMode}
                     themeColor={themeColor}
-                    chromeSurfaceStyle={mapChromeSurface}
+                    chromeSurfaceStyle={mapChromeControlSurface}
                     chromeHoverBackground={mapChromeHoverBg}
                     onEnterEdit={() => onWorkspaceEditModeChange(true)}
                     onExitEdit={(e) => {
@@ -1624,7 +1791,8 @@ export const MapView: React.FC<MapViewProps> = ({
                   note={selectedNote}
                   currentImageIndex={currentPreviewImageIndex}
                   onImageIndexChange={setCurrentPreviewImageIndex}
-                  chromeSurfaceStyle={mapChromeSurface}
+                  chromeSurfaceStyle={mapChromeContentSurface}
+                  chromeAppearance={mapChromeTone}
                   themeColor={themeColor}
                   onOpenEditor={handleEditNoteFromLabel}
                 />
@@ -1635,8 +1803,8 @@ export const MapView: React.FC<MapViewProps> = ({
         <div className="absolute top-24 left-0 right-0 z-[400] pointer-events-none flex justify-center">
           <div className="relative">
             <div
-              className="px-4 py-2 rounded-full shadow-lg text-sm text-gray-600 animate-bounce whitespace-nowrap border border-gray-100/80"
-              style={mapChromeSurface}
+              className={`px-4 py-2 rounded-full shadow-lg text-sm animate-bounce whitespace-nowrap border border-gray-100/80 map-chrome-content-${mapChromeTone}`}
+              style={mapChromeControlSurface}
             >
               Long press anywhere to pin
             </div>
@@ -1681,14 +1849,16 @@ export const MapView: React.FC<MapViewProps> = ({
           showBorderPanel={!!showBorderPanel}
           onToggleBorderPanel={handleToggleBorderPanel}
           themeColor={themeColor}
-          chromeSurfaceStyle={mapChromeSurface}
+          chromeSurfaceStyle={mapChromeControlSurface}
+          menuChromeSurfaceStyle={mapChromeContentSurface}
+          menuChromeAppearance={mapChromeTone}
           chromeHoverBackground={mapChromeHoverBg}
           borderSearch={borderSearchState}
           borderGeoJSON={borderGeoJSON}
           onClearBorder={() => setBorderGeoJSON?.(null)}
           onCloseBorderPanel={() => setShowBorderPanel?.(false)}
           showFrameLayerPanel={showFrameLayerPanel}
-          onToggleFrameLayerPanel={() => setShowFrameLayerPanel(!showFrameLayerPanel)}
+          onToggleFrameLayerPanel={handleToggleLayerPanel}
           frames={project.frames}
           frameLayerVisibility={frameLayerVisibility}
           setFrameLayerVisibility={setFrameLayerVisibility}
@@ -1709,7 +1879,8 @@ export const MapView: React.FC<MapViewProps> = ({
           initialNote={editingNote || {}}
           onSwitchToBoardView={(coords) => onSwitchToBoardView(coords, mapInstance)}
           themeColor={themeColor}
-          panelChromeStyle={mapChromeSurface}
+          panelChromeStyle={mapChromeContentSurface}
+          chromeAppearance={mapChromeTone}
         />
       )}
 
@@ -1719,7 +1890,8 @@ export const MapView: React.FC<MapViewProps> = ({
           note={(hoveredNote ?? selectedNote)!}
           currentImageIndex={currentPreviewImageIndex}
           onImageIndexChange={setCurrentPreviewImageIndex}
-          chromeSurfaceStyle={mapChromeSurface}
+          chromeSurfaceStyle={mapChromeContentSurface}
+          chromeAppearance={mapChromeTone}
           themeColor={themeColor}
         />
       )}
@@ -1799,7 +1971,8 @@ export const MapView: React.FC<MapViewProps> = ({
 
       <MapImportMenuModal
         open={!!showImportMenu}
-        chromeSurfaceStyle={mapChromeSurface}
+        chromeSurfaceStyle={mapChromeContentSurface}
+        chromeAppearance={mapChromeTone}
         onClose={() => setShowImportMenu?.(false)}
         onImportPhotos={() => fileInputRef.current?.click()}
         onImportData={() => dataImportInputRef.current?.click()}

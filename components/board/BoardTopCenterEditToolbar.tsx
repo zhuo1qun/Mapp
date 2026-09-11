@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image as ImageIcon, StickyNote } from 'lucide-react';
+import { StickyNote } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 
 type Props = {
@@ -11,7 +11,8 @@ type Props = {
   chromeHoverBackground?: string;
   themeColor: string;
   onToggleSelectNotePosition: () => void;
-  onAddImage: () => void;
+  /** 暂时隐藏图片入口（功能有 bug）；保留可选 prop 以免改动调用方 */
+  onAddImage?: () => void;
   onEnableDrawFrame: () => void;
   onToggleBoxSelect: () => void;
   onClearSelectingNotePosition: () => void;
@@ -26,7 +27,6 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
   chromeHoverBackground,
   themeColor,
   onToggleSelectNotePosition,
-  onAddImage,
   onEnableDrawFrame,
   onToggleBoxSelect,
   onClearSelectingNotePosition
@@ -65,15 +65,7 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
         >
           <StickyNote size={18} className="sm:w-5 sm:h-5" />
         </ChromeIconButton>
-        <ChromeIconButton
-          chromeSurfaceStyle={chromeSurfaceStyle}
-          chromeHoverBackground={chromeHoverBackground}
-          nonChromeIdleHover="imperative-gray100"
-          onClick={onAddImage}
-          tooltip="图片"
-        >
-          <ImageIcon size={18} className="sm:w-5 sm:h-5" />
-        </ChromeIconButton>
+        {/* 图片按钮暂时隐藏：入口功能有 bug */}
         <ChromeIconButton
           chromeSurfaceStyle={chromeSurfaceStyle}
           chromeHoverBackground={chromeHoverBackground}
@@ -130,4 +122,3 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
     </div>
   );
 };
-

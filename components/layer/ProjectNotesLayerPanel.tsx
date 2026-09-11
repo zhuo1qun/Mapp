@@ -28,12 +28,14 @@ import { SettingsCompactSlider } from '../ui/SettingsCompactSlider';
 import { TagAddPanel } from '../ui/TagAddPanel';
 import { NoteTimeRangeControl } from '../note-editor/NoteTimeRangeControl';
 import { TagLayerHierarchyList } from './TagLayerHierarchyList';
+import { ChromeSegmentedControl } from '../ui/ChromeSegmentedControl';
 import {
   emojiFromLayerTagKey,
   emojiToLayerTagKey,
   insertLayerOrderRelative
 } from '../../utils/layer/tagHierarchy';
 import { useChromeMenuTop } from '../../utils/ui/chromeMenuPosition';
+import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 function insertRelative(order: string[], fromKey: string, toKey: string, place: 'before' | 'after'): string[] {
   return insertLayerOrderRelative(order, fromKey, toKey, place);
@@ -50,6 +52,7 @@ function accordionStorageKey(projectId: string, standard: GraphLayerGroupStandar
 export interface ProjectNotesLayerPanelProps {
   themeColor: string;
   panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
   variant?: 'graph' | 'dock';
   projectId: string;
   merged: GraphLayerState;
@@ -90,6 +93,7 @@ export interface ProjectNotesLayerPanelProps {
 export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   themeColor,
   panelChromeStyle,
+  chromeAppearance = 'light',
   variant: _layerPanelVariant = 'dock',
   projectId,
   merged,
@@ -569,7 +573,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   const panelBody = (
     <div
       data-graph-top-left-panel
-      className={`${posCls} ${embed ? 'mt-2' : ''} flex max-h-[min(24rem,70vh)] overflow-hidden rounded-xl border border-gray-100/80 shadow-xl ${
+      className={`map-chrome-content-${chromeAppearance} ${posCls} ${embed ? 'mt-2' : ''} flex max-h-[min(24rem,70vh)] overflow-hidden rounded-xl border border-gray-100/80 shadow-xl ${
         embed ? 'w-full max-w-xl' : weightSideOpen ? 'w-[min(36rem,calc(100vw-1rem))]' : 'w-[min(20rem,calc(100vw-2rem))]'
       }`}
       style={{
@@ -621,44 +625,26 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
           ) : null}
 
           {!hideStandardToggle ? (
-          <div className="flex items-center gap-2 px-1.5 py-1.5">
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onLayerGroupStandardChange('tag');
-              }}
-              className={`flex flex-1 items-center justify-center rounded-lg px-2 py-1.5 transition-colors ${
-                layerGroupStandard === 'tag'
-                  ? 'text-theme-chrome-fg'
-                  : 'text-theme-chrome-fg opacity-60'
-              } ${layerGroupStandard === 'tag' ? '' : 'bg-gray-100 hover:bg-gray-200'}`}
-              style={layerGroupStandard === 'tag' ? { backgroundColor: themeColor } : undefined}
-              aria-label="切换为按标签分组"
-              title="按标签分组"
-            >
-              <TagIcon size={18} strokeWidth={2} aria-hidden />
-            </button>
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onLayerGroupStandardChange('frame');
-              }}
-              className={`flex flex-1 items-center justify-center rounded-lg px-2 py-1.5 transition-colors ${
-                layerGroupStandard === 'frame'
-                  ? 'text-theme-chrome-fg'
-                  : 'text-theme-chrome-fg opacity-60'
-              } ${layerGroupStandard === 'frame' ? '' : 'bg-gray-100 hover:bg-gray-200'}`}
-              style={layerGroupStandard === 'frame' ? { backgroundColor: themeColor } : undefined}
-              aria-label="切换为按簇分组"
-              title="按簇分组"
-            >
-              <FrameIcon size={18} strokeWidth={2} aria-hidden />
-            </button>
-          </div>
+          <ChromeSegmentedControl
+            className="mx-1.5 my-1.5"
+            aria-label="图层分组方式"
+            value={layerGroupStandard}
+            onChange={onLayerGroupStandardChange}
+            options={[
+              {
+                id: 'tag',
+                label: <TagIcon size={18} strokeWidth={2} aria-hidden />,
+                title: '按标签分组',
+                ariaLabel: '切换为按标签分组'
+              },
+              {
+                id: 'frame',
+                label: <FrameIcon size={18} strokeWidth={2} aria-hidden />,
+                title: '按簇分组',
+                ariaLabel: '切换为按簇分组'
+              }
+            ]}
+          />
           ) : null}
 
           {layerGroupStandard === 'tag' ? (

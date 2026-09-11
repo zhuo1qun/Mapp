@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Settings, Map, Grid, GitBranch, Table2, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { set } from 'idb-keyval';
 import { MAP_STYLE_OPTIONS } from '../constants';
 import type { Project } from '../types';
@@ -9,7 +9,12 @@ import { ThemeColorPicker } from './ThemeColorPicker';
 import { HelpHint } from './ui/HelpHint';
 import { SettingsCompactSlider } from './ui/SettingsCompactSlider';
 import { SettingsToggleSwitch } from './ui/SettingsToggleSwitch';
-import { mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
+import { chromePanelFieldClass } from './ui/chromePanelField';
+import {
+  mapChromeAppearance,
+  mapChromeContentStyle,
+  mapChromeSurfaceStyle
+} from '../utils/map/mapChromeStyle';
 import { PORTAL_TOOLTIP_Z } from './ui/PortalTooltip';
 
 /** 由打开设置时所在的视图决定只展示哪一块 */
@@ -200,16 +205,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const currentMapStyleLabel =
     MAP_STYLE_OPTIONS.find((s) => s.id === currentMapStyle)?.name ?? currentMapStyle;
 
-  const settingsCardChrome = mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
-
-  const viewMeta =
+  const settingsAppearance =
+    settingsContextView === 'map' ? mapChromeAppearance(currentMapStyle) : 'light';
+  const settingsCardChrome =
     settingsContextView === 'map'
-      ? { title: 'Mapping Style', icon: <Map size={18} /> }
-      : settingsContextView === 'board'
-        ? { title: 'Board Style', icon: <Grid size={18} /> }
-        : settingsContextView === 'graph'
-          ? { title: 'Graph Style', icon: <GitBranch size={18} /> }
-          : { title: 'Table Style', icon: <Table2 size={18} /> };
+      ? mapChromeContentStyle(mapUiChromeOpacity, mapUiChromeBlurPx, currentMapStyle)
+      : mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
 
   return createPortal(
     <>
@@ -219,7 +220,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         data-graph-top-left-panel
         role="dialog"
         aria-label="设置"
-        className="fixed z-[5001] ui-chrome-menu-page-left overflow-hidden rounded-xl border border-gray-100/80 shadow-xl flex flex-col"
+        className={`map-chrome-content-${settingsAppearance} fixed z-[5001] ui-chrome-menu-page-left overflow-hidden rounded-xl border border-gray-100/80 shadow-xl flex flex-col`}
         style={{
           top: panelRect.top,
           width: panelRect.width,
@@ -229,22 +230,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-3 py-2.5 shrink-0 border-b border-gray-200/60">
-          <div className="flex items-center gap-2 min-w-0">
-            <Settings size={18} className="text-gray-700 shrink-0" />
-            <h2 className="text-sm font-semibold text-gray-900 truncate">{viewMeta.title}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
-            aria-label="关闭设置"
-          >
-            <X size={18} className="text-gray-600" />
-          </button>
-        </div>
+        <h2 className="shrink-0 px-3 pt-2.5 text-xs font-medium text-gray-500">设置</h2>
 
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 theme-surface-scrollbar">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pt-2 pb-3 theme-surface-scrollbar">
           {settingsContextView === 'map' ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
@@ -255,7 +243,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   aria-expanded={mapBgMenuOpen}
                   aria-haspopup="listbox"
                   onClick={() => setMapBgMenuOpen((o) => !o)}
-                  className="min-w-0 flex flex-1 items-center justify-between gap-2 rounded-lg border border-gray-200/70 bg-white/60 px-2.5 py-1.5 text-left text-xs text-gray-900 shadow-sm transition-colors hover:bg-white/90"
+                  className={`${chromePanelFieldClass} flex-1`}
                 >
                   <span className="truncate">{currentMapStyleLabel}</span>
                   <ChevronDown
@@ -413,8 +401,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <div
             ref={mapBgMenuRef}
             role="listbox"
-            className="fixed overflow-hidden rounded-lg border border-gray-100/80 bg-white/95 py-1 shadow-xl backdrop-blur-sm theme-surface-scrollbar"
+            className={`map-chrome-content-${settingsAppearance} fixed overflow-hidden rounded-lg border border-gray-100/80 py-1 shadow-xl theme-surface-scrollbar`}
             style={{
+              ...settingsCardChrome,
               zIndex: PORTAL_TOOLTIP_Z,
               top: mapBgMenuRect.top,
               left: mapBgMenuRect.left,
@@ -433,7 +422,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 className={`flex w-full border-0 px-2.5 py-1.5 text-left text-xs transition-colors ${
                   currentMapStyle === style.id
                     ? 'font-medium text-gray-900'
-                    : 'text-gray-600 hover:bg-black/[0.04]'
+                    : 'text-gray-600 hover:bg-gray-100'
                 }`}
                 style={
                   currentMapStyle === style.id

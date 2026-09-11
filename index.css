@@ -128,15 +128,85 @@
  * 不再另设 rem 硬顶，避免两侧空很多却提前换行。
  */
 .ui-workspace-bottom-bar {
+  width: max-content;
   max-width: calc(100vw - var(--workspace-ui-left-inset, 0px) - 2rem);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.ui-workspace-bottom-bar > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* All tab names remain in the accessibility tree, but are compact until the
+ * relevant interaction reveals them. Animating the label itself makes the
+ * button and its surrounding bar resize smoothly. */
+.ui-workspace-view-tab-label {
+  display: inline-block;
+  min-width: 0;
+  max-width: 0;
+  margin-left: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 180ms ease, margin-left 180ms ease, opacity 140ms ease;
+}
+
+@media (min-width: 640px) {
+  .ui-workspace-bottom-bar > button:hover .ui-workspace-view-tab-label,
+  .ui-workspace-bottom-bar > button:focus-visible .ui-workspace-view-tab-label {
+    max-width: 8rem;
+    margin-left: 0.5rem;
+    opacity: 1;
+  }
 }
 
 /* On phones the view switcher is compact enough to use the full viewport.
  * Subtracting the docked-sidebar inset here made the tabs wrap despite usable
  * space on both sides of the group. */
 @media (max-width: 639px) {
+  /* 覆盖工作区居中定位：固定元素同时有 left/right 时，left 会优先参与
+   * 定位，令右下页签看起来离右侧多出一段空白。 */
+  .ui-workspace-center-x.ui-workspace-bottom-bar {
+    left: auto;
+    transition: none;
+    /* Tailwind 的 -translate-x-1/2 使用独立的 translate 属性，
+     * 仅重置 transform 不会取消这段半宽度左移。 */
+    translate: none;
+  }
+
   .ui-workspace-bottom-bar {
+    /* 手机上的空间留给地图/画布：切换器改为右下角纵向图标组。 */
+    left: auto;
+    /* 顶栏的独立按钮直接距边 0.5rem。这里有玻璃容器，改为
+     * 0.25rem 外距 + 0.25rem 内衬边，令可见按钮的边缘同样距边 0.5rem。 */
+    right: max(0.25rem, calc(env(safe-area-inset-right, 0px) - 0.25rem));
+    bottom: max(0.25rem, calc(env(safe-area-inset-bottom, 0px) - 0.25rem));
+    padding: 0.25rem;
+    width: auto;
     max-width: calc(100vw - 1rem);
+    transform: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+
+  .ui-workspace-bottom-bar > button {
+    justify-content: flex-start;
+    padding: 0.625rem !important;
+    gap: 0 !important;
+  }
+
+  .ui-workspace-bottom-bar[data-mobile-expanded='true'] > button[data-active='true'] .ui-workspace-view-tab-label {
+    max-width: 8rem;
+    margin-left: 0.5rem;
+    opacity: 1;
+  }
+
+  .ui-workspace-bottom-bar[data-mobile-expanded='false'] > button,
+  .ui-workspace-bottom-bar[data-mobile-expanded='true'] > button[data-active='false'] {
+    justify-content: center;
   }
 }
 
@@ -274,6 +344,82 @@ body {
   background-color: rgb(255 255 255 / var(--map-ui-chrome-opacity, 0.9));
   backdrop-filter: blur(var(--map-ui-chrome-blur-px, 8px));
   -webkit-backdrop-filter: blur(var(--map-ui-chrome-blur-px, 8px));
+}
+
+/* 深色地图上的 regular 玻璃：编辑器和详情卡需要一套稳定、可读的文字与 icon 墨色。
+ * 仅限明确标记为 dark 的面板；普通 Board / Table / Graph 的浅色面不受影响。 */
+.map-chrome-content-dark {
+  color: rgb(243 244 246);
+  border-color: rgb(255 255 255 / 0.16) !important;
+}
+
+.map-chrome-content-dark .text-gray-900,
+.map-chrome-content-dark .text-gray-800,
+.map-chrome-content-dark .text-gray-700,
+.map-chrome-content-dark .text-gray-600 {
+  color: rgb(243 244 246) !important;
+}
+
+.map-chrome-content-dark .text-gray-500 {
+  color: rgb(209 213 219) !important;
+}
+
+.map-chrome-content-dark .text-gray-400,
+.map-chrome-content-dark .text-gray-300 {
+  color: rgb(156 163 175) !important;
+}
+
+.map-chrome-content-dark .bg-white,
+.map-chrome-content-dark .bg-gray-50,
+.map-chrome-content-dark .bg-gray-100,
+.map-chrome-content-dark .bg-gray-200 {
+  background-color: rgb(255 255 255 / 0.1) !important;
+}
+
+.map-chrome-content-dark .border-gray-50,
+.map-chrome-content-dark .border-gray-100,
+.map-chrome-content-dark .border-gray-200 {
+  border-color: rgb(255 255 255 / 0.16) !important;
+}
+
+.map-chrome-content-dark .hover\:bg-gray-100:hover,
+.map-chrome-content-dark .hover\:bg-gray-200:hover {
+  background-color: rgb(255 255 255 / 0.14) !important;
+}
+
+/**
+ * 玻璃面板内嵌控件：凹槽轨道 / 凸起滑块 / 下拉触发器。
+ * 跟 map-chrome-content-light|dark 配套，不要再用半透明白底或主题色实心块冒充胶囊。
+ */
+.chrome-inset {
+  background-color: rgb(243 244 246);
+}
+.map-chrome-content-dark .chrome-inset {
+  background-color: rgb(255 255 255 / 0.1);
+}
+
+.chrome-raised {
+  background-color: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+.map-chrome-content-dark .chrome-raised {
+  background-color: rgb(255 255 255 / 0.2);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+}
+
+.chrome-field {
+  background-color: rgb(243 244 246);
+  border: 1px solid rgb(229 231 235);
+}
+.map-chrome-content-dark .chrome-field {
+  background-color: rgb(255 255 255 / 0.08);
+  border-color: rgb(255 255 255 / 0.16);
+}
+.chrome-field:hover {
+  background-color: rgb(229 231 235);
+}
+.map-chrome-content-dark .chrome-field:hover {
+  background-color: rgb(255 255 255 / 0.14);
 }
 
 /* Fixed width for tag columns to prevent table expansion */

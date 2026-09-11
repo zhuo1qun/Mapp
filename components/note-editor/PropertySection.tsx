@@ -9,6 +9,7 @@ import {
   NOTE_EDITOR_ADD_PILL_IDLE,
   NoteEditorAddPillLabel
 } from './addPillStyles';
+import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface PropertySectionProps {
   startYear?: number;
@@ -16,6 +17,7 @@ interface PropertySectionProps {
   onTimeChange: (next: { startYear?: number; endYear?: number }) => void;
   themeColor: string;
   panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
   active: boolean;
   onProvideTimeDismiss?: (dismiss: () => void) => void;
 
@@ -47,6 +49,7 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
   onTimeChange,
   themeColor,
   panelChromeStyle,
+  chromeAppearance = 'light',
   active,
   onProvideTimeDismiss,
   tags,
@@ -105,6 +108,7 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
             onChange={onTimeChange}
             themeColor={themeColor}
             panelChromeStyle={panelChromeStyle}
+            chromeAppearance={chromeAppearance}
             active={active}
             onProvideDismiss={onProvideTimeDismiss}
             onBeforeOpen={onBeforeOpenTime}
@@ -128,6 +132,7 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
         addTagAnchorRef={addTagBtnRef}
         themeColor={themeColor}
         panelChromeStyle={panelChromeStyle}
+        chromeAppearance={chromeAppearance}
       />
     </section>
   );

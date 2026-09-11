@@ -17,6 +17,7 @@ import {
   tagHierarchySuffix,
   tagRenameEditablePart
 } from '../../utils/layer/tagHierarchy';
+import { ChromeSegmentedControl } from '../ui/ChromeSegmentedControl';
 
 type Props = {
   themeColor: string;
@@ -384,36 +385,17 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
     <>
       <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-0.5">
         <span className="text-[10px] font-medium text-gray-400">多标签显隐</span>
-        <div
-          className="inline-flex shrink-0 items-center rounded-full border border-gray-200/90 bg-gray-100/80 p-0.5"
-          role="group"
+        <ChromeSegmentedControl
           aria-label="标签显隐逻辑"
-        >
-          {(
-            [
-              { id: 'and' as const, title: '且：任一标签隐藏则隐藏节点' },
-              { id: 'or' as const, title: '或：任一标签显示则显示节点' }
-            ] as const
-          ).map(({ id, title }) => {
-            const active = visibilityLogic === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                title={title}
-                aria-label={title}
-                aria-pressed={active}
-                onClick={() => setVisibilityLogic(id)}
-                className={`min-w-[2.25rem] rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide transition-colors ${
-                  active ? 'text-theme-chrome-fg shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-                style={active ? { backgroundColor: themeColor } : undefined}
-              >
-                {id === 'and' ? 'AND' : 'OR'}
-              </button>
-            );
-          })}
-        </div>
+          size="sm"
+          className="shrink-0"
+          value={visibilityLogic}
+          onChange={setVisibilityLogic}
+          options={[
+            { id: 'and', label: 'AND', title: '且：任一标签隐藏则隐藏节点' },
+            { id: 'or', label: 'OR', title: '或：任一标签显示则显示节点' }
+          ]}
+        />
       </div>
 
       {hierarchy.map(({ prefix, tags }) => {

@@ -2,10 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Tag as TagIcon } from 'lucide-react';
 import { TAG_COLORS } from '../../constants';
+import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 export interface TagAddPanelProps {
   themeColor: string;
   panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
   /** 标题说明（如「为 3 个便签添加标签」或「添加标签」） */
   title: string;
   label: string;
@@ -45,6 +47,7 @@ const PORTAL_Z = 10000;
 export const TagAddPanel: React.FC<TagAddPanelProps> = ({
   themeColor,
   panelChromeStyle,
+  chromeAppearance = 'light',
   title,
   label,
   onLabelChange,
@@ -84,7 +87,7 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
     return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
   }, [closeOnInteractOutside]);
 
-  const shellClass = `rounded-xl border border-gray-100/80 p-2.5 shadow-lg ${panelChromeStyle ? '' : 'bg-white'} ${className}`;
+  const shellClass = `map-chrome-content-${chromeAppearance} rounded-xl border border-gray-100/80 p-2.5 shadow-lg ${panelChromeStyle ? '' : 'bg-white'} ${className}`;
 
   const body = (
     <>

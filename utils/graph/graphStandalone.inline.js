@@ -1900,11 +1900,8 @@
           class="w-full" style="accent-color:${escapeHtml2(themeColor)}" />
       </label>`;
       panelSettings.innerHTML = `
-      <div class="flex items-center justify-between border-b border-gray-200/60 px-3 py-2.5">
-        <div class="text-sm font-semibold text-gray-900">\u8BBE\u7F6E</div>
-        <button type="button" data-close class="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="\u5173\u95ED">\u2715</button>
-      </div>
-      <div class="overflow-y-auto px-3 py-3 space-y-4" style="max-height:min(22rem,60dvh)">
+      <h2 class="shrink-0 px-3 pt-2.5 text-xs font-medium text-gray-500">\u8BBE\u7F6E</h2>
+      <div class="overflow-y-auto px-3 pt-2 pb-3 space-y-4" style="max-height:min(22rem,60dvh)">
         <div>
           <div class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">\u754C\u9762\u5916\u89C2</div>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1938,11 +1935,6 @@
           </div>
         </div>
       </div>`;
-      panelSettings.querySelector("[data-close]")?.addEventListener("click", (e) => {
-        e.stopPropagation();
-        settingsOpen = false;
-        syncOpenUi();
-      });
       const bindRange = (id, apply) => {
         const el = panelSettings.querySelector(`#${id}`);
         if (!el) return;

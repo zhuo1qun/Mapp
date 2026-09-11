@@ -5,12 +5,15 @@ import type { GraphLayerGroupStandard } from '../../../utils/graph/graphRuntimeC
 import { MapSearchPanel, type BorderSearchState } from '../controls/MapSearchPanel';
 import { MapLayerControl } from '../controls/MapLayerControl';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
+import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
 interface MapPreviewTopRightToolbarProps {
   showBorderPanel: boolean;
   onToggleBorderPanel: () => void;
   themeColor: string;
   chromeSurfaceStyle: React.CSSProperties;
+  menuChromeSurfaceStyle?: React.CSSProperties;
+  menuChromeAppearance?: MapChromeAppearance;
   chromeHoverBackground: string;
   borderSearch: BorderSearchState;
   borderGeoJSON: any;
@@ -33,6 +36,8 @@ export function MapPreviewTopRightToolbar({
   onToggleBorderPanel,
   themeColor,
   chromeSurfaceStyle,
+  menuChromeSurfaceStyle,
+  menuChromeAppearance = 'light',
   chromeHoverBackground,
   borderSearch,
   borderGeoJSON,
@@ -60,6 +65,8 @@ export function MapPreviewTopRightToolbar({
         onToggle={onToggleBorderPanel}
         themeColor={themeColor}
         chromeSurfaceStyle={chromeSurfaceStyle}
+        menuChromeSurfaceStyle={menuChromeSurfaceStyle}
+        menuChromeAppearance={menuChromeAppearance}
         chromeHoverBackground={chromeHoverBackground}
         borderSearch={borderSearch}
         borderGeoJSON={borderGeoJSON}
@@ -71,6 +78,8 @@ export function MapPreviewTopRightToolbar({
         onTogglePanel={onToggleFrameLayerPanel}
         themeColor={themeColor}
         chromeSurfaceStyle={chromeSurfaceStyle}
+        menuChromeSurfaceStyle={menuChromeSurfaceStyle}
+        menuChromeAppearance={menuChromeAppearance}
         chromeHoverBackground={chromeHoverBackground}
         frames={frames}
         frameLayerVisibility={frameLayerVisibility}

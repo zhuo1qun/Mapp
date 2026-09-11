@@ -6,12 +6,16 @@ import type { GraphLayerGroupStandard } from '../../../utils/graph/graphRuntimeC
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { LayerToolbarIcon } from '../../ui/LayerToolbarIcon';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
+import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
 interface MapLayerControlProps {
   showPanel: boolean;
   onTogglePanel: () => void;
   themeColor: string;
   chromeSurfaceStyle?: React.CSSProperties;
+  /** 展开后的文字面板可与图标按钮采用不同材质，保证可读性。 */
+  menuChromeSurfaceStyle?: React.CSSProperties;
+  menuChromeAppearance?: MapChromeAppearance;
   chromeHoverBackground?: string;
   frames: Frame[] | undefined;
   frameLayerVisibility: Record<string, boolean>;
@@ -36,6 +40,8 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
   onTogglePanel,
   themeColor,
   chromeSurfaceStyle,
+  menuChromeSurfaceStyle,
+  menuChromeAppearance = 'light',
   chromeHoverBackground,
   frames,
   frameLayerVisibility,
@@ -52,6 +58,7 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
   layerGroupStandard = 'tag'
 }) => {
   const ch = chromeSurfaceStyle;
+  const menuCh = menuChromeSurfaceStyle ?? ch;
   const menuTop = useChromeMenuTop(showPanel, frameLayerRef, 8);
   const edgeCls =
     dropdownAlign === 'start' ? 'ui-chrome-menu-page-left' : 'ui-chrome-menu-page-right';
@@ -60,7 +67,7 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
     showPanel && menuTop != null ? (
       <div
         data-map-layer-chrome-panel
-        className={`fixed z-[2000] ${edgeCls} flex gap-2 items-start pointer-events-none`}
+        className={`map-chrome-content-${menuChromeAppearance} fixed z-[2000] ${edgeCls} flex gap-2 items-start pointer-events-none`}
         style={{ top: menuTop }}
       >
         {unifiedNotesLayerSlot ? (
@@ -74,8 +81,8 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
         ) : null}
         {activeFrame && (
           <div
-            className={`w-72 sm:w-80 rounded-xl shadow-xl border border-gray-100 flex flex-col pointer-events-auto overflow-hidden animate-in fade-in slide-in-from-right-4 ${ch ? '' : 'bg-white'}`}
-            style={{ maxHeight: '60vh', ...ch }}
+            className={`w-72 sm:w-80 rounded-xl shadow-xl border border-gray-100 flex flex-col pointer-events-auto overflow-hidden animate-in fade-in slide-in-from-right-4 ${menuCh ? '' : 'bg-white'}`}
+            style={{ maxHeight: '60vh', ...menuCh }}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
@@ -105,8 +112,8 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
             </div>
 
             <div
-              className={`flex-1 overflow-y-auto p-3 custom-scrollbar ${ch ? '' : 'bg-white'}`}
-              style={ch ? { backgroundColor: 'transparent' } : undefined}
+              className={`flex-1 overflow-y-auto p-3 custom-scrollbar ${menuCh ? '' : 'bg-white'}`}
+              style={menuCh ? { backgroundColor: 'transparent' } : undefined}
             >
               {editingFrameDescription !== null ? (
                 <textarea

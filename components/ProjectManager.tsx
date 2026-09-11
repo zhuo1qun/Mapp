@@ -1673,7 +1673,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 </button>
               )}
           </div>
-          <div className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-10 z-[2000] flex items-center gap-2">
+          <div className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-4 z-[2000] flex items-center gap-2">
             {activeProject && syncStatus === 'idle' && getLastSyncTime() && (
               <div
                 className="project-sidebar-action project-sidebar-sync-status flex items-center justify-center w-10 h-10 rounded-xl text-theme-chrome-fg transition-colors cursor-help"

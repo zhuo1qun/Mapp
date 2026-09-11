@@ -79,7 +79,11 @@ export const ChromeIconButton = React.forwardRef<HTMLButtonElement, ChromeIconBu
             : 'bg-white text-gray-700';
 
     const surfaceStyle: React.CSSProperties | undefined = activeTheme && themeColor
-      ? { backgroundColor: themeColor }
+      ? {
+          backgroundColor: themeColor,
+          // 保留深色地图工具栏传入的低对比描边，避免选中后露出默认的亮白边框。
+          ...(ch?.borderColor ? { borderColor: ch.borderColor } : {})
+        }
       : activeMuted
         ? undefined
         : ch || undefined;
