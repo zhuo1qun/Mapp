@@ -5,6 +5,8 @@ import '../../utils/map/smoothMapZoom';
 export type MapSmoothZoomProps = {
   /** Wheel / shared sensitivity (default 1.5). */
   sensitivity?: number;
+  /** Desktop trackpad pinch sensitivity (`wheel + ctrlKey`); defaults to 3.25. */
+  trackpadPinchSensitivity?: number;
   /** Pinch sensitivity; defaults to `sensitivity`. */
   touchSensitivity?: number;
   /** Coast with decaying velocity after fast wheel / pinch (default true). */
@@ -22,6 +24,7 @@ export type MapSmoothZoomProps = {
  */
 export function MapSmoothZoom({
   sensitivity = 1.5,
+  trackpadPinchSensitivity = 3.25,
   touchSensitivity,
   inertia = true,
   touchInertia = false,
@@ -38,6 +41,7 @@ export function MapSmoothZoom({
     map.options.smoothMapZoom = centerMode ? 'center' : true;
     map.options.smoothWheelZoom = centerMode ? 'center' : true;
     map.options.smoothSensitivity = sensitivity;
+    map.options.smoothTrackpadPinchSensitivity = trackpadPinchSensitivity;
     map.options.touchZoomSensitivity = pinch;
     map.options.smoothTouchZoom = !useNativeTouchZoom;
     map.options.smoothZoomInertia = inertia;
@@ -54,7 +58,7 @@ export function MapSmoothZoom({
       map.smoothMapZoom?.disable();
       map.touchZoom?.disable();
     };
-  }, [map, sensitivity, touchSensitivity, inertia, touchInertia, centerMode]);
+  }, [map, sensitivity, trackpadPinchSensitivity, touchSensitivity, inertia, touchInertia, centerMode]);
 
   return null;
 }

@@ -22,6 +22,9 @@ L.Map.mergeOptions({
   /** @deprecated alias — prefer smoothMapZoom */
   smoothWheelZoom: false,
   smoothSensitivity: 1.5,
+  // Desktop trackpad pinch is exposed as a Ctrl+wheel stream. Its deltas are
+  // much smaller than a physical mouse wheel's, so it needs its own gain.
+  smoothTrackpadPinchSensitivity: 3.25,
   touchZoomSensitivity: undefined,
   // Touch devices use Leaflet's native handler by default. The custom handler
   // stays available for environments that need it (for example, touch laptops).
@@ -105,11 +108,71 @@ if (!tileProto._mappSmoothZoomPatched) {
 
     return L.Util.template(this._url, L.extend(data, this.options));
   };
+
+  /**
+   * Leaflet normally cancels every in-flight tile from the previous zoom as
+   * soon as the tile grid changes. Retain only requests whose parent/child
+   * footprint intersects the new viewport: they can become a useful low-res
+   * fallback while the final target tiles arrive. Everything else is aborted
+   * immediately, so an old viewport cannot consume the request queue.
+   */
+  tileProto._abortLoading = function () {
+    var map = this._map;
+    var targetZoom = this._tileZoom;
+    if (!map || targetZoom === undefined) return;
+
+    var pixelBounds = this._getTiledPixelBounds(map.getCenter());
+    var targetRange = this._pxBoundsToTileRange(pixelBounds);
+    var overlapsTargetViewport = function (coords) {
+      if (coords.z === targetZoom) return true;
+
+      if (coords.z < targetZoom) {
+        var parentScale = Math.pow(2, targetZoom - coords.z);
+        return !(
+          (coords.x + 1) * parentScale - 1 < targetRange.min.x ||
+          coords.x * parentScale > targetRange.max.x ||
+          (coords.y + 1) * parentScale - 1 < targetRange.min.y ||
+          coords.y * parentScale > targetRange.max.y
+        );
+      }
+
+      var childScale = Math.pow(2, coords.z - targetZoom);
+      var targetX = Math.floor(coords.x / childScale);
+      var targetY = Math.floor(coords.y / childScale);
+      return (
+        targetX >= targetRange.min.x &&
+        targetX <= targetRange.max.x &&
+        targetY >= targetRange.min.y &&
+        targetY <= targetRange.max.y
+      );
+    };
+
+    for (var key in this._tiles) {
+      var record = this._tiles[key];
+      if (record.coords.z === targetZoom || overlapsTargetViewport(record.coords)) continue;
+
+      var tile = record.el;
+      tile.onload = L.Util.falseFn;
+      tile.onerror = L.Util.falseFn;
+      if (tile.complete) continue;
+
+      tile.src = L.Util.emptyImageUrl;
+      var coords = record.coords;
+      L.DomUtil.remove(tile);
+      delete this._tiles[key];
+      this.fire('tileabort', { tile: tile, coords: coords });
+    }
+  };
 }
 
 function wheelSens(map) {
   var s = map.options.smoothSensitivity;
   return typeof s === 'number' && s > 0 ? s : 1;
+}
+
+function trackpadPinchSens(map) {
+  var s = map.options.smoothTrackpadPinchSensitivity;
+  return typeof s === 'number' && s > 0 ? s : wheelSens(map);
 }
 
 function pinchSens(map) {
@@ -187,6 +250,7 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     this._unbindDocTouch();
     this._pinching = false;
     this._wheeling = false;
+    this._trackpadPinching = false;
     this._coasting = false;
     this._velocity = 0;
 
@@ -311,9 +375,23 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     this._wheeling = true;
     this._coasting = false;
 
-    var dZoom = L.DomEvent.getWheelDelta(e) * 0.003 * wheelSens(this._map);
+    // Chromium and Safari report a desktop trackpad pinch as a Ctrl+wheel
+    // stream. Freeze its anchor for the gesture: tiny pointer-coordinate
+    // variations otherwise turn a pure scale gesture into visible map jitter.
+    var isTrackpadPinch = e.ctrlKey === true && e.deltaMode === 0;
+    if (isTrackpadPinch && !this._trackpadPinching) {
+      this._trackpadPinching = true;
+      this._setAnchor(this._map.mouseEventToContainerPoint(e));
+    } else if (!isTrackpadPinch) {
+      this._trackpadPinching = false;
+      this._setAnchor(this._map.mouseEventToContainerPoint(e));
+    }
+
+    var dZoom =
+      L.DomEvent.getWheelDelta(e) *
+      0.003 *
+      (isTrackpadPinch ? trackpadPinchSens(this._map) : wheelSens(this._map));
     this._applyImpulse(dZoom, now);
-    this._setAnchor(this._map.mouseEventToContainerPoint(e));
 
     clearTimeout(this._wheelIdleTimer);
     this._wheelIdleTimer = setTimeout(this._onWheelIdle.bind(this), 48);
@@ -324,6 +402,13 @@ L.Map.SmoothMapZoom = L.Handler.extend({
 
   _onWheelIdle: function () {
     this._wheeling = false;
+    // Trackpad pinch is direct manipulation; a wheel-style inertial tail both
+    // overshoots and makes the anchor correction look like a wobble.
+    if (this._trackpadPinching) {
+      this._velocity = 0;
+      this._coasting = true;
+      return;
+    }
     this._beginCoast(false);
   },
 

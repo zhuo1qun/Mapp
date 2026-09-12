@@ -1459,6 +1459,7 @@ export const MapView: React.FC<MapViewProps> = ({
         <MapAttributionPrefix />
         <MapSmoothZoom
           sensitivity={1.5}
+          trackpadPinchSensitivity={3.25}
           // Touch-first devices use Leaflet's native pinch handler; wheel zoom
           // keeps its existing quicker, inertial desktop behaviour.
           touchSensitivity={1}
