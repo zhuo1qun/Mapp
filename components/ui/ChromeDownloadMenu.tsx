@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Download } from 'lucide-react';
 import { ChromeIconButton } from './ChromeIconButton';
+import { ChromeMenuItem } from './ChromeMenuItem';
+import { ChromeMenuShell } from './ChromeMenuShell';
 import { useChromeMenuTop } from '../../utils/ui/chromeMenuPosition';
 
 export interface ChromeDownloadMenuItem {
@@ -62,13 +64,13 @@ export const ChromeDownloadMenu: React.FC<ChromeDownloadMenuProps> = ({
         : 'right-0';
 
   const menu = open && items.length > 0 && menuTop != null && (
-    <div
+    <ChromeMenuShell
       id="chrome-download-menu-portal"
       role="menu"
       className={
         menuEdge === 'button'
-          ? `absolute right-0 top-[calc(100%+6px)] z-[600] min-w-[13rem] rounded-xl border border-gray-100/80 py-1 shadow-xl ${menuClassName}`.trim()
-          : `fixed z-[600] ${edgeCls} min-w-[13rem] rounded-xl border border-gray-100/80 py-1 shadow-xl ${menuClassName}`.trim()
+          ? `absolute right-0 top-[calc(100%+6px)] z-[600] min-w-[13rem] ${menuClassName}`.trim()
+          : `fixed z-[600] ${edgeCls} min-w-[13rem] ${menuClassName}`.trim()
       }
       style={
         menuEdge === 'button'
@@ -77,11 +79,10 @@ export const ChromeDownloadMenu: React.FC<ChromeDownloadMenuProps> = ({
       }
     >
       {items.map((item) => (
-        <button
+        <ChromeMenuItem
           key={item.id}
-          type="button"
           role="menuitem"
-          className="w-full text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100/90 flex items-center gap-2"
+          hoverBackground={chromeHoverBackground}
           onClick={(e) => {
             e.stopPropagation();
             item.onSelect();
@@ -89,9 +90,9 @@ export const ChromeDownloadMenu: React.FC<ChromeDownloadMenuProps> = ({
           }}
         >
           {item.label}
-        </button>
+        </ChromeMenuItem>
       ))}
-    </div>
+    </ChromeMenuShell>
   );
 
   return (

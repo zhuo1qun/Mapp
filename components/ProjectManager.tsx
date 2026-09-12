@@ -24,6 +24,9 @@ import { ThemeColorPicker } from './ThemeColorPicker';
 import { AppearanceSettingsBlock } from './AppearanceSettingsBlock';
 import { mapChromeSurfaceStyle, mapChromeHoverBackground } from '../utils/map/mapChromeStyle';
 import { MotionDiv } from './ui/MotionDiv';
+import { ChromeMenuItem } from './ui/ChromeMenuItem';
+import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
+import { ChromeMenuShell } from './ui/ChromeMenuShell';
 
 /** 项目「更多」菜单 portal：高于侧栏与覆盖层，低于删除项目阻断层 10000 */
 const PM_PROJECT_MORE_MENU_Z = 9901;
@@ -123,8 +126,8 @@ const ExportResolutionDialog: React.FC<{
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[3000]" onClick={onClose}>
-      <div
-        className="rounded-2xl shadow-2xl max-w-[320px] w-full mx-4 p-5 animate-in zoom-in-95 duration-200 border border-gray-100/80"
+      <ChromeDialogSurface
+        className="max-w-[320px] mx-4 p-5 animate-in zoom-in-95 duration-200"
         style={mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
         onClick={(e) => e.stopPropagation()}
       >
@@ -156,8 +159,8 @@ const ExportResolutionDialog: React.FC<{
               </button>
 
               {showOptions && (
-                <div
-                  className="absolute top-full left-0 right-0 mt-2 border border-gray-100/80 rounded-xl shadow-xl z-10 py-1 animate-in fade-in slide-in-from-top-2"
+                <ChromeMenuShell
+                  className="absolute top-full left-0 right-0 mt-2 z-10 animate-in fade-in slide-in-from-top-2"
                   style={mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
                 >
                   {[
@@ -165,10 +168,10 @@ const ExportResolutionDialog: React.FC<{
                     { id: 'includeBorder', label: '边界 (Border)' },
                     { id: 'includePins', label: '标记 (Pin)' }
                   ].map((option) => (
-                    <button
+                    <ChromeMenuItem
                       key={option.id}
                       onClick={() => toggleOption(option.id as any)}
-                      className="w-full px-4 py-2.5 text-sm flex items-center justify-between hover:bg-gray-50 transition-colors"
+                      className="flex items-center justify-between"
                     >
                       <span className={exportOptions[option.id as keyof typeof exportOptions] ? 'font-bold' : 'text-gray-500'}>
                         {option.label}
@@ -176,9 +179,9 @@ const ExportResolutionDialog: React.FC<{
                       {exportOptions[option.id as keyof typeof exportOptions] && (
                         <Check size={14} style={{ color: themeColor }} />
                       )}
-                    </button>
+                    </ChromeMenuItem>
                   ))}
-                </div>
+                </ChromeMenuShell>
               )}
             </div>
           </div>
@@ -237,7 +240,7 @@ const ExportResolutionDialog: React.FC<{
             开始导出
           </button>
         </div>
-      </div>
+      </ChromeDialogSurface>
     </div>
   );
 };
@@ -258,6 +261,7 @@ const MenuDropdown: React.FC<{
   surfaceStyle: React.CSSProperties;
   fixedPlacementStyle: React.CSSProperties;
   motionOriginClass: 'origin-top' | 'origin-top-right';
+  hoverBackground: string;
   canDelete?: boolean;
 }> = ({
   project,
@@ -274,99 +278,97 @@ const MenuDropdown: React.FC<{
   surfaceStyle,
   fixedPlacementStyle,
   motionOriginClass,
+  hoverBackground,
   canDelete = true
 }) => {
   return (
-    <div 
+    <ChromeMenuShell
       data-pm-more-menu
-      className={`overflow-y-auto theme-surface-scrollbar rounded-xl shadow-xl border border-white/50 py-1 animate-in fade-in zoom-in-95 ${motionOriginClass}`}
+      className={`overflow-y-auto theme-surface-scrollbar animate-in fade-in zoom-in-95 ${motionOriginClass}`}
       style={{ ...surfaceStyle, ...fixedPlacementStyle }}
       onClick={(e) => e.stopPropagation()}
       role="menu"
     >
-      <button
+      <ChromeMenuItem
+        icon={<Edit2 size={16} />}
+        hoverBackground={hoverBackground}
         onClick={() => { onRename(project.id); onClose(); }}
-        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
       >
-        <Edit2 size={16} /> Rename
-      </button>
-      <div className="h-px bg-gray-100 my-1" />
-      <button
+        Rename
+      </ChromeMenuItem>
+      <ChromeMenuItem
+        icon={<Copy size={16} />}
+        hoverBackground={hoverBackground}
         onClick={() => { onDuplicate(project); onClose(); }}
-        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
       >
-        <Copy size={16} /> Duplicate Project
-      </button>
-      <div className="h-px bg-gray-100 my-1" />
-      <button 
+        Duplicate Project
+      </ChromeMenuItem>
+      <ChromeMenuItem
+        icon={<Download size={16} />}
+        hoverBackground={hoverBackground}
         onClick={() => { onExportData(project); onClose(); }}
-        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
       >
-        <Download size={16} /> Export Data (CSV)
-      </button>
-      <div className="h-px bg-gray-100 my-1" />
-      <button 
+        Export Data (CSV)
+      </ChromeMenuItem>
+      <ChromeMenuItem
+        icon={<Download size={16} />}
+        hoverBackground={hoverBackground}
         onClick={() => { onExportFullProject(project); onClose(); }}
-        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
       >
-        <Download size={16} /> Export Full Project (JSON)
-      </button>
-      <div className="h-px bg-gray-100 my-1" />
-      <button
+        Export Full Project (JSON)
+      </ChromeMenuItem>
+      <ChromeMenuItem
+        icon={<Download size={16} />}
+        hoverBackground={hoverBackground}
         onClick={() => { onExportMappViz(project); onClose(); }}
-        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
       >
-        <Download size={16} /> Export Bibliometrics (.viz.json)
-      </button>
-      <div className="h-px bg-gray-100 my-1" />
-      <button 
+        Export Bibliometrics (.viz.json)
+      </ChromeMenuItem>
+      <ChromeMenuItem
+        icon={<ImageIcon size={16} />}
+        hoverBackground={hoverBackground}
         onClick={() => { onCompressImages(project); onClose(); }}
-        className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
       >
-        <ImageIcon size={16} /> Compress Images
-      </button>
-      <div className="h-px bg-gray-100 my-1" />
+        Compress Images
+      </ChromeMenuItem>
       {onCheckData && (
-        <>
-          <button
-            onClick={async () => {
-              await onCheckData();
-              onClose();
-            }}
-            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-          >
-                      <Palette size={16} /> Check Data
-          </button>
-          <div className="h-px bg-gray-100 my-1" />
-        </>
+        <ChromeMenuItem
+          icon={<Palette size={16} />}
+          hoverBackground={hoverBackground}
+          onClick={async () => {
+            await onCheckData();
+            onClose();
+          }}
+        >
+          Check Data
+        </ChromeMenuItem>
       )}
       {onCleanupBrokenReferences && (
-        <>
-          <button
-            onClick={async () => {
-              await onCleanupBrokenReferences(project);
-              onClose();
-            }}
-            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-          >
-            <Trash2 size={16} /> Clean Broken Links
-          </button>
-          <div className="h-px bg-gray-100 my-1" />
-        </>
+        <ChromeMenuItem
+          icon={<Trash2 size={16} />}
+          hoverBackground={hoverBackground}
+          onClick={async () => {
+            await onCleanupBrokenReferences(project);
+            onClose();
+          }}
+        >
+          Clean Broken Links
+        </ChromeMenuItem>
       )}
       {canDelete ? (
-        <button
+        <ChromeMenuItem
+          icon={<Trash2 size={16} />}
+          destructive
           onClick={(e) => {
             e.stopPropagation();
             onDelete(project.id);
             onClose();
           }}
-          className="w-full text-left px-4 py-2.5 text-sm hover:bg-red-50 text-red-500 flex items-center gap-2"
         >
-          <Trash2 size={16} /> Delete Project
-        </button>
+          Delete Project
+        </ChromeMenuItem>
       ) : null}
-    </div>
+    </ChromeMenuShell>
   );
 };
 
@@ -2061,8 +2063,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
       {isCreating && (
         <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4">
-          <div
-            className="rounded-3xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 border border-gray-100/80"
+          <ChromeDialogSurface
+            className="max-w-md p-6 animate-in zoom-in-95"
             style={mapChromeSurface}
           >
             <h2 className="text-2xl font-black text-gray-800 mb-6">New Project</h2>
@@ -2181,15 +2183,15 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 Create
               </button>
             </div>
-          </div>
+          </ChromeDialogSurface>
         </div>
       )}
 
       {/* Import Dialog */}
       {showImportDialog && (
         <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4">
-          <div
-            className="rounded-3xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 border border-gray-100/80"
+          <ChromeDialogSurface
+            className="max-w-md p-6 animate-in zoom-in-95"
             style={mapChromeSurface}
           >
             <h2 className="text-2xl font-black text-gray-800 mb-6">
@@ -2227,15 +2229,15 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 Select File
               </button>
             </div>
-          </div>
+          </ChromeDialogSurface>
         </div>
       )}
 
       {/* Import error：带出错位置；允许选中复制 */}
       {importErrorMessage && (
         <div className="fixed inset-0 z-[3100] bg-black/50 flex items-center justify-center p-4">
-          <div
-            className="import-error-selectable rounded-3xl shadow-2xl w-full max-w-lg p-6 border border-red-200/80 bg-white"
+          <ChromeDialogSurface
+            className="import-error-selectable max-w-lg border-red-200/80 bg-white p-6"
             role="alertdialog"
             aria-labelledby="import-error-title"
           >
@@ -2253,7 +2255,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             >
               知道了
             </button>
-          </div>
+          </ChromeDialogSurface>
         </div>
       )}
 
@@ -2297,7 +2299,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               {homeLikeList ? (
                 <div
                   data-pm-more-menu
-                  className="fixed bottom-6 left-1/2 max-h-[min(70dvh,70vh)] w-[calc(100%-2rem)] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-3xl shadow-2xl border border-white/50 py-2 animate-in slide-in-from-bottom-4 theme-surface-scrollbar"
+                  className="map-chrome-content-light fixed bottom-6 left-1/2 max-h-[min(70dvh,70vh)] w-[calc(100%-2rem)] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-3xl shadow-2xl border border-gray-100/80 py-2 animate-in slide-in-from-bottom-4 theme-surface-scrollbar"
                   style={{
                     ...mapChromeSurface,
                     maxWidth: PROJECT_SIDEBAR_DRAWER_WIDTH_PX,
@@ -2313,86 +2315,78 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     </div>
                     <div className="text-sm font-bold text-gray-800 truncate">{pm.name}</div>
                   </div>
-                  <button
-                    type="button"
+                  <ChromeMenuItem
+                    icon={<Edit2 size={16} />}
+                    hoverBackground={mapChromeHoverBg}
                     onClick={() => {
                       handleRename(pm.id);
                       setOpenMenuId(null);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
                   >
-                    <Edit2 size={16} /> Rename
-                  </button>
-                  <div className="h-px bg-gray-100 my-1" />
-                  <button
-                    type="button"
+                    Rename
+                  </ChromeMenuItem>
+                  <ChromeMenuItem
+                    icon={<Copy size={16} />}
+                    hoverBackground={mapChromeHoverBg}
                     onClick={() => {
                       handleDuplicateProject(pm);
                       setOpenMenuId(null);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
                   >
-                    <Copy size={16} /> Duplicate Project
-                  </button>
-                  <div className="h-px bg-gray-100 my-1" />
-                  <button
-                    type="button"
+                    Duplicate Project
+                  </ChromeMenuItem>
+                  <ChromeMenuItem
+                    icon={<Download size={16} />}
+                    hoverBackground={mapChromeHoverBg}
                     onClick={() => {
                       handleExportData(pm);
                       setOpenMenuId(null);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
                   >
-                    <Download size={16} /> Export Data (CSV)
-                  </button>
-                  <div className="h-px bg-gray-100 my-1" />
-                  <button
-                    type="button"
+                    Export Data (CSV)
+                  </ChromeMenuItem>
+                  <ChromeMenuItem
+                    icon={<Download size={16} />}
+                    hoverBackground={mapChromeHoverBg}
                     onClick={() => {
                       handleExportFullProject(pm);
                       setOpenMenuId(null);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
                   >
-                    <Download size={16} /> Export Full Project (JSON)
-                  </button>
-                  <div className="h-px bg-gray-100 my-1" />
-                  <button
-                    type="button"
+                    Export Full Project (JSON)
+                  </ChromeMenuItem>
+                  <ChromeMenuItem
+                    icon={<Download size={16} />}
+                    hoverBackground={mapChromeHoverBg}
                     onClick={() => {
                       handleExportMappViz(pm);
                       setOpenMenuId(null);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
                   >
-                    <Download size={16} /> Export Bibliometrics (.viz.json)
-                  </button>
-                  <div className="h-px bg-gray-100 my-1" />
-                  <button
-                    type="button"
+                    Export Bibliometrics (.viz.json)
+                  </ChromeMenuItem>
+                  <ChromeMenuItem
+                    icon={<ImageIcon size={16} />}
+                    hoverBackground={mapChromeHoverBg}
                     onClick={() => {
                       handleCompressImages(pm);
                       setOpenMenuId(null);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
                   >
-                    <ImageIcon size={16} /> Data Check
-                  </button>
+                    Compress Images
+                  </ChromeMenuItem>
                   {(!builtinExampleIds.has(pm.id) || exampleDevMaintenanceMode) ? (
-                    <>
-                      <div className="h-px bg-gray-100 my-1" />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteProject(pm.id);
-                          setOpenMenuId(null);
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-red-50 text-red-500 flex items-center gap-2"
-                      >
-                        <Trash2 size={16} /> Delete Project
-                      </button>
-                    </>
+                    <ChromeMenuItem
+                      icon={<Trash2 size={16} />}
+                      destructive
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteProject(pm.id);
+                        setOpenMenuId(null);
+                      }}
+                    >
+                      Delete Project
+                    </ChromeMenuItem>
                   ) : null}
                 </div>
               ) : projectMoreAnchor ? (
@@ -2421,6 +2415,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     vh
                   )}
                   motionOriginClass={compactProjectList ? 'origin-top' : 'origin-top-right'}
+                  hoverBackground={mapChromeHoverBg}
                   canDelete={canDelete}
                 />
                   );

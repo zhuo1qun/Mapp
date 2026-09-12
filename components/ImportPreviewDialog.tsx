@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Check } from 'lucide-react';
 import { ImportPreview } from './hooks/useImageImport';
 import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY, mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
+import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
 
 interface ImportPreviewDialogProps {
   isOpen: boolean;
@@ -36,8 +37,8 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50">
-      <div
-        className="rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col border border-gray-100/80"
+      <ChromeDialogSurface
+        className="max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col"
         style={cardChrome}
       >
         {/* Header */}
@@ -140,7 +141,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
             Confirm Import ({importableCount})
           </button>
         </div>
-      </div>
+      </ChromeDialogSurface>
     </div>
   );
 };

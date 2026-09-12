@@ -68,7 +68,7 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div>
             <div className="text-base font-bold text-gray-900">导航到此点</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">选择用地图应用打开</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">将在新窗口打开网页导航</div>
           </div>
           <button
             type="button"
@@ -85,7 +85,9 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => pick(app.id)}
-                className="w-full text-left px-3 py-3 rounded-xl hover:bg-gray-50 border-0 flex flex-col gap-0.5"
+                className={`w-full text-left px-3 py-3 rounded-xl border-0 flex flex-col gap-0.5 transition-colors ${
+                  chromeAppearance === 'dark' ? 'hover:bg-white/10' : 'hover:bg-gray-50'
+                }`}
               >
                 <span className="text-sm font-semibold text-gray-800">{app.label}</span>
                 {app.hint ? (

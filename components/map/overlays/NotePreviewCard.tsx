@@ -7,8 +7,8 @@ import { noteHasRenderableMapPosition } from '../../../utils/layer/unifiedNoteLa
 import { hasNavigableGpsCoords } from '../../../utils/map/openExternalNavigation';
 import { isDisplayableImageSrc, noteNeedsMediaResolve } from '../../../utils/persistence/mediaDisplay';
 import { loadNoteImages } from '../../../utils/persistence/storage';
-import { chromePanelGhostIconButtonClass } from '../../ui/chromePanelIconButton';
-import { PortalTooltip } from '../../ui/PortalTooltip';
+import { TagChip } from '../../ui/TagChip';
+import { NoteIconButton } from '../../note-editor/NoteIconButton';
 import { ExternalNavigationSheet } from './ExternalNavigationSheet';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
@@ -174,18 +174,12 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
             {(note.tags?.length ?? 0) > 0 ? (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {note.tags!.map((t) => (
-                  <span
+                  <TagChip
                     key={t.id || `${t.label}:${t.color}`}
-                    className="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-gray-700 bg-gray-100/90 border border-gray-200/80"
-                    title={t.label}
-                  >
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full border border-white/80"
-                      style={{ backgroundColor: t.color || '#9ca3af' }}
-                      aria-hidden
-                    />
-                    <span className="truncate">{t.label}</span>
-                  </span>
+                    label={t.label}
+                    color={t.color || '#9ca3af'}
+                    className="max-w-full"
+                  />
                 ))}
               </div>
             ) : null}
@@ -194,36 +188,32 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
         {showGo || showEdit ? (
           <div className="flex shrink-0 items-center gap-0.5 mt-0.5">
             {showGo ? (
-              <PortalTooltip content="Go · 外部导航" compact>
-                <button
-                  type="button"
-                  className={chromePanelGhostIconButtonClass}
-                  aria-label="Go 外部导航"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setNavSheetOpen(true);
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  <Navigation size={14} strokeWidth={2} aria-hidden />
-                </button>
-              </PortalTooltip>
+              <NoteIconButton
+                label="导航"
+                title="Go · 外部导航"
+                aria-label="Go 外部导航"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNavSheetOpen(true);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <Navigation size={18} strokeWidth={2} aria-hidden />
+              </NoteIconButton>
             ) : null}
             {showEdit ? (
-              <PortalTooltip content="编辑" compact>
-                <button
-                  type="button"
-                  className={chromePanelGhostIconButtonClass}
-                  aria-label="编辑"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenEditor?.(note.id);
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  <Pencil size={14} strokeWidth={2} aria-hidden />
-                </button>
-              </PortalTooltip>
+              <NoteIconButton
+                label="编辑"
+                title="编辑"
+                aria-label="编辑"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenEditor?.(note.id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <Pencil size={18} strokeWidth={2} aria-hidden />
+              </NoteIconButton>
             ) : null}
           </div>
         ) : null}

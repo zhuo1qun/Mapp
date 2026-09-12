@@ -1,7 +1,6 @@
 import React from 'react';
 import { Check, Pencil } from 'lucide-react';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
-import { PortalTooltip } from '../../ui/PortalTooltip';
 
 interface MapTopRightEditToggleProps {
   isEditMode: boolean;
@@ -33,12 +32,11 @@ export function MapTopRightEditToggle({
           <Pencil size={18} className="sm:w-5 sm:h-5" />
         </ChromeIconButton>
       ) : (
-        <PortalTooltip content="完成" compact>
-          <button
+        <button
             type="button"
             onClick={onExitEdit}
             onPointerDown={(e) => e.stopPropagation()}
-            className="flex h-10 sm:h-12 items-center gap-1 sm:gap-2 px-2 sm:px-3 text-sm text-theme-chrome-fg rounded-xl shadow-lg font-bold"
+            className="ui-chrome-icon-button-expands flex h-10 sm:h-12 items-center gap-1 sm:gap-2 px-2 sm:px-3 text-sm text-theme-chrome-fg rounded-xl shadow-lg font-bold"
             style={{ backgroundColor: themeColor }}
             aria-label="完成"
             onMouseEnter={(e) => {
@@ -61,9 +59,8 @@ export function MapTopRightEditToggle({
             }}
           >
             <Check size={18} className="sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">Done</span>
+            <span className="ui-chrome-icon-button-label">完成</span>
           </button>
-        </PortalTooltip>
       )}
     </>
   );

@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import type { Coordinates } from '../../types';
 import { NoteIconButton } from './NoteIconButton';
 
 interface MetadataSectionProps {
   id?: string;
   createdAt?: number;
+  coords?: Coordinates;
+  mediaCount?: number;
   defaultOpen?: boolean;
   showDelete?: boolean;
   onDeleteNote?: () => void;
@@ -15,13 +18,20 @@ interface MetadataSectionProps {
 export const MetadataSection: React.FC<MetadataSectionProps> = ({
   id,
   createdAt,
+  coords,
+  mediaCount = 0,
   defaultOpen = false,
   showDelete,
   onDeleteNote,
   onDismissOverlays
 }) => {
   const [open, setOpen] = useState(defaultOpen);
-  const hasMeta = !!(id || createdAt != null);
+  const hasMapPosition =
+    coords != null &&
+    Number.isFinite(coords.lat) &&
+    Number.isFinite(coords.lng) &&
+    !(coords.lat === 0 && coords.lng === 0);
+  const hasMeta = !!(id || createdAt != null || hasMapPosition || mediaCount > 0);
   if (!hasMeta && !(showDelete && onDeleteNote)) return null;
 
   return (
@@ -59,6 +69,20 @@ export const MetadataSection: React.FC<MetadataSectionProps> = ({
               <div className="flex gap-2 min-w-0">
                 <span className="text-gray-400 shrink-0 not-italic font-sans">Created</span>
                 <span>{new Date(createdAt).toLocaleString()}</span>
+              </div>
+            ) : null}
+            {hasMapPosition ? (
+              <div className="flex gap-2 min-w-0">
+                <span className="text-gray-400 shrink-0 not-italic font-sans">坐标</span>
+                <span title={`${coords!.lat}, ${coords!.lng}`}>
+                  {coords!.lat.toFixed(6)}, {coords!.lng.toFixed(6)}
+                </span>
+              </div>
+            ) : null}
+            {mediaCount > 0 ? (
+              <div className="flex gap-2 min-w-0">
+                <span className="text-gray-400 shrink-0 not-italic font-sans">媒体</span>
+                <span>{mediaCount} 项</span>
               </div>
             ) : null}
           </div>

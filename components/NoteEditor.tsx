@@ -688,6 +688,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             <MetadataSection
               id={initialNote?.id}
               createdAt={initialNote?.createdAt}
+              coords={initialNote?.coords}
+              mediaCount={mediaItems.length}
               showDelete={!!(initialNote?.id && onDelete)}
               onDeleteNote={
                 initialNote?.id && onDelete

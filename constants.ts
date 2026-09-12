@@ -59,7 +59,8 @@ export const MAP_STYLE_OPTIONS: MapStyleOption[] = [
   {
     id: 'carto-light-nolabels',
     // 保留旧 id，已保存的用户设置无需迁移。
-    name: '浅色背景（无标签）',
+    // Base 服务不叠加独立的 Reference 标签层，但仍可能含少量地名/道路标注。
+    name: '浅色画布（少量标注）',
     url: MAP_LIGHT_GRAY_URL,
     attribution: MAP_ATTRIBUTION,
     maxNativeZoom: 16,
@@ -67,14 +68,15 @@ export const MAP_STYLE_OPTIONS: MapStyleOption[] = [
   },
   {
     id: 'carto-light',
-    name: '地形背景（含标签）',
+    name: '地形图（含地名与道路）',
     url: MAP_TOPO_URL,
     attribution: MAP_ATTRIBUTION,
     preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/10/512/512'
   },
   {
     id: 'carto-dark',
-    name: '深色背景（无标签）',
+    // 同样是 Base 服务；不应承诺绝对“无标签”。
+    name: '深色画布（少量标注）',
     url: MAP_DARK_GRAY_URL,
     attribution: MAP_ATTRIBUTION,
     maxNativeZoom: 16,

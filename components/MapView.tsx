@@ -852,6 +852,14 @@ export const MapView: React.FC<MapViewProps> = ({
     setShowCreateMenu(false);
   }, []);
 
+  /** 打开详情预览时收起其它地图浮层，保证单一工作焦点。 */
+  const closePanelsForPreview = useCallback(() => {
+    closeMapChromeExcept();
+    setShowImportMenu?.(false);
+    setShowMapConnectionPanel(false);
+    setMapConnPickTarget(null);
+  }, [closeMapChromeExcept, setShowImportMenu, setShowMapConnectionPanel, setMapConnPickTarget]);
+
   const graphLayerStandard = (project.graphLayerStandard ?? 'tag') as GraphLayerGroupStandard;
   const mergedTagMapLayers = useMemo(
     () => mergeGraphLayerState(notes, project.graphLayers ?? null, 'tag'),
@@ -1036,6 +1044,7 @@ export const MapView: React.FC<MapViewProps> = ({
         setSelectedNoteId(null);
         setConnectionHighlightNoteIds(null);
       } else {
+        closePanelsForPreview();
         setSelectedNoteId(null);
         // 计算与当前点通过连线相连的所有点（包括自身）
         const relatedIds = new Set<string>();
@@ -1059,7 +1068,8 @@ export const MapView: React.FC<MapViewProps> = ({
       return;
     }
 
-    // 普通地图模式：点击 pin 选中；Shift+点击切换多选（与 Board 一致）
+    // 普通地图模式：单选会打开详情卡，故收起其它浮层；Shift 多选不打断当前工作流。
+    if (!e?.originalEvent?.shiftKey) closePanelsForPreview();
     setPreSelectedNotes(null);
     const additive = !!(e?.originalEvent?.shiftKey);
     let nextSet: Set<string>;
@@ -1594,6 +1604,7 @@ export const MapView: React.FC<MapViewProps> = ({
             isUIVisible && isMapToolbarEditMode ? handleEditNoteFromLabel : undefined
           }
           onSelectNote={(noteId) => {
+            closePanelsForPreview();
             setSelectedNoteIds(new Set([noteId]));
             setSelectedNoteId(noteId);
           }}
@@ -2048,6 +2059,7 @@ export const MapView: React.FC<MapViewProps> = ({
         open={!!showImportMenu}
         chromeSurfaceStyle={mapChromeContentSurface}
         chromeAppearance={mapChromeTone}
+        chromeHoverBackground={mapChromeHoverBg}
         onClose={() => setShowImportMenu?.(false)}
         onImportPhotos={() => fileInputRef.current?.click()}
         onImportData={() => dataImportInputRef.current?.click()}

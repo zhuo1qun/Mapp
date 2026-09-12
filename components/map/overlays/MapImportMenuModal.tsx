@@ -1,11 +1,14 @@
 import React from 'react';
 import { FileJson, Image as ImageIcon, Plus } from 'lucide-react';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
+import { ChromeMenuItem } from '../../ui/ChromeMenuItem';
+import { ChromeMenuShell } from '../../ui/ChromeMenuShell';
 
 type Props = {
   open: boolean;
   chromeSurfaceStyle?: React.CSSProperties;
   chromeAppearance?: MapChromeAppearance;
+  chromeHoverBackground?: string;
   onClose: () => void;
   onImportPhotos: () => void;
   onImportData: () => void;
@@ -17,6 +20,7 @@ export const MapImportMenuModal: React.FC<Props> = ({
   open,
   chromeSurfaceStyle,
   chromeAppearance = 'light',
+  chromeHoverBackground,
   onClose,
   onImportPhotos,
   onImportData,
@@ -25,57 +29,55 @@ export const MapImportMenuModal: React.FC<Props> = ({
 }) => {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[6000] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={() => onClose()} />
-      <div
-        className={`map-chrome-content-${chromeAppearance} relative z-[6001] rounded-xl shadow-xl border border-gray-100/80 py-2 w-48 mx-4`}
+    <div className="fixed inset-0 z-[6000] flex items-end justify-center p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="导入内容">
+      <button type="button" className="fixed inset-0 bg-black/20 backdrop-blur-[2px]" aria-label="关闭导入菜单" onClick={onClose} />
+      <ChromeMenuShell
+        appearance={chromeAppearance}
+        className="relative z-[6001] w-full max-w-md rounded-2xl py-1.5 animate-in slide-in-from-bottom-4 fade-in sm:w-48 sm:rounded-xl sm:py-1 sm:zoom-in-95"
         style={chromeSurfaceStyle}
       >
-        <button
+        <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500 sm:hidden">导入</div>
+        <ChromeMenuItem
+          icon={<ImageIcon size={16} />}
+          hoverBackground={chromeHoverBackground}
           onClick={(e) => {
             e.stopPropagation();
             onImportPhotos();
             onClose();
           }}
-          className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
         >
-          <ImageIcon size={16} /> Import from Photos
-        </button>
-        <div className="h-px bg-gray-100 my-1" />
-        <button
+          Import from Photos
+        </ChromeMenuItem>
+        <ChromeMenuItem
+          icon={<FileJson size={16} />}
+          hoverBackground={chromeHoverBackground}
           onClick={(e) => {
             e.stopPropagation();
             onImportData();
             onClose();
           }}
-          className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
         >
-          <FileJson size={16} /> Import from Data (JSON/CSV)
-        </button>
+          Import from Data (JSON/CSV)
+        </ChromeMenuItem>
         {cameraAvailable ? (
-          <>
-            <div className="h-px bg-gray-100 my-1" />
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onImportCamera();
-                onClose();
-              }}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-            >
-              <Plus size={16} /> Import from Camera
-            </button>
-          </>
+          <ChromeMenuItem
+            icon={<Plus size={16} />}
+            hoverBackground={chromeHoverBackground}
+            onClick={(e) => {
+              e.stopPropagation();
+              onImportCamera();
+              onClose();
+            }}
+          >
+            Import from Camera
+          </ChromeMenuItem>
         ) : (
-          <>
-            <div className="h-px bg-gray-100 my-1" />
-            <div className="px-4 py-2.5 text-xs text-gray-500 flex items-center gap-2">
-              <Plus size={16} className="opacity-50" />
-              <span>Camera requires HTTPS</span>
-            </div>
-          </>
+          <div className="flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500">
+            <Plus size={16} className="opacity-50" />
+            <span>Camera requires HTTPS</span>
+          </div>
         )}
-      </div>
+      </ChromeMenuShell>
     </div>
   );
 };

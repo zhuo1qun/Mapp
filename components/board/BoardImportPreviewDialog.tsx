@@ -1,6 +1,7 @@
 import React, { CSSProperties } from 'react';
 import { Check, X } from 'lucide-react';
 import { mapChromeSurfaceStyle } from '../../utils/map/mapChromeStyle';
+import { ChromeDialogSurface } from '../ui/ChromeDialogSurface';
 
 export type BoardImportPreviewItem = {
   file: File;
@@ -70,8 +71,8 @@ export const BoardImportPreviewDialog: React.FC<BoardImportPreviewDialogProps> =
         }
       }}
     >
-      <div
-        className="mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-gray-100/80 shadow-2xl"
+      <ChromeDialogSurface
+        className="mx-4 flex max-h-[80vh] max-w-2xl flex-col overflow-hidden"
         style={panelChromeStyle ?? mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
         onClick={(e) => {
           e.preventDefault();
@@ -181,7 +182,7 @@ export const BoardImportPreviewDialog: React.FC<BoardImportPreviewDialogProps> =
             Confirm Import ({importable})
           </button>
         </div>
-      </div>
+      </ChromeDialogSurface>
     </div>
   );
 };

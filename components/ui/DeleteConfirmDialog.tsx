@@ -1,5 +1,6 @@
 import React from 'react';
 import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY, mapChromeSurfaceStyle } from '../../utils/map/mapChromeStyle';
+import { ChromeDialogSurface } from './ChromeDialogSurface';
 
 export type DeleteConfirmVariant = 'note' | 'connection' | 'notes-batch';
 
@@ -50,8 +51,8 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
         aria-label="关闭"
         onClick={() => !confirming && onCancel()}
       />
-      <div
-        className="relative w-full max-w-sm rounded-2xl border border-gray-100/80 shadow-xl p-5 text-sm"
+      <ChromeDialogSurface
+        className="max-w-sm p-5 text-sm"
         style={cardChrome}
       >
         <h2 id="delete-confirm-dialog-title" className="font-bold text-gray-900 mb-2 text-base">
@@ -96,7 +97,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
             {confirming ? '处理中…' : '删除'}
           </button>
         </div>
-      </div>
+      </ChromeDialogSurface>
     </div>
   );
 };

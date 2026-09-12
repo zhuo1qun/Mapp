@@ -80,7 +80,7 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
     isOpen && menuTop != null ? (
       <div
         data-map-search-chrome-panel
-        className={`map-chrome-content-${menuChromeAppearance} fixed z-[2000] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-4 animate-in fade-in slide-in-from-top-4 ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
+        className={`map-chrome-content-${menuChromeAppearance} fixed z-[2000] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-3 animate-in fade-in slide-in-from-top-4 ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
         style={{ top: menuTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -112,8 +112,8 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
           value={borderSearchMode}
           onChange={setBorderSearchMode}
           options={[
-            { id: 'region', label: 'Region Border' },
-            { id: 'place', label: 'Place' }
+            { id: 'region', label: '画边界' },
+            { id: 'place', label: '找地点' }
           ]}
         />
 

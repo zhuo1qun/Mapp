@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ProjectKind } from '../types';
 import { MODAL_BACKDROP_MASK_STYLE } from '../utils/map/mapChromeStyle';
+import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
 
 type Props = {
   projectName: string;
@@ -27,10 +28,10 @@ export const ProjectKindPromptDialog: React.FC<Props> = ({
       onClick={onCancel}
       role="presentation"
     >
-      <div
+      <ChromeDialogSurface
         role="dialog"
         aria-labelledby="project-kind-prompt-title"
-        className="w-full max-w-md rounded-3xl border border-gray-100/80 p-6 shadow-2xl animate-in zoom-in-95"
+        className="max-w-md p-6 animate-in zoom-in-95"
         style={chromeSurfaceStyle ?? { backgroundColor: '#fff' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -71,7 +72,7 @@ export const ProjectKindPromptDialog: React.FC<Props> = ({
         >
           取消
         </button>
-      </div>
+      </ChromeDialogSurface>
     </div>
   );
 };

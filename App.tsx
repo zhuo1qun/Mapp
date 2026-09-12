@@ -62,7 +62,8 @@ import {
 import {
   mapChromeSurfaceStyle,
   mapChromeHoverBackground,
-  mapChromeControlStyle
+  mapChromeControlStyle,
+  mapChromeControlHoverBackground
 } from './utils/map/mapChromeStyle';
 import { applyThemeChromeCssVars } from './utils/theme/themeChrome';
 import { cancelPendingMapLocate, isMapLocatePending } from './utils/map/pendingMapLocate';
@@ -760,6 +761,18 @@ export default function App() {
   const mapViewSwitcherInactiveStyle = mapViewSwitcherUsesMapChrome
     ? { color: mapViewSwitcherChromeStyle.color }
     : undefined;
+  const mapViewSwitcherInactiveClass = mapViewSwitcherUsesMapChrome
+    ? 'ui-map-chrome-view-switcher-tab'
+    : 'hover:bg-gray-100';
+  const mapViewSwitcherStyle = mapViewSwitcherUsesMapChrome
+    ? {
+        ...mapViewSwitcherChromeStyle,
+        '--map-chrome-tab-hover-bg': mapChromeControlHoverBackground(
+          mapUiChromeOpacity,
+          mapStyle
+        )
+      }
+    : mapViewSwitcherChromeStyle;
 
   useEffect(() => {
     applyThemeChromeCssVars(document.documentElement, themeColor);
@@ -2038,7 +2051,7 @@ export default function App() {
           className={`fixed bottom-4 ui-workspace-center-x ui-workspace-bottom-bar -translate-x-1/2 z-50 p-1.5 rounded-2xl shadow-xl border flex flex-nowrap justify-center gap-1 animate-in slide-in-from-bottom-4 fade-in ${
             panelChromeStyle ? 'border-gray-100/80' : 'border-white/50 map-chrome-surface-fallback'
           }`}
-          style={mapViewSwitcherChromeStyle}
+          style={mapViewSwitcherStyle}
         >
           {projectKind === 'mapping' ? (
             <button
@@ -2049,7 +2062,7 @@ export default function App() {
               flex items-center gap-2 ${viewMode === 'map' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'map' 
                 ? 'text-theme-chrome-fg shadow-md scale-105' 
-                : 'hover:bg-gray-100 text-gray-500'}
+                : `${mapViewSwitcherInactiveClass} text-gray-500`}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
               style={viewMode === 'map' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
@@ -2067,7 +2080,7 @@ export default function App() {
               flex items-center gap-2 ${viewMode === 'graph' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'graph' 
                 ? 'text-theme-chrome-fg shadow-md scale-105' 
-                : 'hover:bg-gray-100 text-gray-500'}
+                : `${mapViewSwitcherInactiveClass} text-gray-500`}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             style={viewMode === 'graph' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
@@ -2084,7 +2097,7 @@ export default function App() {
               flex items-center gap-2 ${viewMode === 'board' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'board' 
                 ? 'text-theme-chrome-fg shadow-md scale-105' 
-                : 'hover:bg-gray-100 text-gray-500'}
+                : `${mapViewSwitcherInactiveClass} text-gray-500`}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             style={viewMode === 'board' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
@@ -2100,7 +2113,7 @@ export default function App() {
               flex items-center gap-2 ${viewMode === 'table' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'table' 
                 ? 'text-theme-chrome-fg shadow-md scale-105' 
-                : 'hover:bg-gray-100 text-gray-500'}
+                : `${mapViewSwitcherInactiveClass} text-gray-500`}
               ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             style={viewMode === 'table' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}

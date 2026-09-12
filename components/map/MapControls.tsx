@@ -4,6 +4,8 @@ import { Note } from '../../types';
 import { THEME_COLOR } from '../../constants';
 import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
+import { ChromeMenuItem } from '../ui/ChromeMenuItem';
+import { ChromeMenuShell } from '../ui/ChromeMenuShell';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface MapControlsProps {
@@ -118,6 +120,14 @@ export const MapControls: React.FC<MapControlsProps> = ({
       onTouchEnd={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
+      {(showLocateMenu || showCreateMenu) && (
+        <button
+          type="button"
+          aria-label="关闭操作菜单"
+          className="fixed inset-0 z-[1999] bg-black/15 backdrop-blur-[2px] sm:hidden"
+          onClick={onCloseMenus}
+        />
+      )}
       {/* First Row: Main Controls */}
       {/* 要求：设置按钮在左上角工具栏最左侧（第一个） */}
       <ChromeIconButton
@@ -172,9 +182,10 @@ export const MapControls: React.FC<MapControlsProps> = ({
 
       {/* 菜单左缘与顶栏左侧（本控件左缘）对齐，而非与定位按钮齐平 */}
       {showLocateMenu && (
-        <div
+        <ChromeMenuShell
           data-locate-menu
-          className={`map-chrome-content-${menuChromeAppearance} absolute left-0 top-full mt-2 w-48 rounded-xl shadow-xl border border-gray-100 py-1 z-[2000] ${neutralStyle ? '' : 'bg-white'}`}
+          appearance={menuChromeAppearance}
+          className={`map-compact-action-sheet fixed inset-x-2 bottom-2 z-[2000] w-auto rounded-2xl py-1.5 sm:absolute sm:left-0 sm:right-auto sm:top-full sm:bottom-auto sm:mt-2 sm:w-48 sm:rounded-xl sm:py-1 ${neutralStyle ? '' : 'bg-white'}`}
           style={menuChromeSurfaceStyle ?? neutralStyle}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
@@ -182,7 +193,17 @@ export const MapControls: React.FC<MapControlsProps> = ({
           onMouseDown={(e) => e.stopPropagation()}
           onMouseMove={(e) => e.stopPropagation()}
         >
-          <button
+          <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500 sm:hidden">定位</div>
+          <ChromeMenuItem
+            className="group"
+            hoverBackground={neutralHover}
+            icon={
+              isLocating ? (
+                <Loader2 size={16} className="animate-spin text-blue-500" />
+              ) : (
+                <Locate size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />
+              )
+            }
             onClick={(e) => {
               e.stopPropagation();
               onLocateCurrentPosition();
@@ -191,16 +212,13 @@ export const MapControls: React.FC<MapControlsProps> = ({
             onPointerDown={(e) => e.stopPropagation()}
             onPointerMove={(e) => e.stopPropagation()}
             disabled={isLocating}
-            className="group w-full text-left px-4 py-3 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 text-sm transition-colors"
           >
-            {isLocating ? (
-              <Loader2 size={16} className="text-blue-500 animate-spin" />
-            ) : (
-              <Locate size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-            )}
-            <span>{isLocating ? 'Locating...' : 'My Location'}</span>
-          </button>
-          <button
+            {isLocating ? 'Locating...' : 'My Location'}
+          </ChromeMenuItem>
+          <ChromeMenuItem
+            className="group"
+            hoverBackground={neutralHover}
+            icon={<MapPin size={16} className="text-gray-400 transition-colors group-hover:text-red-500" />}
             onClick={(e) => {
               e.stopPropagation();
               locateToLatestPin();
@@ -208,18 +226,17 @@ export const MapControls: React.FC<MapControlsProps> = ({
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerMove={(e) => e.stopPropagation()}
-            className="group w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-sm transition-colors"
           >
-            <MapPin size={16} className="text-gray-400 group-hover:text-red-500 transition-colors" />
-            <span>Latest Note</span>
-          </button>
-        </div>
+            Latest Note
+          </ChromeMenuItem>
+        </ChromeMenuShell>
       )}
 
       {showCreateMenu && (
-        <div
+        <ChromeMenuShell
           data-create-node-menu
-          className={`map-chrome-content-${menuChromeAppearance} absolute left-0 top-full mt-2 w-52 rounded-xl shadow-xl border border-gray-100 py-1 z-[2000] ${neutralStyle ? '' : 'bg-white'}`}
+          appearance={menuChromeAppearance}
+          className={`map-compact-action-sheet fixed inset-x-2 bottom-2 z-[2000] w-auto rounded-2xl py-1.5 sm:absolute sm:left-0 sm:right-auto sm:top-full sm:bottom-auto sm:mt-2 sm:w-52 sm:rounded-xl sm:py-1 ${neutralStyle ? '' : 'bg-white'}`}
           style={menuChromeSurfaceStyle ?? neutralStyle}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
@@ -227,7 +244,17 @@ export const MapControls: React.FC<MapControlsProps> = ({
           onMouseDown={(e) => e.stopPropagation()}
           onMouseMove={(e) => e.stopPropagation()}
         >
-          <button
+          <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500 sm:hidden">新建</div>
+          <ChromeMenuItem
+            className="group"
+            hoverBackground={neutralHover}
+            icon={
+              isCreatingAtLocation ? (
+                <Loader2 size={16} className="animate-spin text-blue-500" />
+              ) : (
+                <MapPin size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />
+              )
+            }
             onClick={(e) => {
               e.stopPropagation();
               onCloseMenus();
@@ -236,16 +263,13 @@ export const MapControls: React.FC<MapControlsProps> = ({
             onPointerDown={(e) => e.stopPropagation()}
             onPointerMove={(e) => e.stopPropagation()}
             disabled={isCreatingAtLocation}
-            className="group w-full text-left px-4 py-3 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 text-sm transition-colors"
           >
-            {isCreatingAtLocation ? (
-              <Loader2 size={16} className="text-blue-500 animate-spin" />
-            ) : (
-              <MapPin size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-            )}
-            <span>在当前位置添加</span>
-          </button>
-          <button
+            在当前位置添加
+          </ChromeMenuItem>
+          <ChromeMenuItem
+            className="group"
+            hoverBackground={neutralHover}
+            icon={<ImageIcon size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />}
             onClick={(e) => {
               e.stopPropagation();
               onCloseMenus();
@@ -253,12 +277,10 @@ export const MapControls: React.FC<MapControlsProps> = ({
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerMove={(e) => e.stopPropagation()}
-            className="group w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-sm transition-colors"
           >
-            <ImageIcon size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-            <span>从相册导入图片</span>
-          </button>
-        </div>
+            从相册导入图片
+          </ChromeMenuItem>
+        </ChromeMenuShell>
       )}
     </div>
   );
