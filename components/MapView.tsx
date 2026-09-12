@@ -1757,7 +1757,9 @@ export const MapView: React.FC<MapViewProps> = ({
         {isUIVisible && (
           <div
             data-allow-context-menu
-            className={`fixed top-2 sm:top-4 ui-workspace-left z-[1000] flex flex-col items-start gap-2 sm:gap-3 pointer-events-none ${
+            className={`fixed top-2 sm:top-4 ui-workspace-left z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 sm:gap-3 pointer-events-none ${
+              showLocateMenu || showCreateMenu ? 'map-toolbar--sheet-open' : ''
+            } ${
               isMapToolbarEditMode
                 ? 'right-2 sm:right-4 lg:right-[calc(20rem+0.75rem)]'
                 : 'right-2 sm:right-4'

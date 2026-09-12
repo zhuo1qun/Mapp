@@ -568,7 +568,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   const panelBody = (
     <div
       data-graph-top-left-panel
-      className={`map-chrome-content-${chromeAppearance} ${posCls} ${embed ? 'mt-2' : ''} flex max-h-[min(24rem,70vh)] overflow-hidden rounded-xl border border-gray-100/80 shadow-xl ${
+      className={`map-layer-panel-body map-chrome-content-${chromeAppearance} ${posCls} ${embed ? 'mt-2' : ''} flex max-h-[min(24rem,70vh)] overflow-hidden rounded-xl border border-gray-100/80 shadow-xl ${
         embed ? 'w-full max-w-xl' : 'w-[min(20rem,calc(100vw-2rem))]'
       }`}
       style={{
@@ -851,7 +851,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                   </div>
 
                   {expanded ? (
-                    <div className="border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
+                    <div className="chrome-content-shift-in border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
                       {panelNotes.map((note) => {
                         const nVisible = !note.layerItemHidden;
                         const isNDrag = dragNoteId === note.id;

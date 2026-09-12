@@ -29,11 +29,11 @@ export const MapImportMenuModal: React.FC<Props> = ({
 }) => {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[6000] flex items-end justify-center p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="导入内容">
+    <div className="fixed inset-0 z-[var(--z-map-modal)] flex items-end justify-center p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="导入内容">
       <button type="button" className="fixed inset-0 bg-black/20 backdrop-blur-[2px]" aria-label="关闭导入菜单" onClick={onClose} />
       <ChromeMenuShell
         appearance={chromeAppearance}
-        className="relative z-[6001] w-full max-w-md rounded-2xl py-1.5 animate-in slide-in-from-bottom-4 fade-in sm:w-48 sm:rounded-xl sm:py-1 sm:zoom-in-95"
+        className="relative z-10 w-full max-w-md rounded-2xl py-1.5 animate-in slide-in-from-bottom-4 fade-in sm:w-48 sm:rounded-xl sm:py-1 sm:zoom-in-95"
         style={chromeSurfaceStyle}
       >
         <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500 sm:hidden">导入</div>

@@ -13,6 +13,7 @@ import { Note, ViewMode, Project, ProjectKind } from './types';
 import { get, set } from 'idb-keyval';
 import {
   MAP_STYLE_OPTIONS,
+  PROJECT_ENTER_SETTLE_MS,
   PROJECT_OPEN_OVERLAY_FADE_S,
   PROJECT_OPEN_SLIDE_DURATION_S,
   PROJECT_OPEN_SLIDE_EASE,
@@ -72,6 +73,9 @@ import { useCsvImport } from './components/hooks/useCsvImport';
 import { useFileDrop } from './components/hooks/useFileDrop';
 import { EditInspectorProvider } from './components/editInspector/EditInspectorProvider';
 import { installBuiltinExamples } from './utils/builtinExamples/install';
+import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
+
+type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
 
 export default function App() {
   const emptyNotes = useMemo(() => [], []);
@@ -281,6 +285,52 @@ export default function App() {
     () => Math.round(PROJECT_OPEN_SLIDE_DURATION_S * 1000),
     []
   );
+
+  /**
+   * 项目进入前半段：维持原有的全宽展开与两帧绘制等待。
+   * 各入口仅决定来源模式与是否需要展开，避免把同一节奏复制到新建/导入路径。
+   */
+  const beginProjectEnter = useCallback(
+    async ({
+      projectId,
+      mode,
+      waitForExpand,
+      setCurrentId
+    }: {
+      projectId: string;
+      mode: ProjectEnterMode;
+      waitForExpand: boolean;
+      setCurrentId: boolean;
+    }) => {
+      setSidebarExpandingToHome(false);
+      setProjectEnterCollapsing(false);
+      setSidebarDockedInline(true);
+      setIsSidebarOpen(true);
+      setPendingEnterWorkspaceFromHome(mode === 'from-home');
+      setSidebarExpandForProjectSwitch(mode === 'project-switch');
+
+      if (setCurrentId) setCurrentProjectId(projectId);
+      if (!waitForExpand) return;
+
+      await afterNextPaint();
+      await waitForAnimation(projectEnterExpandMs);
+    },
+    [projectEnterExpandMs, setCurrentProjectId, setIsSidebarOpen]
+  );
+
+  /** 项目进入后半段：全宽短暂停留后收束为侧栏。 */
+  const completeProjectEnter = useCallback(async () => {
+    await waitForAnimation(projectEnterExpandMs + PROJECT_ENTER_SETTLE_MS);
+    setIsSidebarOpen(true);
+    setSidebarDockedInline(true);
+    setProjectEnterCollapsing(true);
+    setPendingEnterWorkspaceFromHome(false);
+    setSidebarExpandForProjectSwitch(false);
+
+    await afterNextPaint();
+    await waitForAnimation(projectEnterExpandMs);
+    setProjectEnterCollapsing(false);
+  }, [projectEnterExpandMs, setIsSidebarOpen]);
 
   /** 加载条：全宽段内显示；一开始收束即隐藏 */
   const projectEnterLoadBarVisible =
@@ -511,29 +561,17 @@ export default function App() {
     const switchingProject = !!currentProjectId && currentProjectId !== id;
     const previousProjectId = currentProjectId;
 
-    setSidebarExpandingToHome(false);
-    setProjectEnterCollapsing(false);
     clearMapNavigation();
     clearBoardNavigation();
     clearGraphNavigation();
 
-    setSidebarDockedInline(true);
-    setIsSidebarOpen(true);
-
     // —— 1) 先切到全屏中间态（此时还不加载）——
-    if (fromHome) {
-      setSidebarExpandForProjectSwitch(false);
-      setPendingEnterWorkspaceFromHome(true);
-    } else if (switchingProject) {
-      setPendingEnterWorkspaceFromHome(false);
-      setSidebarExpandForProjectSwitch(true);
-    } else {
-      setSidebarExpandForProjectSwitch(false);
-    }
-    setCurrentProjectId(id);
-
-    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-    await new Promise((r) => setTimeout(r, projectEnterExpandMs));
+    await beginProjectEnter({
+      projectId: id,
+      mode: fromHome ? 'from-home' : switchingProject ? 'project-switch' : 'steady',
+      waitForExpand: true,
+      setCurrentId: true
+    });
 
     // —— 2) 全屏已就位，开始加载 ——
     const loaded = await projectState.selectProject(id);
@@ -549,19 +587,8 @@ export default function App() {
       return;
     }
 
-    // —— 3) 加载完成后先停在全屏一拍（与旧切换节奏一致：expandMs+80），再收束 ——
-    // 收束时长本身仍是 expandMs；此前「超快」是立刻收束 + %/px 无法插值瞬切，不是把加载算进动画。
-    await new Promise((r) => setTimeout(r, projectEnterExpandMs + 80));
-
-    setIsSidebarOpen(true);
-    setSidebarDockedInline(true);
-    setProjectEnterCollapsing(true);
-    setPendingEnterWorkspaceFromHome(false);
-    setSidebarExpandForProjectSwitch(false);
-
-    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-    await new Promise((r) => setTimeout(r, projectEnterExpandMs));
-    setProjectEnterCollapsing(false);
+    // —— 3) 加载完成后先停在全屏一拍，再收束 ——
+    await completeProjectEnter();
   }, [
     currentProjectId,
     pendingEnterWorkspaceFromHome,
@@ -572,8 +599,8 @@ export default function App() {
     clearBoardNavigation,
     clearGraphNavigation,
     closeProjectSidebar,
-    setCurrentProjectId,
-    projectEnterExpandMs
+    beginProjectEnter,
+    completeProjectEnter
   ]);
 
   const handleBackToHome = useCallback(() => {
@@ -1302,32 +1329,15 @@ export default function App() {
       (project.connections?.length ?? 0) > 0;
 
     const runEnterRhythm = async (projectId: string) => {
-      setSidebarExpandingToHome(false);
-      setSidebarExpandForProjectSwitch(false);
-      setProjectEnterCollapsing(false);
-      setSidebarDockedInline(true);
-      setIsSidebarOpen(true);
-      if (enteringFromHome) {
-        setPendingEnterWorkspaceFromHome(true);
-        setCurrentProjectId(projectId);
-        await new Promise<void>((r) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => r()))
-        );
-        await new Promise((r) => setTimeout(r, projectEnterExpandMs));
-      }
+      await beginProjectEnter({
+        projectId,
+        mode: enteringFromHome ? 'from-home' : 'steady',
+        waitForExpand: enteringFromHome,
+        setCurrentId: enteringFromHome
+      });
       await projectState.selectProject(projectId);
       if (enteringFromHome) {
-        await new Promise((r) => setTimeout(r, projectEnterExpandMs + 80));
-        setProjectEnterCollapsing(true);
-        setPendingEnterWorkspaceFromHome(false);
-        await new Promise<void>((r) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => r()))
-        );
-        await new Promise((r) => setTimeout(r, projectEnterExpandMs));
-        setProjectEnterCollapsing(false);
-      } else {
-        setPendingEnterWorkspaceFromHome(false);
-        setSidebarExpandForProjectSwitch(false);
+        await completeProjectEnter();
       }
     };
 
@@ -2048,7 +2058,7 @@ export default function App() {
           ref={mobileViewSwitcherRef}
           data-allow-context-menu
           data-mobile-expanded={isMobileViewSwitcherExpanded ? 'true' : 'false'}
-          className={`fixed bottom-4 ui-workspace-center-x ui-workspace-bottom-bar -translate-x-1/2 z-50 p-1.5 rounded-2xl shadow-xl border flex flex-nowrap justify-center gap-1 animate-in slide-in-from-bottom-4 fade-in ${
+          className={`fixed bottom-4 ui-workspace-center-x ui-workspace-bottom-bar -translate-x-1/2 z-[var(--z-workspace-tabs)] p-1.5 rounded-2xl shadow-xl border flex flex-nowrap justify-center gap-1 animate-in slide-in-from-bottom-4 fade-in ${
             panelChromeStyle ? 'border-gray-100/80' : 'border-white/50 map-chrome-surface-fallback'
           }`}
           style={mapViewSwitcherStyle}

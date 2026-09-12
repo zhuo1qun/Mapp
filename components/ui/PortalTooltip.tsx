@@ -5,8 +5,8 @@ const GAP_PX = 6;
 const VIEW_PAD_PX = 10;
 const LONG_PRESS_MS = 480;
 const TOUCH_HOLD_MS = 1600;
-/** 高于 SettingsPanel 下拉面板 z-[5001] */
-export const PORTAL_TOOLTIP_Z = 6000;
+/** 高于地图 modal，但低于阻断性确认框；与 index.css 的 --z-map-tooltip 对应。 */
+export const PORTAL_TOOLTIP_Z = 7000;
 
 export type PortalTooltipTone = 'neutral' | 'warning';
 

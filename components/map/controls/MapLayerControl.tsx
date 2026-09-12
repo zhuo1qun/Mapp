@@ -65,11 +65,18 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
 
   const panel =
     showPanel && menuTop != null ? (
-      <div
-        data-map-layer-chrome-panel
-        className={`map-chrome-content-${menuChromeAppearance} fixed z-[2000] ${edgeCls} flex gap-2 items-start pointer-events-none`}
-        style={{ top: menuTop }}
-      >
+      <>
+        <button
+          type="button"
+          className="fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden"
+          aria-label="关闭图层"
+          onClick={onTogglePanel}
+        />
+        <div
+          data-map-layer-chrome-panel
+          className={`map-layer-chrome-panel ui-compact-bottom-sheet map-chrome-content-${menuChromeAppearance} fixed z-[var(--z-map-anchored-panel)] ${edgeCls} flex gap-2 items-start pointer-events-none`}
+          style={{ top: menuTop }}
+        >
         {unifiedNotesLayerSlot ? (
           <div
             className="pointer-events-auto shrink-0"
@@ -132,7 +139,8 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </>
     ) : null;
 
   return (

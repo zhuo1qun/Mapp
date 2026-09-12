@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { parseHexToRgb } from '../theme/themeChrome';
 
 /** 全屏模态遮罩（便签编辑器等）：轻半透明 + 背景模糊，避免过重黑层 */
 export const MODAL_BACKDROP_MASK_STYLE: CSSProperties = {
@@ -142,6 +143,35 @@ export function mapChromeSurfaceInlineCss(opacity: number, blurPx: number): stri
     parts.push(`backdrop-filter:blur(${b}px)`, `-webkit-backdrop-filter:blur(${b}px)`);
   }
   return parts.join(';');
+}
+
+/**
+ * 地图点位文字标签的玻璃面：在保留全局透明度与模糊设置的同时，
+ * 以主题色轻微染色背景，并使用同色系描边。
+ *
+ * 不用 CSS `color-mix()`，使 Leaflet DivIcon 的内联样式在较旧 WebView 中也能稳定工作。
+ */
+export function mapChromeTextLabelInlineCss(
+  opacity: number,
+  blurPx: number,
+  themeColor: string
+): string {
+  const themeRgb = parseHexToRgb(themeColor);
+  if (!themeRgb) return mapChromeSurfaceInlineCss(opacity, blurPx);
+
+  const o = Math.min(1, Math.max(0, opacity));
+  // 使用白色与主题色的预混色，避免纯主题色半透明叠在深色底图上后显脏或降低可读性。
+  const tint = 0.13;
+  const background = [themeRgb.r, themeRgb.g, themeRgb.b]
+    .map((channel) => Math.round(255 + (channel - 255) * tint))
+    .join(',');
+  const borderOpacity = Math.min(0.72, o * 0.75);
+
+  return [
+    mapChromeSurfaceInlineCss(o, blurPx),
+    `background-color:rgba(${background},${o})`,
+    `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${borderOpacity})`
+  ].join(';');
 }
 
 /** 图谱圆形底衬：填充与 mapChromeSurfaceStyle 一致，描边随不透明度略提亮 */

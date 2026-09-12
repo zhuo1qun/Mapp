@@ -25,6 +25,15 @@
    */
   --workspace-ui-left-inset: 0px;
   --workspace-ui-inset-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* 全局浮层层级：组件只能引用这些语义层，不再各自猜测四位数 z-index。 */
+  --z-workspace-tabs: 50;
+  --z-map-toolbar: 1000;
+  --z-map-anchored-panel: 2000;
+  --z-map-sheet-backdrop: 4000;
+  --z-map-sheet: 4001;
+  --z-map-modal: 6000;
+  --z-map-tooltip: 7000;
+  --z-blocking-dialog: 10050;
 }
 
 /** 相对工作区左缘：侧栏右缘 + 原 left-2 / sm:left-4 */
@@ -443,10 +452,100 @@ body {
   background-color: rgb(255 255 255 / 0.12);
 }
 
+@keyframes chrome-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chrome-sheet-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.985);
+  }
+}
+
+@keyframes chrome-sheet-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes chrome-sheet-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.chrome-sheet-entering {
+  animation: chrome-sheet-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chrome-sheet-exiting {
+  animation: chrome-sheet-exit 180ms ease-in both;
+  pointer-events: none;
+}
+
+.chrome-sheet-backdrop-entering {
+  animation: chrome-sheet-backdrop-enter 160ms ease-out both;
+}
+
+.chrome-sheet-backdrop-exiting {
+  animation: chrome-sheet-backdrop-exit 160ms ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-sheet-entering,
+  .chrome-sheet-exiting,
+  .chrome-sheet-backdrop-entering,
+  .chrome-sheet-backdrop-exiting {
+    animation-duration: 1ms;
+  }
+}
+
 /* 紧凑工作区的即时操作采用底部 sheet；统一避开 iPhone Home Indicator。 */
 @media (max-width: 639px) {
+  /* 工具栏本身原本是独立 stacking context。操作 sheet 打开时抬高整组，
+   * 才能让其遮罩可靠盖住 portal 面板及右下页签。 */
+  .map-toolbar--sheet-open {
+    z-index: var(--z-map-sheet) !important;
+  }
+
   .map-compact-action-sheet {
     bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+  }
+
+  /* 需要持续查看/调整的设置和图层，以工作 sheet 覆盖地图并压过页签，
+   * 由遮罩接管点击，避免切换视图时留下半编辑状态。 */
+  .ui-compact-bottom-sheet {
+    top: auto !important;
+    right: 0.5rem !important;
+    bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem)) !important;
+    left: 0.5rem !important;
+    width: auto !important;
+    max-height: min(72dvh, calc(100dvh - 1rem)) !important;
+    border-radius: 1rem !important;
+    z-index: var(--z-map-sheet) !important;
+  }
+
+  .map-layer-chrome-panel.ui-compact-bottom-sheet {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    pointer-events: auto;
+  }
+
+  .map-layer-chrome-panel .map-layer-panel-body {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: min(58dvh, calc(100dvh - 7rem)) !important;
   }
 }
 
@@ -519,6 +618,46 @@ body {
 }
 .map-chrome-content-dark .chrome-field:hover {
   background-color: rgb(255 255 255 / 0.14);
+}
+
+/* 图层明细与底图菜单：仅作轻微位移动画，不叠加透明度或缩放，避免列表内容显得闪烁。 */
+@keyframes chrome-content-shift-in {
+  from {
+    transform: translateY(-4px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.chrome-content-shift-in {
+  animation: chrome-content-shift-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* 桌面锚定面板从锚点下方落位；窄屏底部 sheet 则自下向上归位。 */
+.chrome-anchored-panel-shift-in {
+  animation: chrome-content-shift-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes chrome-bottom-sheet-shift-in {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.chrome-bottom-sheet-shift-in {
+  animation: chrome-bottom-sheet-shift-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-content-shift-in,
+  .chrome-anchored-panel-shift-in,
+  .chrome-bottom-sheet-shift-in {
+    animation: none;
+  }
 }
 
 /* Fixed width for tag columns to prevent table expansion */

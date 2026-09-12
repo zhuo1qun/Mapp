@@ -157,7 +157,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   const renderNotes = (tagKey: string) => {
     const panelNotes = notesForTag(tagKey);
     return (
-      <div className="border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
+      <div className="chrome-content-shift-in border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
         {panelNotes.length === 0 ? (
           <div className="px-2 py-1 text-[10px] text-gray-400">无便签</div>
         ) : (
@@ -534,9 +534,11 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
 
             {prefixOpen && leafOnly ? renderNotes(tags[0]) : null}
 
-            {prefixOpen && !leafOnly
-              ? tags.map((t) => renderTagRow(t, { nested: true }))
-              : null}
+            {prefixOpen && !leafOnly ? (
+              <div className="chrome-content-shift-in">
+                {tags.map((t) => renderTagRow(t, { nested: true }))}
+              </div>
+            ) : null}
           </div>
         );
       })}

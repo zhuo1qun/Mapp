@@ -78,13 +78,20 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
 
   const panel =
     isOpen && menuTop != null ? (
-      <div
-        data-map-search-chrome-panel
-        className={`map-chrome-content-${menuChromeAppearance} fixed z-[2000] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-3 animate-in fade-in slide-in-from-top-4 ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
-        style={{ top: menuTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <>
+        <button
+          type="button"
+          className="fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden"
+          aria-label="关闭检索"
+          onClick={onClose}
+        />
+        <div
+          data-map-search-chrome-panel
+          className={`map-chrome-content-${menuChromeAppearance} ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-3 animate-in fade-in slide-in-from-top-4 ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
+          style={{ top: menuTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-xs font-medium text-gray-500">检索</h3>
           {borderGeoJSON ? (
@@ -191,7 +198,8 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </>
     ) : null;
 
   return (

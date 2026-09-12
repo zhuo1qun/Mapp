@@ -121,6 +121,10 @@
   // utils.ts
   init_es();
 
+  // utils/theme/themeChrome.ts
+  var LAB_EPS = 216 / 24389;
+  var LAB_KAPPA = 24389 / 27;
+
   // utils/map/mapChromeStyle.ts
   var DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
   var DEFAULT_MAP_UI_CHROME_BLUR_PX = 8;

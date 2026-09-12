@@ -142,6 +142,8 @@ export const PROJECT_OPEN_OVERLAY_FADE_S = 0.2;
 /** 整屏左滑与左侧栏抽屉同节奏，见 App 内 ProjectManager 外层 MotionDiv */
 export const PROJECT_OPEN_SLIDE_DURATION_S = 0.3;
 export const PROJECT_OPEN_SLIDE_EASE: [number, number, number, number] = [0.4, 0, 0.2, 1];
+/** 项目加载完成后，全宽中间态保留的一小段稳定时间。 */
+export const PROJECT_ENTER_SETTLE_MS = 80;
 
 /** 大屏侧栏抽屉固定宽度（ px）；小屏仍为视口比例 62% */
 export const PROJECT_SIDEBAR_DRAWER_WIDTH_PX = 420;

@@ -6,7 +6,7 @@ import { lngWrapOffsetsForBounds } from '../../utils/map/lngWorldWrap';
 import {
   DEFAULT_MAP_UI_CHROME_BLUR_PX,
   DEFAULT_MAP_UI_CHROME_OPACITY,
-  mapChromeSurfaceInlineCss
+  mapChromeTextLabelInlineCss
 } from '../../utils/map/mapChromeStyle';
 
 interface TextLabelsLayerProps {
@@ -155,8 +155,8 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
   const rafRef = useRef<number | null>(null);
   const isGestureZoomingRef = useRef(false);
   const chromeCss = useMemo(
-    () => mapChromeSurfaceInlineCss(mapUiChromeOpacity, mapUiChromeBlurPx),
-    [mapUiChromeOpacity, mapUiChromeBlurPx]
+    () => mapChromeTextLabelInlineCss(mapUiChromeOpacity, mapUiChromeBlurPx, themeColor),
+    [mapUiChromeOpacity, mapUiChromeBlurPx, themeColor]
   );
 
   useMapEvents({

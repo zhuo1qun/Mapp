@@ -98,6 +98,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     width: number;
     maxHeight: number;
   } | null>(null);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsCompactViewport(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -214,13 +223,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   return createPortal(
     <>
+      <button
+        type="button"
+        className="fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden"
+        aria-label="关闭设置"
+        onClick={onClose}
+      />
       <div
         ref={panelRef}
         data-allow-context-menu
         data-graph-top-left-panel
         role="dialog"
         aria-label="设置"
-        className={`map-chrome-content-${settingsAppearance} fixed z-[5001] ui-chrome-menu-page-left overflow-hidden rounded-xl border border-gray-100/80 shadow-xl flex flex-col`}
+        className={`map-chrome-content-${settingsAppearance} ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-left overflow-hidden rounded-xl border border-gray-100/80 shadow-xl flex flex-col ${
+          isCompactViewport ? 'chrome-bottom-sheet-shift-in' : 'chrome-anchored-panel-shift-in'
+        }`}
         style={{
           top: panelRect.top,
           width: panelRect.width,
@@ -252,6 +269,35 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   />
                 </button>
               </div>
+              {mapBgMenuOpen && isCompactViewport ? (
+                <div
+                  ref={mapBgMenuRef}
+                  role="listbox"
+                  className="chrome-content-shift-in overflow-hidden rounded-xl border border-gray-200 py-1"
+                >
+                  {MAP_STYLE_OPTIONS.map((style) => (
+                    <button
+                      key={style.id}
+                      type="button"
+                      role="option"
+                      aria-selected={currentMapStyle === style.id}
+                      onClick={() => handleMapStyleSelect(style.id)}
+                      className={`flex w-full border-0 px-3 py-2.5 text-left text-sm transition-colors ${
+                        currentMapStyle === style.id
+                          ? 'font-medium text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                      style={
+                        currentMapStyle === style.id
+                          ? { boxShadow: `inset 3px 0 0 0 ${themeColor}` }
+                          : undefined
+                      }
+                    >
+                      {style.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {showTextLabels !== undefined && onShowTextLabelsChange ? (
                 <SettingsToggleSwitch
                   label="显示标签"
@@ -396,12 +442,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       )}
 
       {mapBgMenuOpen &&
+        !isCompactViewport &&
         mapBgMenuRect &&
         createPortal(
           <div
             ref={mapBgMenuRef}
             role="listbox"
-            className={`map-chrome-content-${settingsAppearance} fixed overflow-hidden rounded-lg border border-gray-100/80 py-1 shadow-xl theme-surface-scrollbar`}
+            className={`map-chrome-content-${settingsAppearance} chrome-content-shift-in fixed overflow-hidden rounded-lg border border-gray-200 py-1 shadow-xl theme-surface-scrollbar`}
             style={{
               ...settingsCardChrome,
               zIndex: PORTAL_TOOLTIP_Z,

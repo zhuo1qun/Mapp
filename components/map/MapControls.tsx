@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMap } from 'react-leaflet';
 import { Note } from '../../types';
 import { THEME_COLOR } from '../../constants';
@@ -6,6 +7,7 @@ import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon } from 'luc
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { ChromeMenuItem } from '../ui/ChromeMenuItem';
 import { ChromeMenuShell } from '../ui/ChromeMenuShell';
+import { ChromeSheetPresence } from '../ui/ChromeSheetPresence';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface MapControlsProps {
@@ -60,6 +62,11 @@ export const MapControls: React.FC<MapControlsProps> = ({
   const map = useMap();
   const controlsRef = useRef<HTMLDivElement>(null);
   const locateMenuRef = useRef<HTMLDivElement>(null);
+  const compactSheetRef = useRef<HTMLDivElement>(null);
+  const [isCompactViewport, setIsCompactViewport] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
+  );
+  const [compactMenuKind, setCompactMenuKind] = useState<'locate' | 'create' | null>(null);
 
   const locateToLatestPin = () => {
     if (mapNotes.length > 0) {
@@ -68,10 +75,27 @@ export const MapControls: React.FC<MapControlsProps> = ({
     }
   };
 
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 639px)');
+    const update = () => setIsCompactViewport(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (showLocateMenu) setCompactMenuKind('locate');
+    else if (showCreateMenu) setCompactMenuKind('create');
+  }, [showLocateMenu, showCreateMenu]);
+
   // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (controlsRef.current && !controlsRef.current.contains(event.target as Node)) {
+      if (
+        controlsRef.current &&
+        !controlsRef.current.contains(event.target as Node) &&
+        !compactSheetRef.current?.contains(event.target as Node)
+      ) {
         onCloseMenus();
       }
     };
@@ -104,7 +128,90 @@ export const MapControls: React.FC<MapControlsProps> = ({
     };
   }, []);
 
+  const locateMenuItems = (
+    <>
+      <ChromeMenuItem
+        className="group"
+        hoverBackground={neutralHover}
+        icon={
+          isLocating ? (
+            <Loader2 size={16} className="animate-spin text-blue-500" />
+          ) : (
+            <Locate size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />
+          )
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          onLocateCurrentPosition();
+          onCloseMenus();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerMove={(e) => e.stopPropagation()}
+        disabled={isLocating}
+      >
+        {isLocating ? 'Locating...' : 'My Location'}
+      </ChromeMenuItem>
+      <ChromeMenuItem
+        className="group"
+        hoverBackground={neutralHover}
+        icon={<MapPin size={16} className="text-gray-400 transition-colors group-hover:text-red-500" />}
+        onClick={(e) => {
+          e.stopPropagation();
+          locateToLatestPin();
+          onCloseMenus();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerMove={(e) => e.stopPropagation()}
+      >
+        Latest Note
+      </ChromeMenuItem>
+    </>
+  );
+
+  const createMenuItems = (
+    <>
+      <ChromeMenuItem
+        className="group"
+        hoverBackground={neutralHover}
+        icon={
+          isCreatingAtLocation ? (
+            <Loader2 size={16} className="animate-spin text-blue-500" />
+          ) : (
+            <MapPin size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />
+          )
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          onCloseMenus();
+          onCreateAtCurrentLocation();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerMove={(e) => e.stopPropagation()}
+        disabled={isCreatingAtLocation}
+      >
+        在当前位置添加
+      </ChromeMenuItem>
+      <ChromeMenuItem
+        className="group"
+        hoverBackground={neutralHover}
+        icon={<ImageIcon size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />}
+        onClick={(e) => {
+          e.stopPropagation();
+          onCloseMenus();
+          onImportFromPhotos();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerMove={(e) => e.stopPropagation()}
+      >
+        从相册导入图片
+      </ChromeMenuItem>
+    </>
+  );
+  const renderedCompactMenuKind =
+    compactMenuKind ?? (showLocateMenu ? 'locate' : showCreateMenu ? 'create' : null);
+
   return (
+    <>
     <div
       ref={controlsRef}
       className="relative flex flex-row items-center gap-1.5 sm:gap-2 pointer-events-auto"
@@ -120,14 +227,6 @@ export const MapControls: React.FC<MapControlsProps> = ({
       onTouchEnd={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
-      {(showLocateMenu || showCreateMenu) && (
-        <button
-          type="button"
-          aria-label="关闭操作菜单"
-          className="fixed inset-0 z-[1999] bg-black/15 backdrop-blur-[2px] sm:hidden"
-          onClick={onCloseMenus}
-        />
-      )}
       {/* First Row: Main Controls */}
       {/* 要求：设置按钮在左上角工具栏最左侧（第一个） */}
       <ChromeIconButton
@@ -181,11 +280,11 @@ export const MapControls: React.FC<MapControlsProps> = ({
       </div>
 
       {/* 菜单左缘与顶栏左侧（本控件左缘）对齐，而非与定位按钮齐平 */}
-      {showLocateMenu && (
+      {showLocateMenu && !isCompactViewport && (
         <ChromeMenuShell
           data-locate-menu
           appearance={menuChromeAppearance}
-          className={`map-compact-action-sheet fixed inset-x-2 bottom-2 z-[2000] w-auto rounded-2xl py-1.5 sm:absolute sm:left-0 sm:right-auto sm:top-full sm:bottom-auto sm:mt-2 sm:w-48 sm:rounded-xl sm:py-1 ${neutralStyle ? '' : 'bg-white'}`}
+          className={`absolute left-0 top-full z-[var(--z-map-anchored-panel)] mt-2 w-48 ${neutralStyle ? '' : 'bg-white'}`}
           style={menuChromeSurfaceStyle ?? neutralStyle}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
@@ -193,50 +292,15 @@ export const MapControls: React.FC<MapControlsProps> = ({
           onMouseDown={(e) => e.stopPropagation()}
           onMouseMove={(e) => e.stopPropagation()}
         >
-          <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500 sm:hidden">定位</div>
-          <ChromeMenuItem
-            className="group"
-            hoverBackground={neutralHover}
-            icon={
-              isLocating ? (
-                <Loader2 size={16} className="animate-spin text-blue-500" />
-              ) : (
-                <Locate size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />
-              )
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              onLocateCurrentPosition();
-              onCloseMenus();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerMove={(e) => e.stopPropagation()}
-            disabled={isLocating}
-          >
-            {isLocating ? 'Locating...' : 'My Location'}
-          </ChromeMenuItem>
-          <ChromeMenuItem
-            className="group"
-            hoverBackground={neutralHover}
-            icon={<MapPin size={16} className="text-gray-400 transition-colors group-hover:text-red-500" />}
-            onClick={(e) => {
-              e.stopPropagation();
-              locateToLatestPin();
-              onCloseMenus();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerMove={(e) => e.stopPropagation()}
-          >
-            Latest Note
-          </ChromeMenuItem>
+          {locateMenuItems}
         </ChromeMenuShell>
       )}
 
-      {showCreateMenu && (
+      {showCreateMenu && !isCompactViewport && (
         <ChromeMenuShell
           data-create-node-menu
           appearance={menuChromeAppearance}
-          className={`map-compact-action-sheet fixed inset-x-2 bottom-2 z-[2000] w-auto rounded-2xl py-1.5 sm:absolute sm:left-0 sm:right-auto sm:top-full sm:bottom-auto sm:mt-2 sm:w-52 sm:rounded-xl sm:py-1 ${neutralStyle ? '' : 'bg-white'}`}
+          className={`absolute left-0 top-full z-[var(--z-map-anchored-panel)] mt-2 w-52 ${neutralStyle ? '' : 'bg-white'}`}
           style={menuChromeSurfaceStyle ?? neutralStyle}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
@@ -244,44 +308,51 @@ export const MapControls: React.FC<MapControlsProps> = ({
           onMouseDown={(e) => e.stopPropagation()}
           onMouseMove={(e) => e.stopPropagation()}
         >
-          <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500 sm:hidden">新建</div>
-          <ChromeMenuItem
-            className="group"
-            hoverBackground={neutralHover}
-            icon={
-              isCreatingAtLocation ? (
-                <Loader2 size={16} className="animate-spin text-blue-500" />
-              ) : (
-                <MapPin size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />
-              )
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              onCloseMenus();
-              onCreateAtCurrentLocation();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerMove={(e) => e.stopPropagation()}
-            disabled={isCreatingAtLocation}
-          >
-            在当前位置添加
-          </ChromeMenuItem>
-          <ChromeMenuItem
-            className="group"
-            hoverBackground={neutralHover}
-            icon={<ImageIcon size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCloseMenus();
-              onImportFromPhotos();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerMove={(e) => e.stopPropagation()}
-          >
-            从相册导入图片
-          </ChromeMenuItem>
+          {createMenuItems}
         </ChromeMenuShell>
       )}
     </div>
+    {isCompactViewport && typeof document !== 'undefined'
+      ? createPortal(
+          <ChromeSheetPresence open={showLocateMenu || showCreateMenu}>
+            {(phase) => (
+              <div ref={compactSheetRef}>
+                <button
+                  type="button"
+                  aria-label="关闭操作菜单"
+                  className={`chrome-sheet-backdrop-${phase} fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px]`}
+                  onClick={onCloseMenus}
+                />
+                {renderedCompactMenuKind === 'locate' ? (
+                  <ChromeMenuShell
+                    appearance={menuChromeAppearance}
+                    className={`map-compact-action-sheet chrome-sheet-${phase} fixed inset-x-2 bottom-2 z-[var(--z-map-sheet)] w-auto rounded-2xl py-1.5 ${
+                      neutralStyle ? '' : 'bg-white'
+                    }`}
+                    style={menuChromeSurfaceStyle ?? neutralStyle}
+                  >
+                    <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500">定位</div>
+                    {locateMenuItems}
+                  </ChromeMenuShell>
+                ) : null}
+                {renderedCompactMenuKind === 'create' ? (
+                  <ChromeMenuShell
+                    appearance={menuChromeAppearance}
+                    className={`map-compact-action-sheet chrome-sheet-${phase} fixed inset-x-2 bottom-2 z-[var(--z-map-sheet)] w-auto rounded-2xl py-1.5 ${
+                      neutralStyle ? '' : 'bg-white'
+                    }`}
+                    style={menuChromeSurfaceStyle ?? neutralStyle}
+                  >
+                    <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500">新建</div>
+                    {createMenuItems}
+                  </ChromeMenuShell>
+                ) : null}
+              </div>
+            )}
+          </ChromeSheetPresence>,
+          document.body
+        )
+      : null}
+    </>
   );
 };
