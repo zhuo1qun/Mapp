@@ -234,7 +234,9 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
           const { detail } = parseNoteContent(note.text);
           if (!detail.trim()) return null;
           return (
-            <div className="px-4 py-3 text-gray-800 text-sm leading-snug break-words border-b border-gray-50 bg-gray-50/30 mapping-preview-markdown">
+            <div className={`px-4 py-3 text-gray-800 text-sm leading-snug break-words border-b border-gray-50 mapping-preview-markdown ${
+              chromeAppearance === 'dark' ? 'bg-transparent' : 'bg-gray-50/30'
+            }`}>
               <ReactMarkdown
                 components={{
                   a: ({ href, children, ...props }) => (
@@ -333,6 +335,8 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
         label={parseNoteContent(note.text || '').title || undefined}
         onClose={() => setNavSheetOpen(false)}
         themeColor={themeColor}
+        panelChromeStyle={chromeSurfaceStyle}
+        chromeAppearance={chromeAppearance}
       />
     ) : null}
     </>

@@ -33,6 +33,15 @@ import { TextLabelsLayer } from './map/TextLabelsLayer';
 import { MapPositionTracker } from './map/MapPositionTracker';
 import { MapCenterHandler } from './map/MapCenterHandler';
 import { MapControls } from './map/MapControls';
+import {
+  PENDING_MAP_LOCATE_EVENT,
+  applyReadyMapLocate,
+  beginPendingMapLocate,
+  cancelPendingMapLocate,
+  completePendingMapLocate,
+  getPendingMapLocate,
+  peekReadyMapLocate
+} from '../utils/map/pendingMapLocate';
 import { MapSearchPanel } from './map/controls/MapSearchPanel';
 import { MapLayerControl } from './map/controls/MapLayerControl';
 import { NotePreviewCard } from './map/overlays/NotePreviewCard';
@@ -56,7 +65,7 @@ import { NoteEditor } from './NoteEditor';
 import { generateId } from '../utils';
 import { hexToRgb, isPhotoTakenRecently } from '../utils/map/mapUtils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
-import { loadImage, getViewPositionCache } from '../utils/persistence/storage';
+import { loadImage, getViewPositionCache, setViewPositionCache } from '../utils/persistence/storage';
 import { useNotesWithResolvedMedia } from '../utils/persistence/useNotesWithResolvedMedia';
 import { ImportPreviewDialog } from './ImportPreviewDialog';
 import { buildMapTabExportPayload } from '../utils/map/mapTabExportPayload';
@@ -150,8 +159,7 @@ const MapTileZoomFallback: React.FC<{
       minNativeZoom: initialFallbackZoom,
       maxNativeZoom: initialFallbackZoom,
       updateWhenZooming: false,
-      updateWhenIdle: false,
-      updateInterval: 80,
+      updateWhenIdle: true,
       keepBuffer: 2
     });
 
@@ -170,6 +178,10 @@ const MapTileZoomFallback: React.FC<{
       cancelRebase();
       rebaseTimer = setTimeout(() => {
         rebaseTimer = null;
+        if (map._mappSmoothZooming) {
+          scheduleRebase();
+          return;
+        }
         updateFallbackZoom();
       }, 900);
     };
@@ -187,6 +199,9 @@ const MapTileZoomFallback: React.FC<{
 
   return null;
 };
+
+/** 空项目自动定位按项目只发起一次，切视图卸载 MapView 后不重跑。 */
+const emptyProjectLocateStarted = new Set<string>();
 
 interface MapViewProps {
   project: Project;
@@ -434,7 +449,19 @@ export const MapView: React.FC<MapViewProps> = ({
   }, []);
 
   const { mapInstance, mapRefCallback } = useMapInitialization();
+  const mapInstanceRef = useRef(mapInstance);
+  mapInstanceRef.current = mapInstance;
+  const navigateToCoordsRef = useRef(navigateToCoords);
+  navigateToCoordsRef.current = navigateToCoords;
+  const mapViewMountedRef = useRef(true);
   const mapShellRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    mapViewMountedRef.current = true;
+    return () => {
+      mapViewMountedRef.current = false;
+    };
+  }, []);
 
   /** 侧栏宽度动画 / 容器尺寸变化后 Leaflet 需 invalidateSize，否则会偏左、与侧栏相对关系错位 */
   useEffect(() => {
@@ -582,13 +609,17 @@ export const MapView: React.FC<MapViewProps> = ({
   // Location error retry tracking
   const [hasRetriedLocation, setHasRetriedLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [locateEpoch, setLocateEpoch] = useState(0);
   const [isCreatingAtLocation, setIsCreatingAtLocation] = useState(false);
   /** Empty-project geolocation arrived after fallback center — one-shot late recenter */
   const [lateAutoCenter, setLateAutoCenter] = useState<[number, number] | null>(null);
-  const emptyProjectLocateAttemptedRef = useRef(false);
 
   // Current marker index being viewed
 
+  const locatingActive = useMemo(
+    () => isLocating || getPendingMapLocate(project.id)?.phase === 'requesting',
+    [isLocating, project.id, locateEpoch]
+  );
   const defaultCenter: [number, number] = [28.1847, 112.9467];
   /** 有有效地理坐标的便签（不含 0,0 占位），用于地图定位与空状态 */
   const mapGeoNotes = useMemo(() => notes.filter((n) => noteHasRenderableMapPosition(n)), [notes]);
@@ -635,31 +666,56 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Enhanced location request with auto-retry and navigation
   const handleLocateCurrentPosition = useCallback(async () => {
+    const projectId = project.id;
+
+    // 已有实时定位时先立即飞入；watchPosition 会持续更新它，避免重复点击仍等待一轮 GPS 请求。
+    const liveMap = mapInstanceRef.current;
+    if (currentLocation && liveMap?.getContainer().isConnected) {
+      // 取消仍在跑的自动/旧请求，避免其延迟结果随后覆盖这次即时定位。
+      cancelPendingMapLocate(projectId);
+      setViewPositionCache(projectId, 'map', { center: [currentLocation.lat, currentLocation.lng], zoom: 16 });
+      liveMap.flyTo([currentLocation.lat, currentLocation.lng], 16, { duration: 0.9 });
+      return;
+    }
+
+    const gen = beginPendingMapLocate(projectId);
     try {
-      setIsLocating(true);
-      setHasRetriedLocation(false);
-      setLocationError(null);
-      console.log('Requesting current location...');
+      if (mapViewMountedRef.current) {
+        setIsLocating(true);
+        setHasRetriedLocation(false);
+        setLocationError(null);
+      }
 
       let loc = await requestLocation({ requestOrientation: true });
-      if (!loc && !hasRetriedLocation) {
+      if (!loc && mapViewMountedRef.current && !hasRetriedLocation) {
         setHasRetriedLocation(true);
         await new Promise((r) => setTimeout(r, 1000));
         loc = await requestLocation({ requestOrientation: true });
       }
 
-      if (loc && mapInstance) {
-        console.log('Location obtained, navigating to:', loc);
-        mapInstance.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
-      } else {
-        console.warn('Location not available after request');
+      if (!loc) {
+        cancelPendingMapLocate(projectId, gen);
+        return;
       }
+
+      // 当前地图仍在场时直接飞入，避免再经由全局事件转发一轮；切出视图后才保留 intent 给下次挂载。
+      const map = mapInstanceRef.current;
+      if (map?.getContainer().isConnected) {
+        cancelPendingMapLocate(projectId, gen);
+        setViewPositionCache(projectId, 'map', { center: [loc.lat, loc.lng], zoom: 16 });
+        map.flyTo([loc.lat, loc.lng], 16, { duration: 0.9 });
+        return;
+      }
+
+      if (!completePendingMapLocate(projectId, gen, loc.lat, loc.lng, 16)) return;
+      setViewPositionCache(projectId, 'map', { center: [loc.lat, loc.lng], zoom: 16 });
     } catch (error) {
       console.error('Location request failed:', error);
+      cancelPendingMapLocate(projectId, gen);
     } finally {
-      setIsLocating(false);
+      if (mapViewMountedRef.current) setIsLocating(false);
     }
-  }, [requestLocation, hasRetriedLocation, mapInstance, setLocationError]);
+  }, [currentLocation, requestLocation, hasRetriedLocation, setLocationError, project.id]);
 
   // Map position management hook
   const { initialMapPosition, handleMapPositionChange } = useMapPosition({
@@ -673,29 +729,46 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Empty project (no pins / no cache / no nav): prefer current location, then keep fallback
   useEffect(() => {
-    emptyProjectLocateAttemptedRef.current = false;
     setLateAutoCenter(null);
   }, [project.id]);
 
   useEffect(() => {
-    if (emptyProjectLocateAttemptedRef.current) return;
     if (navigateToCoords) return;
     if (mapGeoNotes.length > 0) return;
     const cached = getViewPositionCache(project.id, 'map');
     if (cached?.center && cached.zoom) return;
+    if (peekReadyMapLocate(project.id) || getPendingMapLocate(project.id)) return;
+    if (emptyProjectLocateStarted.has(project.id)) return;
 
-    emptyProjectLocateAttemptedRef.current = true;
-    let cancelled = false;
+    emptyProjectLocateStarted.add(project.id);
+    const gen = beginPendingMapLocate(project.id);
     (async () => {
-      // Auto path: do not prompt iOS orientation (needs user gesture); location only
       const loc = await requestLocation({ requestOrientation: false });
-      if (cancelled || !loc) return;
-      setLateAutoCenter([loc.lat, loc.lng]);
+      if (!loc) {
+        cancelPendingMapLocate(project.id, gen);
+        emptyProjectLocateStarted.delete(project.id);
+        return;
+      }
+      if (!completePendingMapLocate(project.id, gen, loc.lat, loc.lng, 16)) return;
+      setViewPositionCache(project.id, 'map', { center: [loc.lat, loc.lng], zoom: 16 });
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [navigateToCoords, mapGeoNotes.length, project.id, requestLocation]);
+
+  useEffect(() => {
+    const onPending = () => {
+      setLocateEpoch((n) => n + 1);
+      if (navigateToCoordsRef.current) return;
+      const map = mapInstanceRef.current;
+      if (map) applyReadyMapLocate(map, project.id, true);
+    };
+    window.addEventListener(PENDING_MAP_LOCATE_EVENT, onPending);
+    return () => window.removeEventListener(PENDING_MAP_LOCATE_EVENT, onPending);
+  }, [project.id]);
+
+  useEffect(() => {
+    if (!mapInstance || navigateToCoords) return;
+    applyReadyMapLocate(mapInstance, project.id, true);
+  }, [mapInstance, project.id, navigateToCoords]);
 
   // Image import management hook
   const {
@@ -924,8 +997,9 @@ export const MapView: React.FC<MapViewProps> = ({
       setLocationError(null);
       const loc = await requestLocation({ requestOrientation: false });
       if (!loc) return;
-      if (mapInstance) {
-        mapInstance.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
+      const map = mapInstanceRef.current;
+      if (map) {
+        map.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
       }
       handleLongPress({ lat: loc.lat, lng: loc.lng });
     } catch (error) {
@@ -933,7 +1007,7 @@ export const MapView: React.FC<MapViewProps> = ({
     } finally {
       setIsCreatingAtLocation(false);
     }
-  }, [requestLocation, mapInstance, setLocationError, handleLongPress]);
+  }, [requestLocation, setLocationError, handleLongPress]);
 
   const handleImportFromPhotos = useCallback(() => {
     fileInputRef.current?.click();
@@ -1596,7 +1670,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
         <MapLocationErrorBanner
           locationError={locationError}
-          isLocating={isLocating}
+          isLocating={locatingActive}
           onRetry={handleLocateCurrentPosition}
           onClose={() => {
             setLocationError(null);
@@ -1685,7 +1759,7 @@ export const MapView: React.FC<MapViewProps> = ({
                 >
                   <MapControls
                     onLocateCurrentPosition={handleLocateCurrentPosition}
-                    isLocating={isLocating}
+                    isLocating={locatingActive}
                     mapNotes={mapRenderedNotes}
                     themeColor={themeColor}
                     chromeSurfaceStyle={mapChromeControlSurface}
@@ -1751,7 +1825,7 @@ export const MapView: React.FC<MapViewProps> = ({
                   />
                 </div>
                 <div
-                  className="flex h-10 sm:h-12 gap-3 pointer-events-auto items-center shrink-0"
+                  className="flex h-10 sm:h-12 gap-1.5 sm:gap-2 pointer-events-auto items-center shrink-0"
                   onPointerDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}

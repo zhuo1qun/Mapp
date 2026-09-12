@@ -179,10 +179,10 @@
   .ui-workspace-bottom-bar {
     /* 手机上的空间留给地图/画布：切换器改为右下角纵向图标组。 */
     left: auto;
-    /* 顶栏的独立按钮直接距边 0.5rem。这里有玻璃容器，改为
-     * 0.25rem 外距 + 0.25rem 内衬边，令可见按钮的边缘同样距边 0.5rem。 */
-    right: max(0.25rem, calc(env(safe-area-inset-right, 0px) - 0.25rem));
-    bottom: max(0.25rem, calc(env(safe-area-inset-bottom, 0px) - 0.25rem));
+    /* 与右上角工具栏一致：最少距右 0.5rem，并在圆角 / 安全区设备上继续避开边缘。 */
+    right: max(0.5rem, env(safe-area-inset-right, 0px));
+    /* 比工具栏默认 bottom-4 更保守，给圆角与 Home Indicator 留出额外呼吸空间。 */
+    bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
     padding: 0.25rem;
     width: auto;
     max-width: calc(100vw - 1rem);
@@ -385,6 +385,42 @@ body {
 .map-chrome-content-dark .hover\:bg-gray-100:hover,
 .map-chrome-content-dark .hover\:bg-gray-200:hover {
   background-color: rgb(255 255 255 / 0.14) !important;
+}
+
+/* 图层中的末级便签行不再固定使用浅灰底；深色地图上保持与玻璃容器同一明度层级。 */
+.map-layer-note-row {
+  background-color: rgb(243 244 246 / 0.9);
+}
+
+.map-layer-note-row--drop-target {
+  background-color: rgb(229 231 235 / 0.95);
+}
+
+.map-chrome-content-dark .map-layer-note-row {
+  background-color: rgb(255 255 255 / 0.1) !important;
+}
+
+.map-chrome-content-dark .map-layer-note-row--drop-target {
+  background-color: rgb(255 255 255 / 0.16) !important;
+}
+
+/* 详情卡正文保持与外壳同一深色材质，避免 Markdown 的浅灰底叠成发亮色块。 */
+.map-chrome-content-dark .mapping-preview-markdown {
+  background-color: transparent !important;
+}
+
+.map-chrome-content-dark .mapping-preview-markdown blockquote {
+  border-left-color: rgb(255 255 255 / 0.24);
+  color: rgb(209 213 219);
+}
+
+.map-chrome-content-dark .mapping-preview-markdown code {
+  background-color: rgb(255 255 255 / 0.12);
+}
+
+.map-chrome-content-dark .mapping-preview-markdown pre {
+  background-color: rgb(0 0 0 / 0.18);
+  border-color: rgb(255 255 255 / 0.12);
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   openExternalMapApp,
   type ExternalMapAppId
 } from '../../../utils/map/openExternalNavigation';
+import { MODAL_BACKDROP_MASK_STYLE, type MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
 type Props = {
   open: boolean;
@@ -14,6 +15,9 @@ type Props = {
   label?: string;
   onClose: () => void;
   themeColor?: string;
+  /** 与触发它的详情卡/编辑器共用同一层玻璃材质。 */
+  panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
 };
 
 /**
@@ -26,7 +30,9 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
   lng,
   label,
   onClose,
-  themeColor = '#3b82f6'
+  themeColor = '#3b82f6',
+  panelChromeStyle,
+  chromeAppearance = 'light'
 }) => {
   if (!open || typeof document === 'undefined') return null;
 
@@ -39,19 +45,23 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={MODAL_BACKDROP_MASK_STYLE}
       role="dialog"
       aria-modal="true"
       aria-label="选择地图应用"
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/40 border-0 cursor-default"
+        className="absolute inset-0 border-0 cursor-default"
         aria-label="关闭"
         onClick={onClose}
       />
       <div
-        className="relative w-full sm:max-w-sm sm:mx-4 rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl border border-gray-100/80 overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 fade-in duration-200"
+        className={`map-chrome-content-${chromeAppearance} relative w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-100/80 overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 fade-in duration-200 ${
+          panelChromeStyle ? '' : 'bg-white'
+        }`}
+        style={panelChromeStyle}
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >

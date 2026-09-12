@@ -54,6 +54,14 @@ export const useGeolocation = (isMapMode: boolean) => {
   const orientationAttachedRef = useRef(false);
   const orientationCleanupRef = useRef<(() => void) | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Check location permission
   const checkLocationPermission = useCallback(async (): Promise<string> => {
@@ -284,6 +292,7 @@ export const useGeolocation = (isMapMode: boolean) => {
       lat: position.coords.latitude,
       lng: position.coords.longitude
     };
+    if (!mountedRef.current) return loc;
     setCurrentLocation(loc);
     setLocationError(null);
     setHasLocationPermission(true);
@@ -331,30 +340,40 @@ export const useGeolocation = (isMapMode: boolean) => {
     );
   }, [applyPositionUpdate, stopWatching]);
 
+  const locationRequestSeqRef = useRef(0);
+
   // Enhanced geolocation function with retry logic and accuracy fallback
   const getCurrentPositionWithRetry = useCallback((
     onSuccess: (position: GeolocationPosition) => void,
     onError: (error: GeolocationPositionError) => void,
     maxRetries: number = 3,
-    currentRetry: number = 0
+    currentRetry: number = 0,
+    requestSeq?: number
   ): void => {
+    const seq = requestSeq ?? ++locationRequestSeqRef.current;
     // Progressive timeout and accuracy settings
     const settings = [
-      { timeout: 10000, enableHighAccuracy: true },    // First attempt: high accuracy
-      { timeout: 15000, enableHighAccuracy: false },   // Second attempt: fast/low accuracy
-      { timeout: 20000, enableHighAccuracy: false }    // Third attempt: longer timeout/low accuracy
+      // 与实时 watchPosition 对齐：先接受数秒内的定位修复，避免每次点击都重新等待 GPS 冷启动。
+      { timeout: 6000, enableHighAccuracy: true, maximumAge: 5000 },
+      { timeout: 10000, enableHighAccuracy: false, maximumAge: 15000 },
+      { timeout: 15000, enableHighAccuracy: false, maximumAge: 30000 }
     ];
 
     const currentSettings = settings[Math.min(currentRetry, settings.length - 1)];
 
     navigator.geolocation.getCurrentPosition(
-      onSuccess,
+      (position) => {
+        if (seq !== locationRequestSeqRef.current) return;
+        onSuccess(position);
+      },
       (error) => {
+        if (seq !== locationRequestSeqRef.current) return;
         if (currentRetry < maxRetries) {
           const accuracy = currentSettings.enableHighAccuracy ? '高精度' : '普通精度';
           console.log(`位置获取尝试 ${currentRetry + 1} 失败 (${accuracy})，正在重试...`, error);
           setTimeout(() => {
-            getCurrentPositionWithRetry(onSuccess, onError, maxRetries, currentRetry + 1);
+            if (seq !== locationRequestSeqRef.current) return;
+            getCurrentPositionWithRetry(onSuccess, onError, maxRetries, currentRetry + 1, seq);
           }, 1500); // Wait 1.5 seconds before retry
         } else {
           onError(error);
@@ -388,7 +407,7 @@ export const useGeolocation = (isMapMode: boolean) => {
    */
   const requestLocation = useCallback(async (opts?: { requestOrientation?: boolean }): Promise<LocationData | null> => {
     try {
-      setLocationError(null);
+      if (mountedRef.current) setLocationError(null);
 
       if (opts?.requestOrientation !== false) {
         void requestOrientationPermission();
@@ -396,7 +415,7 @@ export const useGeolocation = (isMapMode: boolean) => {
 
       // Check if geolocation is available
       if (!navigator.geolocation) {
-        setLocationError('此设备或浏览器不支持地理位置功能。请尝试使用现代浏览器。');
+        if (mountedRef.current) setLocationError('此设备或浏览器不支持地理位置功能。请尝试使用现代浏览器。');
         return null;
       }
 
@@ -406,7 +425,7 @@ export const useGeolocation = (isMapMode: boolean) => {
 
       // Check permission first
       const permission = await checkLocationPermission();
-      setHasLocationPermission(permission === 'granted');
+      if (mountedRef.current) setHasLocationPermission(permission === 'granted');
 
       if (permission === 'denied') {
         const deniedMessage = isWeChat
@@ -414,7 +433,7 @@ export const useGeolocation = (isMapMode: boolean) => {
           : isAndroid && isEdge
           ? '位置权限被拒绝。'
           : '位置权限被拒绝。';
-        setLocationError(deniedMessage);
+        if (mountedRef.current) setLocationError(deniedMessage);
         return null;
       }
 
@@ -423,7 +442,7 @@ export const useGeolocation = (isMapMode: boolean) => {
         const specialMessage = isWeChat
           ? '微信浏览器需要额外的位置权限设置。请尝试：\n1. 点击地址栏右侧的设置图标\n2. 选择"允许使用位置信息"\n3. 刷新页面后重试\n\n如果仍然失败，请在微信设置中开启位置权限。'
           : 'Edge浏览器可能需要额外的位置权限设置。请尝试：\n1. 点击地址栏左侧的锁图标\n2. 选择"网站权限" > "位置" > "允许"\n3. 刷新页面后重试';
-        setLocationError(specialMessage);
+        if (mountedRef.current) setLocationError(specialMessage);
         return null;
       }
 
@@ -431,7 +450,7 @@ export const useGeolocation = (isMapMode: boolean) => {
         getCurrentPositionWithRetry(
           (position) => {
             applyPositionUpdate(position);
-            startWatching();
+            if (mountedRef.current) startWatching();
             resolve({
               lat: position.coords.latitude,
               lng: position.coords.longitude
@@ -439,15 +458,17 @@ export const useGeolocation = (isMapMode: boolean) => {
           },
           (error) => {
             console.warn('Location request failed:', error);
-            setLocationError(formatLocationError(error));
-            setHasLocationPermission(false);
+            if (mountedRef.current) {
+              setLocationError(formatLocationError(error));
+              setHasLocationPermission(false);
+            }
             resolve(null);
           }
         );
       });
     } catch (error) {
       console.warn('Location request error:', error);
-      setLocationError('获取位置信息时发生错误。请检查网络连接和位置权限设置。');
+      if (mountedRef.current) setLocationError('获取位置信息时发生错误。请检查网络连接和位置权限设置。');
       return null;
     }
   }, [

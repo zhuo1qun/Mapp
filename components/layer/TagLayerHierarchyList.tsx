@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react';
 import type { GraphLayerState, Note, TagVisibilityLogic } from '../../types';
 import { GRAPH_UNTAGGED_TAG_GROUP } from '../../utils/graph/graphRuntimeCore';
 import {
@@ -28,8 +28,6 @@ type Props = {
   onActivateNote?: (note: Note) => void;
   tagColorsByKey: Map<string, string[]>;
   onOpenTagColor: (tagKey: string, fromColor: string, anchor: HTMLElement) => void;
-  weightOpenKey: string | null;
-  setWeightOpenKey: React.Dispatch<React.SetStateAction<string | null>>;
   /** 双击标签名批量重命名（传入完整旧键 → 完整新键） */
   onRenameTag?: (oldFullKey: string, nextFullKey: string) => void | Promise<void>;
 };
@@ -48,8 +46,6 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   onActivateNote,
   tagColorsByKey,
   onOpenTagColor,
-  weightOpenKey,
-  setWeightOpenKey,
   onRenameTag
 }) => {
   const hiddenSet = useMemo(
@@ -170,7 +166,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
             return (
               <div
                 key={note.id}
-                className="flex items-center gap-1 rounded-md border border-transparent px-1 py-0.5 bg-gray-100/90"
+                className="map-layer-note-row flex items-center gap-1 rounded-md border border-transparent px-1 py-0.5"
               >
                 <div className="shrink-0 w-3.5" aria-hidden />
                 <button
@@ -234,7 +230,6 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
 
   const renderTagRow = (k: string, opts: { nested?: boolean }) => {
     const visible = !hiddenSet.has(k);
-    const weightOpen = weightOpenKey === k;
     const expanded = expandedTag === k;
     const groupNotes = notesForTag(k);
     const fullLabel = k === GRAPH_UNTAGGED_TAG_GROUP ? '无标签' : k;
@@ -359,18 +354,6 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
             onClick={() => toggleHidden([k])}
           >
             {visible ? <Eye size={16} strokeWidth={2} /> : <EyeOff size={16} strokeWidth={2} />}
-          </button>
-          <button
-            type="button"
-            className={`shrink-0 rounded-md p-1.5 hover:bg-gray-100 ${
-              weightOpen ? 'text-gray-900' : 'text-gray-500'
-            }`}
-            style={weightOpen ? { color: themeColor } : undefined}
-            aria-label={weightOpen ? '关闭权重面板' : '调节半径权重'}
-            title="标签分组半径权重"
-            onClick={() => setWeightOpenKey((prev) => (prev === k ? null : k))}
-          >
-            {weightOpen ? <ChevronLeft size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
           </button>
         </div>
         {showLineAfter ? (
@@ -544,24 +527,6 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
               >
                 {allHidden ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
               </button>
-              {leafOnly ? (
-                <button
-                  type="button"
-                  className={`shrink-0 rounded-md p-1.5 hover:bg-gray-100 ${
-                    weightOpenKey === tags[0] ? 'text-gray-900' : 'text-gray-500'
-                  }`}
-                  style={weightOpenKey === tags[0] ? { color: themeColor } : undefined}
-                  aria-label={weightOpenKey === tags[0] ? '关闭权重面板' : '调节半径权重'}
-                  title="标签分组半径权重"
-                  onClick={() => setWeightOpenKey((prev) => (prev === tags[0] ? null : tags[0]))}
-                >
-                  {weightOpenKey === tags[0] ? (
-                    <ChevronLeft size={18} strokeWidth={2} />
-                  ) : (
-                    <ChevronRight size={18} strokeWidth={2} />
-                  )}
-                </button>
-              ) : null}
             </div>
             {showPrefixLineAfter ? (
               <div className="mx-2 h-0.5 rounded-full" style={{ backgroundColor: themeColor }} />

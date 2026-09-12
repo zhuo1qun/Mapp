@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import { getViewPositionCache, setViewPositionCache } from '../../utils/persistence/storage';
+import { isMapLocatePending, peekReadyMapLocate } from '../../utils/map/pendingMapLocate';
 import { Note } from '../../types';
 
 interface UseMapPositionProps {
@@ -34,6 +35,17 @@ export const useMapPosition = ({
       };
     }
 
+    // 1.5 GPS locate that finished after leaving the map (view switch, etc.)
+    if (projectId) {
+      const pendingLocate = peekReadyMapLocate(projectId);
+      if (pendingLocate) {
+        return {
+          center: [pendingLocate.lat, pendingLocate.lng] as [number, number],
+          zoom: pendingLocate.zoom
+        };
+      }
+    }
+
     // 2. Check cached position (saved when leaving mapping view)
     const cached = getViewPositionCache(projectId, 'map');
     if (cached?.center && cached.zoom) {
@@ -61,11 +73,11 @@ export const useMapPosition = ({
 
   // Real-time map position saving (similar to board's transform saving)
   const handleMapPositionChange = useCallback((center: [number, number], zoom: number) => {
-    if (projectId) {
-      // Real-time save map position whenever it changes (after cache restoration)
-      console.log('[useMapPosition] 实时保存地图位置:', { center, zoom });
-      setViewPositionCache(projectId, 'map', { center, zoom });
-    }
+    if (!projectId) return;
+    // Locate in flight / not yet applied: do not persist a mid-animation camera.
+    if (isMapLocatePending(projectId)) return;
+    console.log('[useMapPosition] 实时保存地图位置:', { center, zoom });
+    setViewPositionCache(projectId, 'map', { center, zoom });
   }, [projectId]);
 
   return {

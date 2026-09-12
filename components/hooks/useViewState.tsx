@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { ViewMode } from '../../types';
 import { getViewPositionCache, setViewPositionCache } from '../../utils/persistence/storage';
+import { isMapLocatePending } from '../../utils/map/pendingMapLocate';
 
 interface NavigationCoords {
   lat: number;
@@ -80,6 +81,7 @@ export const useViewState = (): UseViewStateReturn => {
   // Position saving
   const saveMapPosition = useCallback((projectId: string, mapInstance: any) => {
     if (!projectId || !mapInstance) return;
+    if (isMapLocatePending(projectId)) return;
 
     try {
       const center = mapInstance.getCenter();

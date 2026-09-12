@@ -53,6 +53,60 @@ if (!markerProto._mappSmoothZoomPatched) {
   };
 }
 
+/**
+ * Smooth zoom only CSS-transforms tiles until commit. If GridLayer._update runs
+ * against the interpolating zoom, it will request an intermediate z with x/y from
+ * that grid — the classic “fast zoom-in loads the wrong tiles” failure.
+ */
+const gridProto = L.GridLayer.prototype;
+if (!gridProto._mappSmoothZoomPatched) {
+  gridProto._mappSmoothZoomPatched = true;
+  const _updateOrig = gridProto._update;
+  gridProto._update = function (center) {
+    if (this._map && this._map._mappSmoothZooming) return this;
+    return _updateOrig.call(this, center);
+  };
+  const _resetViewOrig = gridProto._resetView;
+  gridProto._resetView = function (e) {
+    if (this._map && this._map._mappSmoothZooming && !(e && (e.pinch || e.flyTo))) {
+      return;
+    }
+    return _resetViewOrig.call(this, e);
+  };
+}
+
+const tileProto = L.TileLayer.prototype;
+if (!tileProto._mappSmoothZoomPatched) {
+  tileProto._mappSmoothZoomPatched = true;
+  tileProto.getTileUrl = function (coords) {
+    // Use this tile's own z. Leaflet's default fills `{z}` from `_tileZoom`,
+    // so a parent tile kept across a fast zoom-in would request destination-z
+    // with origin-z x/y — geographically wrong squares.
+    var zoom = coords.z;
+    if (this.options.zoomReverse) {
+      zoom = this.options.maxZoom - zoom;
+    }
+    zoom += this.options.zoomOffset || 0;
+
+    var data = {
+      r: L.Browser.retina ? '@2x' : '',
+      s: this._getSubdomain(coords),
+      x: coords.x,
+      y: coords.y,
+      z: zoom
+    };
+    if (this._map && !this._map.options.crs.infinite && this._globalTileRange) {
+      var invertedY = this._globalTileRange.max.y - coords.y;
+      if (this.options.tms) {
+        data.y = invertedY;
+      }
+      data['-y'] = invertedY;
+    }
+
+    return L.Util.template(this._url, L.extend(data, this.options));
+  };
+}
+
 function wheelSens(map) {
   var s = map.options.smoothSensitivity;
   return typeof s === 'number' && s > 0 ? s : 1;
@@ -166,12 +220,13 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     map._mappZoomCommitGuard = true;
     this._clearAnimFlags();
 
-    // Reset map pane pan offset like `_resetView`, then fire a clean end sequence.
+    // Match Leaflet `_onZoomTransitionEnd`: do not fire `viewreset` here.
+    // `viewreset` re-enters GridLayer._setView and aborts the destination
+    // tiles that `zoom` just started loading — worst when jumping many levels.
     L.DomUtil.setPosition(map._mapPane, new L.Point(0, 0));
     map._move(center, zoom, undefined, true);
     map.fire('zoom');
     map.fire('move');
-    map.fire('viewreset');
     map._moveEnd(true);
 
     requestAnimationFrame(function () {
@@ -371,10 +426,9 @@ L.Map.SmoothMapZoom = L.Handler.extend({
       noUpdate: true
     });
 
-    // Keep internal center/zoom in sync without firing zoom/move. Passing
-    // `{ pinch: true }` here looks harmless, but Leaflet deliberately emits a
-    // `zoom` event for pinch updates even with events suppressed; that makes
-    // GridLayer reconsider tile levels on every touch frame.
+    // Keep pointer-anchor math (`containerPointToLatLng`) in sync with the
+    // visual zoom. Tile fetching is blocked separately while
+    // `_mappSmoothZooming` is set, so this must not request intermediate z.
     map._move(this._center, this._visualZoom, undefined, true);
 
     var settled =

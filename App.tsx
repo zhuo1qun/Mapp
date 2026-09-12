@@ -54,8 +54,6 @@ import {
   analyzeDuplicateImages,
   attemptImageRecovery,
   loadNoteImages,
-  findOrphanedData,
-  cleanupOrphanedData,
   cleanBrokenReferences,
   loadAllProjects,
   saveProject,
@@ -67,6 +65,7 @@ import {
   mapChromeControlStyle
 } from './utils/map/mapChromeStyle';
 import { applyThemeChromeCssVars } from './utils/theme/themeChrome';
+import { cancelPendingMapLocate, isMapLocatePending } from './utils/map/pendingMapLocate';
 import { useDataImport } from './components/hooks/useDataImport';
 import { useCsvImport } from './components/hooks/useCsvImport';
 import { useFileDrop } from './components/hooks/useFileDrop';
@@ -232,10 +231,6 @@ export default function App() {
     borderGeoJSON,
     setBorderGeoJSON,
     mapViewFileInputRef,
-    isRunningCleanup,
-    setIsRunningCleanup,
-    showCleanupMenu,
-    setShowCleanupMenu,
     sidebarButtonDragRef,
     isRouteMode,
     setIsRouteMode,
@@ -348,61 +343,6 @@ export default function App() {
 
 
   // Load complete project data with progress
-
-  // Cleanup orphaned data (images and sketches not referenced by any project)
-  const handleCleanupOrphanedData = useCallback(async (forceDeleteDuplicates: boolean = false) => {
-    if (isRunningCleanup) {
-      console.log('Cleanup already running, skipping...');
-      return;
-    }
-
-    try {
-      setIsRunningCleanup(true);
-      console.log(`Starting ${forceDeleteDuplicates ? 'aggressive' : 'safe'} orphaned data cleanup...`);
-
-      // Show loading state
-      setIsLoadingProject(true);
-      setLoadingProgress(0);
-
-      // Step 1: Find orphaned data (30%)
-      setLoadingProgress(30);
-      const orphanedData = await findOrphanedData();
-      console.log(`Found ${orphanedData.orphanedImages.length} orphaned images, ${orphanedData.orphanedSketches.length} orphaned sketches, ${orphanedData.orphanedBackgrounds.length} orphaned backgrounds`);
-
-      // Step 2: Clean up orphaned data (60%)
-      setLoadingProgress(60);
-      const cleanupResult = await cleanupOrphanedData();
-      console.log(`Cleaned up ${cleanupResult.imagesCleaned} orphaned images, ${cleanupResult.sketchesCleaned} orphaned sketches, ${cleanupResult.backgroundsCleaned} orphaned backgrounds, freed ${(cleanupResult.spaceFreed / (1024 * 1024)).toFixed(2)}MB`);
-
-      // Step 3: Clean up duplicate images (90%)
-      setLoadingProgress(90);
-      const duplicateOptions = forceDeleteDuplicates ? { forceDeleteSuspicious: true } : {};
-      const duplicateCleanupResult = await cleanupDuplicateImages(true, duplicateOptions);
-      if (duplicateCleanupResult) {
-        const suspiciousAction = forceDeleteDuplicates ? 'force deleted' : 'skipped';
-        console.log(`Cleaned up ${duplicateCleanupResult.imagesCleaned} duplicate images (${duplicateCleanupResult.skippedSuspicious} suspicious ${suspiciousAction}), freed ${duplicateCleanupResult.spaceFreed.toFixed(2)}MB`);
-
-        if (duplicateCleanupResult.suspiciousGroups.length > 0 && !forceDeleteDuplicates) {
-          console.warn(`⚠️ Skipped ${duplicateCleanupResult.suspiciousGroups.length} suspicious duplicate groups. Use force mode to clean them.`);
-        }
-      }
-
-      // Step 4: Refresh projects (95%)
-      setLoadingProgress(95);
-      await projectState.loadProjects();
-
-      // Step 5: Complete (100%)
-      setLoadingProgress(100);
-
-      console.log(`${forceDeleteDuplicates ? 'Aggressive' : 'Safe'} orphaned data cleanup completed`);
-    } catch (error) {
-      console.error('Cleanup failed:', error);
-    } finally {
-      setIsLoadingProject(false);
-      setLoadingProgress(0);
-      setIsRunningCleanup(false);
-    }
-  }, [isRunningCleanup]);
 
   // Convert ProjectSummary to basic Project for display
   const summariesToProjects = useCallback((summaries: ProjectSummary[]): Project[] => {
@@ -1551,12 +1491,7 @@ export default function App() {
                   clearSelectionInTransition={sidebarExpandingToHome}
                   easterEggMode={atSteadyProjectHome && homeEasterEggMode}
                   onToggleEasterEggMode={() => {
-                    setHomeEasterEggMode((v) => {
-                      const next = !v;
-                      // 进入彩蛋模式时关闭“清理数据”菜单，避免遮罩/菜单覆盖物理层造成困惑
-                      if (next) setShowCleanupMenu(false);
-                      return next;
-                    });
+                    setHomeEasterEggMode((v) => !v);
                   }}
                   easterEggGravityY={homeEasterEggGravityY}
                   onEasterEggGravityYChange={async (v) => {
@@ -1570,11 +1505,6 @@ export default function App() {
                     setHomeEasterEggMouseConstraintStiffness(next);
                     await set('mapp-home-easter-egg-mouse-stiffness', next);
                   }}
-                  showHomeDataCleanupButton={!activeProject}
-                  homeCleanupMenuOpen={showCleanupMenu}
-                  onHomeCleanupMenuToggle={() => setShowCleanupMenu(!showCleanupMenu)}
-                  onHomeCleanupOrphanedData={handleCleanupOrphanedData}
-                  isHomeCleanupRunning={isRunningCleanup}
                   showProjectLoadBar={projectEnterLoadBarVisible}
                   projectLoadProgress={projectEnterLoadProgress}
                   projects={summariesToProjects(projectSummaries)}
@@ -1668,11 +1598,7 @@ export default function App() {
                 clearSelectionInTransition={sidebarExpandingToHome}
                  easterEggMode={atSteadyProjectHome && homeEasterEggMode}
                  onToggleEasterEggMode={() => {
-                   setHomeEasterEggMode((v) => {
-                     const next = !v;
-                     if (next) setShowCleanupMenu(false);
-                     return next;
-                   });
+                   setHomeEasterEggMode((v) => !v);
                  }}
                  easterEggGravityY={homeEasterEggGravityY}
                  onEasterEggGravityYChange={async (v) => {
@@ -1686,11 +1612,6 @@ export default function App() {
                    setHomeEasterEggMouseConstraintStiffness(next);
                    await set('mapp-home-easter-egg-mouse-stiffness', next);
                  }}
-                 showHomeDataCleanupButton={!activeProject}
-                 homeCleanupMenuOpen={showCleanupMenu}
-                 onHomeCleanupMenuToggle={() => setShowCleanupMenu(!showCleanupMenu)}
-                 onHomeCleanupOrphanedData={handleCleanupOrphanedData}
-                 isHomeCleanupRunning={isRunningCleanup}
                  showProjectLoadBar={projectEnterLoadBarVisible}
                  projectLoadProgress={projectEnterLoadProgress}
                  projects={summariesToProjects(projectSummaries)}
@@ -1744,7 +1665,7 @@ export default function App() {
         {/* 主视图中不再显示云图标，统一在侧边栏显示 */}
         
         {!isEditorOpen &&
-          (!mappingWorkspaceEditMode || viewMode === 'board') &&
+          !mappingWorkspaceEditMode &&
           isUIVisible &&
           !isSidebarOpen && (
           <button
@@ -1929,6 +1850,21 @@ export default function App() {
                     // Close editor first to ensure UI state is correct
                     setIsEditorOpen(false);
 
+                    if (coords) {
+                      if (currentProjectId) cancelPendingMapLocate(currentProjectId);
+                      navigateToMap(coords);
+                      setViewMode('map');
+                      return;
+                    }
+
+                    // GPS locate still in flight / waiting to apply: don't restore
+                    // a stale cached camera over it.
+                    if (currentProjectId && isMapLocatePending(currentProjectId)) {
+                      navigateToMap(undefined);
+                      setViewMode('map');
+                      return;
+                    }
+
                     // Prepare navigation coordinates
                     let navigationCoords = coords;
                     if (!navigationCoords && currentProjectId) {
@@ -2048,6 +1984,7 @@ export default function App() {
               projectKind === 'mapping'
                 ? (coords?: { lat: number; lng: number; zoom?: number }) => {
                     setIsEditorOpen(false);
+                    if (coords && currentProjectId) cancelPendingMapLocate(currentProjectId);
                     navigateToMap(coords);
                     setViewMode('map');
                   }
@@ -2092,7 +2029,7 @@ export default function App() {
 
       {!isEditorOpen &&
         activeProject &&
-        (!mappingWorkspaceEditMode || viewMode === 'board') &&
+        !mappingWorkspaceEditMode &&
         isUIVisible && projectKind && (
         <div
           ref={mobileViewSwitcherRef}

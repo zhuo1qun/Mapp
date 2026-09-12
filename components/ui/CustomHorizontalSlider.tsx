@@ -34,58 +34,84 @@ export const CustomHorizontalSlider: React.FC<CustomHorizontalSliderProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const lastValueRef = useRef(value);
   const draggingRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
+  const restoreMapDraggingRef = useRef(false);
 
   useEffect(() => {
     lastValueRef.current = value;
   }, [value]);
 
   const finishPointerInteraction = useCallback(() => {
-    if (!draggingRef.current) return;
+    const wasDragging = draggingRef.current;
     draggingRef.current = false;
+    activePointerIdRef.current = null;
+    if (restoreMapDraggingRef.current && mapInstance) {
+      mapInstance.dragging.enable();
+    }
+    restoreMapDraggingRef.current = false;
+    if (!wasDragging) return;
     setIsDragging(false);
     onCommit?.(lastValueRef.current);
-  }, [onCommit]);
+  }, [mapInstance, onCommit]);
 
   useEffect(() => {
     if (!isDragging) return;
     const onUp = () => finishPointerInteraction();
     document.addEventListener('pointerup', onUp);
     document.addEventListener('pointercancel', onUp);
-    if (mapInstance) {
-      mapInstance.dragging.disable();
-    }
     return () => {
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
-      if (mapInstance) {
+    };
+  }, [isDragging, finishPointerInteraction]);
+
+  useEffect(
+    () => () => {
+      if (restoreMapDraggingRef.current && mapInstance) {
         mapInstance.dragging.enable();
       }
-    };
-  }, [isDragging, mapInstance, finishPointerInteraction]);
+    },
+    [mapInstance]
+  );
 
   const percentage = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
     e.stopPropagation();
     draggingRef.current = true;
+    activePointerIdRef.current = e.pointerId;
     setIsDragging(true);
+    if (mapInstance?.dragging.enabled()) {
+      restoreMapDraggingRef.current = true;
+      mapInstance.dragging.disable();
+    }
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     updateValueFromPointer(e.clientX);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
+    if (!draggingRef.current || activePointerIdRef.current !== e.pointerId) return;
+    e.preventDefault();
     e.stopPropagation();
     updateValueFromPointer(e.clientX);
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (!draggingRef.current) return;
+    if (!draggingRef.current || activePointerIdRef.current !== e.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
     try {
       (e.currentTarget as Element).releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
+    finishPointerInteraction();
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    if (activePointerIdRef.current !== e.pointerId) return;
     finishPointerInteraction();
   };
 
@@ -119,7 +145,11 @@ export const CustomHorizontalSlider: React.FC<CustomHorizontalSliderProps> = ({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerCancel}
       >
+        {/* 视觉轨道保持纤细，触控命中区则扩至约 36px，避免手指轻微偏移就断开。 */}
+        <div className="absolute -inset-y-4 left-0 right-0 z-10 touch-none" aria-hidden />
         <div className="absolute top-0 left-0 right-0 h-1 bg-gray-200 rounded-full pointer-events-none" />
         <div
           className="absolute top-0 left-0 h-1 rounded-full pointer-events-none transition-all duration-75"

@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import {
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
+  HelpCircle,
   Eye,
   EyeOff,
   Frame as FrameIcon,
@@ -13,8 +13,6 @@ import {
 import { TAG_COLORS } from '../../constants';
 import type { Frame, GraphLayerState, Note } from '../../types';
 import {
-  GRAPH_LAYER_WEIGHT_MAX,
-  GRAPH_LAYER_WEIGHT_MIN,
   GRAPH_UNTAGGED_TAG_GROUP,
   type GraphLayerGroupStandard
 } from '../../utils/graph/graphRuntimeCore';
@@ -24,11 +22,11 @@ import {
   sortNotesForLayerPanelDesc,
   truncateRawTextLabel
 } from '../../utils/layer/unifiedNoteLayer';
-import { SettingsCompactSlider } from '../ui/SettingsCompactSlider';
 import { TagAddPanel } from '../ui/TagAddPanel';
 import { NoteTimeRangeControl } from '../note-editor/NoteTimeRangeControl';
 import { TagLayerHierarchyList } from './TagLayerHierarchyList';
 import { ChromeSegmentedControl } from '../ui/ChromeSegmentedControl';
+import { PortalTooltip } from '../ui/PortalTooltip';
 import {
   emojiFromLayerTagKey,
   emojiToLayerTagKey,
@@ -309,7 +307,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   );
 
   const [dragKey, setDragKey] = useState<string | null>(null);
-  const [weightOpenKey, setWeightOpenKey] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
   const [dropPlace, setDropPlace] = useState<'before' | 'after'>('before');
 
@@ -553,8 +550,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
     [notes, onBatchUpdateNotes, onUpdateNote]
   );
 
-  const weightSideOpen = weightOpenKey != null;
-  const weightPanelKey = weightOpenKey;
   const pageMenuOpen = !embed && !flow;
   const fallbackAnchorRef = useRef<HTMLElement | null>(null);
   const menuTop = useChromeMenuTop(
@@ -574,7 +569,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
     <div
       data-graph-top-left-panel
       className={`map-chrome-content-${chromeAppearance} ${posCls} ${embed ? 'mt-2' : ''} flex max-h-[min(24rem,70vh)] overflow-hidden rounded-xl border border-gray-100/80 shadow-xl ${
-        embed ? 'w-full max-w-xl' : weightSideOpen ? 'w-[min(36rem,calc(100vw-1rem))]' : 'w-[min(20rem,calc(100vw-2rem))]'
+        embed ? 'w-full max-w-xl' : 'w-[min(20rem,calc(100vw-2rem))]'
       }`}
       style={{
         ...(panelChromeStyle ?? { backgroundColor: 'rgba(255,255,255,0.96)' }),
@@ -585,6 +580,18 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-1.5 px-3 pt-2.5">
+          <h2 className="text-xs font-medium text-gray-500">图层</h2>
+          <PortalTooltip content="根据标签或簇类型分层，可以通过节点编辑添加标签，通过画布编辑分簇。">
+            <button
+              type="button"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              aria-label="图层说明"
+            >
+              <HelpCircle size={14} strokeWidth={2} aria-hidden />
+            </button>
+          </PortalTooltip>
+        </div>
         <div className="max-h-[min(22rem,68vh)] min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-0.5 theme-surface-scrollbar">
           {boardVariantToggles ? (
             <>
@@ -657,8 +664,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
               onActivateNote={onActivateNote}
               tagColorsByKey={tagColorsByKey}
               onOpenTagColor={openTagColorBatchEditor}
-              weightOpenKey={weightOpenKey}
-              setWeightOpenKey={setWeightOpenKey}
               onRenameTag={(oldKey, nextKey) => void applyRenameTagGroup(oldKey, nextKey)}
             />
           ) : (
@@ -666,7 +671,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
             const k = String(key).trim();
             const visible = !hiddenSet.has(k);
             const rowKey = k === '' && layerGroupStandard === 'frame' ? '__empty_frame__' : k;
-            const weightOpen = weightOpenKey === k;
             const isDragging = dragKey === k;
             const isOver = overKey === k && dragKey != null && dragKey !== k;
             const showLineBefore = isOver && dropPlace === 'before';
@@ -844,23 +848,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                     >
                       {visible ? <Eye size={18} strokeWidth={2} /> : <EyeOff size={18} strokeWidth={2} />}
                     </button>
-                    <button
-                      type="button"
-                      draggable={false}
-                      className={`shrink-0 rounded-md p-1.5 hover:bg-gray-100 ${
-                        weightOpen ? 'text-gray-900' : 'text-gray-500'
-                      }`}
-                      style={weightOpen ? { color: themeColor } : undefined}
-                      aria-label={weightOpen ? '关闭权重面板' : '在右侧调节半径权重'}
-                      title="簇分组半径权重"
-                      onClick={() => setWeightOpenKey((prev) => (prev === k ? null : k))}
-                    >
-                      {weightOpen ? (
-                        <ChevronLeft size={18} strokeWidth={2} />
-                      ) : (
-                        <ChevronRight size={18} strokeWidth={2} />
-                      )}
-                    </button>
                   </div>
 
                   {expanded ? (
@@ -918,8 +905,8 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                                   .filter(Boolean) as Note[];
                                 applyReorderInGroup(k, reordered);
                               }}
-                              className={`flex items-center gap-1 rounded-md border border-transparent px-1 py-0.5 ${
-                                isNOver && !isNDrag ? 'bg-gray-120/90' : 'bg-gray-100/90'
+                              className={`map-layer-note-row flex items-center gap-1 rounded-md border border-transparent px-1 py-0.5 ${
+                                isNOver && !isNDrag ? 'map-layer-note-row--drop-target' : ''
                               }`}
                             >
                               <div
@@ -1040,35 +1027,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
           )}
         </div>
       </div>
-
-      {weightPanelKey != null ? (
-        <div
-          className="flex w-[min(16rem,45vw)] shrink-0 flex-col justify-center border-l border-gray-200/85 px-2 py-2"
-          title={groupDisplayLabel(weightPanelKey, layerGroupStandard, framesById)}
-        >
-          <SettingsCompactSlider
-            label="半径权重"
-            themeColor={themeColor}
-            value={merged.weights?.[weightPanelKey] ?? 0.5}
-            min={GRAPH_LAYER_WEIGHT_MIN}
-            max={GRAPH_LAYER_WEIGHT_MAX}
-            step={0.05}
-            onChange={(v) =>
-              patch((p) => ({
-                ...p,
-                weights: { ...p.weights, [weightPanelKey]: v }
-              }))
-            }
-            formatValue={(v) => v.toFixed(2)}
-            // frame：时间线纵轴靠前更靠上（「按聚类分层」强度另见设置项）
-            // tag：与 LayerRegistry 一致——权重大 → 靠圆心
-            minCaption={layerGroupStandard === 'tag' ? '远心' : '靠上'}
-            maxCaption={layerGroupStandard === 'tag' ? '近心' : '靠下'}
-            trackWidth="stretch"
-            className="min-w-0"
-          />
-        </div>
-      ) : null}
 
       {tagColorBatchEditor && (
         <TagAddPanel

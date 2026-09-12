@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, Note, ProjectKind } from '../types';
-import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, Camera, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, RefreshCw, Code2, GitBranch } from 'lucide-react';
+import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, Camera, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, GitBranch } from 'lucide-react';
 import { generateId, formatDate, exportToJpeg, exportToJpegCentered, compressImageFromBase64 } from '../utils';
 import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
@@ -381,12 +381,6 @@ interface ProjectManagerProps {
   isSidebar?: boolean;
   /** 侧栏向右展成全宽过渡为「主页」布局：列表同主页（居中、项项带框） */
   expandToHomeLayout?: boolean;
-  /** 纯主页时显示右上角「清理数据」入口（由 App 持有菜单状态） */
-  showHomeDataCleanupButton?: boolean;
-  homeCleanupMenuOpen?: boolean;
-  onHomeCleanupMenuToggle?: () => void;
-  onHomeCleanupOrphanedData?: (forceDeleteDuplicates: boolean) => void | Promise<void>;
-  isHomeCleanupRunning?: boolean;
   onCloseSidebar?: () => void;
   onBackToHome?: () => void;
   viewMode?: 'map' | 'board' | 'table' | 'graph';
@@ -442,11 +436,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   syncStatus,
   isSidebar = false,
   expandToHomeLayout = false,
-  showHomeDataCleanupButton = false,
-  homeCleanupMenuOpen = false,
-  onHomeCleanupMenuToggle,
-  onHomeCleanupOrphanedData,
-  isHomeCleanupRunning = false,
   onCloseSidebar,
   onBackToHome,
   viewMode = 'map',
@@ -1433,78 +1422,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
   const mainHomeChrome = (
     <>
-      {showHomeDataCleanupButton &&
-        !transitionListOnly &&
-        homeLikeList &&
-        onHomeCleanupMenuToggle &&
-        onHomeCleanupOrphanedData && (
-          <>
-            <div className="pointer-events-auto absolute top-4 right-10 z-[2010]">
-              <button
-                type="button"
-                onClick={() => onHomeCleanupMenuToggle()}
-                disabled={isHomeCleanupRunning}
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-theme-chrome-fg transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ backgroundColor: themeColor }}
-                title="清理数据选项"
-                onMouseEnter={(e) => {
-                  if (!isHomeCleanupRunning) e.currentTarget.style.backgroundColor = themeColorDark;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = themeColor;
-                }}
-              >
-                <RefreshCw
-                  size={20}
-                  strokeWidth={2}
-                  className={isHomeCleanupRunning ? 'animate-spin' : ''}
-                  aria-hidden
-                />
-              </button>
-              {homeCleanupMenuOpen && (
-                <div className="absolute top-full right-0 z-[2020] mt-2 min-w-48 rounded-lg border border-gray-100/80 bg-white py-1 shadow-xl">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onHomeCleanupMenuToggle();
-                      void onHomeCleanupOrphanedData(false);
-                    }}
-                    disabled={isHomeCleanupRunning}
-                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-gray-50"
-                  >
-                    <RefreshCw size={16} className="text-green-600" />
-                    <div>
-                      <div className="font-medium">安全清理</div>
-                      <div className="text-xs text-gray-500">只清理孤立数据和普通重复</div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onHomeCleanupMenuToggle();
-                      void onHomeCleanupOrphanedData(true);
-                    }}
-                    disabled={isHomeCleanupRunning}
-                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-red-50"
-                  >
-                    <RefreshCw size={16} className="text-red-600" />
-                    <div>
-                      <div className="font-medium">深度清理</div>
-                      <div className="text-xs text-gray-500">清理所有重复（包括可疑的）</div>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
-            {homeCleanupMenuOpen && (
-              <div
-                className="fixed inset-0 z-[2005]"
-                onClick={() => onHomeCleanupMenuToggle()}
-                aria-hidden
-              />
-            )}
-          </>
-        )}
       {/* 全屏启动页或侧栏展成主页布局：设置入口与 chrome 设定一致，与当前是否打开项目无关 */}
       {true &&
         !transitionListOnly &&

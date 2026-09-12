@@ -26,12 +26,6 @@ interface UseAppStateReturn {
   // File input ref
   mapViewFileInputRef: React.RefObject<HTMLInputElement>;
 
-  // Loading states
-  isRunningCleanup: boolean;
-  setIsRunningCleanup: (running: boolean) => void;
-  showCleanupMenu: boolean;
-  setShowCleanupMenu: (show: boolean) => void;
-
   // Sidebar drag
   sidebarButtonDragRef: React.MutableRefObject<{
     isDragging: boolean;
@@ -53,9 +47,6 @@ export const useAppState = (): UseAppStateReturn => {
   const [showMapImportMenu, setShowMapImportMenu] = useState(false);
   const [showBorderPanel, setShowBorderPanel] = useState(false);
   const [borderGeoJSON, setBorderGeoJSON] = useState<any | null>(null);
-  const [isRunningCleanup, setIsRunningCleanup] = useState(false);
-  const [showCleanupMenu, setShowCleanupMenu] = useState(false);
-
   // Route planning
   const [isRouteMode, setIsRouteMode] = useState(false);
   const [waypoints, setWaypoints] = useState<Note[]>([]);
@@ -99,10 +90,6 @@ export const useAppState = (): UseAppStateReturn => {
     borderGeoJSON,
     setBorderGeoJSON,
     mapViewFileInputRef,
-    isRunningCleanup,
-    setIsRunningCleanup,
-    showCleanupMenu,
-    setShowCleanupMenu,
     sidebarButtonDragRef,
     isRouteMode,
     setIsRouteMode,
@@ -110,7 +97,6 @@ export const useAppState = (): UseAppStateReturn => {
     setWaypoints
   };
 };
-
 
 
 

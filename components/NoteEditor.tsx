@@ -770,6 +770,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           label={parseNoteContent(initialNote?.text || '').title || undefined}
           onClose={() => setNavSheetOpen(false)}
           themeColor={themeColor}
+          panelChromeStyle={panelChromeStyle}
+          chromeAppearance={chromeAppearance}
         />
       ) : null}
     </div>
