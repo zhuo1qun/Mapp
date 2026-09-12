@@ -2,7 +2,7 @@ import type { MapTabExportNote, MapTabExportPayload } from './mapTabExportPayloa
 import {
   DEFAULT_MAP_UI_CHROME_BLUR_PX,
   DEFAULT_MAP_UI_CHROME_OPACITY,
-  mapChromeSurfaceInlineCss
+  mapChromeTextLabelInlineCss
 } from './mapChromeStyle';
 
 export function decodeMapTabPayloadFromBase64(b64: string): MapTabExportPayload {
@@ -185,7 +185,7 @@ export function runMapTabStandalone(L: any, marked: MarkedLike, payload: MapTabE
     previewImgIdx: 0
   };
 
-  const map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView(payload.center, payload.zoom);
+  const map = L.map('map', { zoomControl: false, scrollWheelZoom: true }).setView(payload.center, payload.zoom);
   L.tileLayer(payload.tileUrl, {
     attribution: payload.tileAttribution || '',
     maxZoom: payload.maxZoom ?? 19,
@@ -425,9 +425,10 @@ export function runMapTabStandalone(L: any, marked: MarkedLike, payload: MapTabE
 
     const themeColor = payload.themeColor;
     const labelSize = payload.labelSize;
-    const chromeCss = mapChromeSurfaceInlineCss(
+    const chromeCss = mapChromeTextLabelInlineCss(
       (payload as { mapUiChromeOpacity?: number }).mapUiChromeOpacity ?? DEFAULT_MAP_UI_CHROME_OPACITY,
-      (payload as { mapUiChromeBlurPx?: number }).mapUiChromeBlurPx ?? DEFAULT_MAP_UI_CHROME_BLUR_PX
+      (payload as { mapUiChromeBlurPx?: number }).mapUiChromeBlurPx ?? DEFAULT_MAP_UI_CHROME_BLUR_PX,
+      themeColor
     );
 
     const addNoteLabel = (note: MapTabExportNote) => {

@@ -14,7 +14,6 @@ export function buildStandaloneMapTabHtml(payload: MapTabExportPayload): string 
   const json = JSON.stringify(payload);
   const b64 = btoa(unescape(encodeURIComponent(json)));
   const title = escapeHtml(payload.projectName || 'map');
-  const safeName = (payload.projectName || 'map').replace(/[/\\?%*:|"<>]/g, '_');
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -41,14 +40,13 @@ export function buildStandaloneMapTabHtml(payload: MapTabExportPayload): string 
     .mapping-preview-markdown pre { background: #f9fafb; padding: 0.5rem; border-radius: 6px; overflow-x: auto; margin: 0.5rem 0; border: 1px solid #f3f4f6; }
     .mapping-preview-markdown a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
     .mapping-preview-markdown a:hover { color: #1d4ed8; }
+    /* 保留瓦片来源文字与链接，但不让默认白色控件底遮住地图。 */
+    .leaflet-control-attribution { background: transparent !important; box-shadow: none; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased">
   <div id="map"></div>
   <div id="km-map-tab-preview" class="hidden"></div>
-  <p class="fixed bottom-2 left-2 z-[400] text-[10px] text-gray-400 pointer-events-none max-w-[min(100%-1rem,16rem)]">
-    独立预览页 · 数据已内嵌 · ${escapeHtml(safeName)}
-  </p>
   <script>window.__KM_MAP_TAB__=${JSON.stringify({ b64 })};</script>
   <script>${mapTabStandaloneInline}</script>
 </body>

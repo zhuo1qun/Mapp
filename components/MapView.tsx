@@ -1945,16 +1945,7 @@ export const MapView: React.FC<MapViewProps> = ({
           borderGeoJSON={borderGeoJSON}
           onClearBorder={() => setBorderGeoJSON?.(null)}
           onCloseBorderPanel={() => setShowBorderPanel?.(false)}
-          showFrameLayerPanel={showFrameLayerPanel}
-          onToggleFrameLayerPanel={handleToggleLayerPanel}
-          frames={project.frames}
-          frameLayerVisibility={frameLayerVisibility}
-          setFrameLayerVisibility={setFrameLayerVisibility}
-          showAllFrames={showAllFrames}
-          setShowAllFrames={setShowAllFrames}
-          frameLayerRef={frameLayerRef}
           onExportStandaloneTab={() => void exportStandaloneMapTab()}
-          layerGroupStandard={graphLayerStandard}
         />
       )}
       

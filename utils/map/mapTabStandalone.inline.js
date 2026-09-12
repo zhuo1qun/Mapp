@@ -2,6 +2,26 @@
   // utils/theme/themeChrome.ts
   var LAB_EPS = 216 / 24389;
   var LAB_KAPPA = 24389 / 27;
+  function parseHexToRgb(hex) {
+    const h = hex.trim();
+    const m6 = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);
+    if (m6) {
+      return {
+        r: parseInt(m6[1], 16),
+        g: parseInt(m6[2], 16),
+        b: parseInt(m6[3], 16)
+      };
+    }
+    const m3 = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(h);
+    if (m3) {
+      return {
+        r: parseInt(m3[1] + m3[1], 16),
+        g: parseInt(m3[2] + m3[2], 16),
+        b: parseInt(m3[3] + m3[3], 16)
+      };
+    }
+    return null;
+  }
 
   // utils/map/mapChromeStyle.ts
   var DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
@@ -21,6 +41,19 @@
       parts.push(`backdrop-filter:blur(${b}px)`, `-webkit-backdrop-filter:blur(${b}px)`);
     }
     return parts.join(";");
+  }
+  function mapChromeTextLabelInlineCss(opacity, blurPx, themeColor) {
+    const themeRgb = parseHexToRgb(themeColor);
+    if (!themeRgb) return mapChromeSurfaceInlineCss(opacity, blurPx);
+    const o = Math.min(1, Math.max(0, opacity));
+    const tint = 0.13;
+    const background = [themeRgb.r, themeRgb.g, themeRgb.b].map((channel) => Math.round(255 + (channel - 255) * tint)).join(",");
+    const borderOpacity = Math.min(0.72, o * 0.75);
+    return [
+      mapChromeSurfaceInlineCss(o, blurPx),
+      `background-color:rgba(${background},${o})`,
+      `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${borderOpacity})`
+    ].join(";");
   }
 
   // utils/map/mapTabRuntimeCore.ts
@@ -142,7 +175,7 @@
       preSelected: null,
       previewImgIdx: 0
     };
-    const map = L.map("map", { zoomControl: true, scrollWheelZoom: true }).setView(payload.center, payload.zoom);
+    const map = L.map("map", { zoomControl: false, scrollWheelZoom: true }).setView(payload.center, payload.zoom);
     L.tileLayer(payload.tileUrl, {
       attribution: payload.tileAttribution || "",
       maxZoom: payload.maxZoom ?? 19,
@@ -339,9 +372,10 @@
       });
       const themeColor = payload.themeColor;
       const labelSize = payload.labelSize;
-      const chromeCss = mapChromeSurfaceInlineCss(
+      const chromeCss = mapChromeTextLabelInlineCss(
         payload.mapUiChromeOpacity ?? DEFAULT_MAP_UI_CHROME_OPACITY,
-        payload.mapUiChromeBlurPx ?? DEFAULT_MAP_UI_CHROME_BLUR_PX
+        payload.mapUiChromeBlurPx ?? DEFAULT_MAP_UI_CHROME_BLUR_PX,
+        themeColor
       );
       const addNoteLabel = (note) => {
         const text = getLabelText(note.text || "");
