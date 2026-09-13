@@ -145,12 +145,14 @@ export const PROJECT_OPEN_SLIDE_EASE: [number, number, number, number] = [0.4, 0
 /** 项目加载完成后，全宽中间态保留的一小段稳定时间。 */
 export const PROJECT_ENTER_SETTLE_MS = 80;
 
-/** 大屏侧栏抽屉固定宽度（ px）；小屏仍为视口比例 62% */
+/** 窄屏覆盖式抽屉的最大宽度（px）。 */
 export const PROJECT_SIDEBAR_DRAWER_WIDTH_PX = 420;
-/** 与 Tailwind `lg` 一致：≥此宽度视为大屏，侧栏用固定像素宽 */
+/** 宽屏工作区内的项目导航宽度；导航不应挤占地图/画布。 */
+export const PROJECT_SIDEBAR_DOCKED_WIDTH_PX = 360;
+/** 与 Tailwind `lg` 一致：≥此宽度停靠到工作区左侧。 */
 export const PROJECT_SIDEBAR_FIXED_WIDTH_MIN_VIEWPORT_PX = 1024;
-/** 项目列表容器最大宽度（与 Tailwind `max-w-md = 28rem = 448px` 对齐） */
-export const PROJECT_LIST_MAX_WIDTH_PX = 480;
+/** 项目列表在停靠模式下与侧栏同宽。 */
+export const PROJECT_LIST_MAX_WIDTH_PX = PROJECT_SIDEBAR_DOCKED_WIDTH_PX;
 
 /** 毫秒版，供 setTimeout 兜底 */
 export const PROJECT_OPEN_OVERLAY_FADE_MS = Math.round(PROJECT_OPEN_OVERLAY_FADE_S * 1000);

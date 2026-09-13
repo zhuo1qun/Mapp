@@ -35,6 +35,8 @@ interface ClusterMarkerLayerProps {
   noteCoordOverrides?: Record<string, Coordinates>;
   /** 图层面板叠放序：序号越大越在上层（与同视图 sortNotesByLayerStack 一致） */
   noteStackRank?: ReadonlyMap<string, number>;
+  /** 删除动画尚未提交数据时，保持该图钉在地图上的收缩状态。 */
+  deletingNoteIds?: ReadonlySet<string>;
 }
 
 function ClusterMarkerLayerInner({
@@ -53,7 +55,8 @@ function ClusterMarkerLayerInner({
   onMarkerDragEnd,
   onMarkerDrag,
   noteCoordOverrides = {},
-  noteStackRank
+  noteStackRank,
+  deletingNoteIds
 }: ClusterMarkerLayerProps) {
   const map = useMap();
   const [, bump] = useState(0);
@@ -150,6 +153,7 @@ function ClusterMarkerLayerInner({
                 draggable={pinDraggable(note.id) && k === primaryK}
                 onDragEnd={onMarkerDragEnd ? (e) => onMarkerDragEnd(note, e) : undefined}
                 onDrag={onMarkerDrag ? (e) => onMarkerDrag(note, e) : undefined}
+                motion={deletingNoteIds?.has(note.id) ? 'exit' : undefined}
               />
             ));
           } else {
@@ -175,6 +179,7 @@ function ClusterMarkerLayerInner({
                   e.originalEvent?.stopImmediatePropagation();
                   onClusterClick(cluster.notes, e);
                 }}
+                motion={deletingNoteIds?.has(topNote.id) ? 'exit' : undefined}
               />
             ));
           }
@@ -210,6 +215,7 @@ function ClusterMarkerLayerInner({
             draggable={pinDraggable(note.id) && k === primaryK}
             onDragEnd={onMarkerDragEnd ? (e) => onMarkerDragEnd(note, e) : undefined}
             onDrag={onMarkerDrag ? (e) => onMarkerDrag(note, e) : undefined}
+            motion={deletingNoteIds?.has(note.id) ? 'exit' : undefined}
           />
         ));
       })}

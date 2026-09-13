@@ -18,6 +18,7 @@ import {
   PROJECT_OPEN_SLIDE_DURATION_S,
   PROJECT_OPEN_SLIDE_EASE,
   PROJECT_SIDEBAR_DRAWER_WIDTH_PX,
+  PROJECT_SIDEBAR_DOCKED_WIDTH_PX,
   PROJECT_LIST_MAX_WIDTH_PX,
   PROJECT_SIDEBAR_FIXED_WIDTH_MIN_VIEWPORT_PX
 } from './constants';
@@ -357,8 +358,8 @@ export default function App() {
       return viewportWidthPx;
     }
     return projectSidebarLargeViewport
-      ? PROJECT_LIST_MAX_WIDTH_PX
-      : Math.min(viewportWidthPx * 0.62, PROJECT_LIST_MAX_WIDTH_PX);
+      ? PROJECT_SIDEBAR_DOCKED_WIDTH_PX
+      : Math.min(PROJECT_SIDEBAR_DRAWER_WIDTH_PX, Math.max(0, viewportWidthPx - 48));
   }, [
     isProjectEnterFullWidth,
     sidebarExpandingToHome,
@@ -369,6 +370,9 @@ export default function App() {
 
   const projectSidebarIsFullWidth =
     atSteadyProjectHome || isProjectEnterFullWidth || sidebarExpandingToHome;
+  /** 首页/过渡期保留全宽；稳定项目页才按屏幕宽度决定停靠或覆盖。 */
+  const projectSidebarIsDocked =
+    sidebarDockedInline && (projectSidebarIsFullWidth || projectSidebarLargeViewport);
 
   const { handleDataImport: handleProjectDataImport } = useDataImport({
     project: activeProject as Project,
@@ -713,10 +717,10 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     const computeInsetPx = () => {
-      const sidebarVisible = isUIVisible && isSidebarOpen && !projectSidebarIsFullWidth;
+      const sidebarVisible =
+        isUIVisible && isSidebarOpen && projectSidebarIsDocked && !projectSidebarIsFullWidth;
       if (!sidebarVisible) return 0;
-      if (projectSidebarLargeViewport) return PROJECT_LIST_MAX_WIDTH_PX;
-      return Math.min(window.innerWidth * 0.62, PROJECT_LIST_MAX_WIDTH_PX);
+      return PROJECT_SIDEBAR_DOCKED_WIDTH_PX;
     };
     const apply = () => {
       root.style.setProperty('--workspace-ui-left-inset', `${Math.round(computeInsetPx())}px`);
@@ -730,13 +734,14 @@ export default function App() {
   }, [
     isUIVisible,
     isSidebarOpen,
+    projectSidebarIsDocked,
     projectSidebarIsFullWidth,
     projectSidebarLargeViewport
   ]);
 
   /** 侧栏 docked：全宽启动页与项目内联共用同一壳，不再切换到单独「全屏 ProjectManager」 */
   const showDockedProjectSidebar =
-    isUIVisible && isSidebarOpen && sidebarDockedInline;
+    isUIVisible && isSidebarOpen && projectSidebarIsDocked;
 
   /**
    * 进入项目时工作区占位：中间态内不再单独展示「加载项目」屏（进度并入侧栏顶条），
@@ -1566,7 +1571,7 @@ export default function App() {
           </AnimatePresence>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <AnimatePresence>
-      {isSidebarOpen && isUIVisible && !sidebarDockedInline && (
+      {isSidebarOpen && isUIVisible && !projectSidebarIsDocked && (
           <div className="fixed inset-0 z-[2000] flex overflow-hidden">
              <MotionDiv
                className="fixed inset-0 bg-black/20"

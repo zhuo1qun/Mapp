@@ -1,7 +1,11 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { Note, Frame, Connection, type GraphLayerState, type Project } from '../types';
 import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
-import { isNoteVisibleInUnifiedLayer, noteTagLabels } from '../utils/layer/unifiedNoteLayer';
+import {
+  isNoteVisibleInUnifiedLayer,
+  noteHasRenderableMapPosition,
+  noteTagLabels
+} from '../utils/layer/unifiedNoteLayer';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { NoteEditor } from './NoteEditor';
 import { Square, X, Check, Minus, Move, Hash, Plus, FileJson, Locate, Settings } from 'lucide-react';
@@ -65,6 +69,10 @@ import {
   VIBRATION_MEDIUM,
   VIBRATION_LONG
 } from './board-constants';
+
+const BOARD_NOTE_INTRO_MS = 280;
+const BOARD_NOTE_INTRO_DISMISS_DELAY_MS = 560;
+const BOARD_NOTE_EXIT_MS = 220;
 
 
 function imageRefLooksLikeImageId(imageRef: string): boolean {
@@ -298,6 +306,132 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+  // New text notes briefly live here before their editor opens, so their
+  // creation has a visible anchor instead of appearing as an abrupt modal.
+  const [introNote, setIntroNote] = useState<Note | null>(null);
+  const [isIntroPending, setIsIntroPending] = useState(false);
+  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'exit'>('enter');
+  const [enteringNoteIds, setEnteringNoteIds] = useState<Set<string>>(() => new Set());
+  const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
+  const introTimerRef = useRef<number | null>(null);
+  const introDismissTimerRef = useRef<number | null>(null);
+  const introExitTimerRef = useRef<number | null>(null);
+  const introStartedAtRef = useRef(0);
+  const boardLongPressPreviewNoteRef = useRef<Note | null>(null);
+  const noteMotionTimersRef = useRef<Set<number>>(new Set());
+  const deletingNoteIdsRef = useRef<Set<string>>(new Set());
+
+  const boardDisplayNotes = useMemo(() => {
+    if (!introNote) return displayNotes;
+    // 保存后仍先保留临时卡作为过渡层，待它淡出后再露出正式卡，避免
+    // 同一个便签在编辑器收场时突然换成另一张卡片。
+    return [...displayNotes.filter((note) => note.id !== introNote.id), introNote];
+  }, [displayNotes, introNote]);
+
+  const markBoardNoteEntering = useCallback((noteId: string) => {
+    setEnteringNoteIds((current) => new Set(current).add(noteId));
+    const timer = window.setTimeout(() => {
+      noteMotionTimersRef.current.delete(timer);
+      setEnteringNoteIds((current) => {
+        if (!current.has(noteId)) return current;
+        const next = new Set(current);
+        next.delete(noteId);
+        return next;
+      });
+    }, BOARD_NOTE_INTRO_MS);
+    noteMotionTimersRef.current.add(timer);
+  }, []);
+
+  const addBoardNoteWithEnter = useCallback(
+    (note: Note) => {
+      markBoardNoteEntering(note.id);
+      onAddNote?.(note);
+    },
+    [markBoardNoteEntering, onAddNote]
+  );
+
+  const beginNewBoardNoteIntro = useCallback(
+    (note: Note) => {
+      if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
+      if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
+      if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
+      setIntroNote(note);
+      setIsIntroPending(true);
+      setIntroNoteMotion('enter');
+      markBoardNoteEntering(note.id);
+      setEditingNote(note);
+      introStartedAtRef.current = Date.now();
+    },
+    [markBoardNoteEntering]
+  );
+
+  const openNewBoardNoteEditorAfterIntro = useCallback(
+    (note: Note, elapsedMs = 0) => {
+      if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
+      const remainingIntroMs = Math.max(120, BOARD_NOTE_INTRO_MS - elapsedMs);
+      introTimerRef.current = window.setTimeout(() => {
+        introTimerRef.current = null;
+        setIsIntroPending(false);
+        onToggleEditor(true);
+      }, remainingIntroMs);
+    },
+    [onToggleEditor]
+  );
+
+  const deleteBoardNotesWithExit = useCallback(
+    (noteIds: string[]) => {
+      const ids = [...new Set(noteIds)].filter((id) => !deletingNoteIdsRef.current.has(id));
+      if (ids.length === 0 || (!onDeleteNote && !onDeleteNotesBatch)) return;
+
+      // 尚未保存的新便签由编辑器关闭后的统一退场流程接手，避免卡片在
+      // 编辑器仍在收场时提前消失。
+      const idsToDelete = ids.filter(
+        (id) => id !== introNote?.id || notes.some((note) => note.id === id)
+      );
+      if (idsToDelete.length === 0) return;
+
+      idsToDelete.forEach((id) => deletingNoteIdsRef.current.add(id));
+      setDeletingNoteIds((current) => {
+        const next = new Set(current);
+        idsToDelete.forEach((id) => next.add(id));
+        return next;
+      });
+      setSelectedNoteIds((current) => {
+        const next = new Set(current);
+        idsToDelete.forEach((id) => next.delete(id));
+        return next;
+      });
+      setSelectedNoteId((current) => (current && idsToDelete.includes(current) ? null : current));
+
+      const timer = window.setTimeout(() => {
+        noteMotionTimersRef.current.delete(timer);
+        const removeExitState = () => {
+          idsToDelete.forEach((id) => deletingNoteIdsRef.current.delete(id));
+          setDeletingNoteIds((current) => {
+            const next = new Set(current);
+            idsToDelete.forEach((id) => next.delete(id));
+            return next;
+          });
+          setIntroNote((current) => (current && idsToDelete.includes(current.id) ? null : current));
+        };
+
+        if (idsToDelete.length > 1 && onDeleteNotesBatch) {
+          Promise.resolve(onDeleteNotesBatch(idsToDelete)).finally(removeExitState);
+        } else {
+          Promise.all(idsToDelete.map((id) => Promise.resolve(onDeleteNote?.(id)))).finally(removeExitState);
+        }
+      }, BOARD_NOTE_EXIT_MS);
+      noteMotionTimersRef.current.add(timer);
+    },
+    [introNote?.id, notes, onDeleteNote, onDeleteNotesBatch]
+  );
+
+  useEffect(() => () => {
+    if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
+    if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
+    if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
+    noteMotionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+  }, []);
   
   // 标记是否已经执行过重排
   const [hasRearranged, setHasRearranged] = useState(false);
@@ -368,6 +502,14 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   // Note position selection state
   const [isSelectingNotePosition, setIsSelectingNotePosition] = useState(false);
   const [notePositionPreview, setNotePositionPreview] = useState<{ x: number; y: number } | null>(null);
+  const boardLongPressTimerRef = useRef<number | null>(null);
+  const boardLongPressStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    boardX: number;
+    boardY: number;
+  } | null>(null);
+  const boardLongPressTriggeredRef = useRef(false);
   
   // 当编辑模式切换时，清除过滤状态和绘制状态
   useEffect(() => {
@@ -488,6 +630,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const lastMousePos = useRef<{ x: number, y: number } | null>(null);
   const panStartPos = useRef<{ x: number, y: number } | null>(null);
   const isZoomingRef = useRef(false);
+  const [isZooming, setIsZooming] = useState(false);
   const dragRectRef = useRef<DOMRect | null>(null);
   
   // Blank click count for exit logic
@@ -1642,6 +1785,24 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   }, [navigateToCoords, projectId]); // Significant reduction in dependencies
 
   const closeEditor = () => {
+    if (introTimerRef.current !== null) {
+      window.clearTimeout(introTimerRef.current);
+      introTimerRef.current = null;
+    }
+    setIsIntroPending(false);
+    if (introNote) {
+      if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
+      if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
+      const introNoteId = introNote.id;
+      introDismissTimerRef.current = window.setTimeout(() => {
+        introDismissTimerRef.current = null;
+        setIntroNoteMotion('exit');
+        introExitTimerRef.current = window.setTimeout(() => {
+          introExitTimerRef.current = null;
+          setIntroNote((current) => (current?.id === introNoteId ? null : current));
+        }, BOARD_NOTE_EXIT_MS);
+      }, BOARD_NOTE_INTRO_DISMISS_DELAY_MS);
+    }
     // Delay clearing editingNote to ensure any pending state updates are processed
     setTimeout(() => {
     setEditingNote(null);
@@ -1849,7 +2010,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         noteGroupId: importBatchGroupId,
       };
       
-      onAddNote?.(newNote);
+      addBoardNoteWithEnter(newNote);
     }
     
     // Show message if there were duplicates
@@ -1987,7 +2148,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       })
       );
 
-      newNotes.forEach((note) => onAddNote?.(note));
+      newNotes.forEach(addBoardNoteWithEnter);
 
       const duplicateCount = parsed.rawNotes.length - uniqueImportedNotes.length;
       if (duplicateCount > 0) {
@@ -2157,7 +2318,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       imageWidth: boardWidth,
       imageHeight: boardHeight,
     };
-    onAddNote?.(newNote);
+    addBoardNoteWithEnter(newNote);
   };
 
   const handleImageInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2180,7 +2341,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   };
 
   // 在指定位置创建便签（board 坐标；光标为中心，与预览框一致，不做网格吸附）
-  const createNoteAtPosition = (boardX: number, boardY: number) => {
+  const createNoteAtPosition = (
+    boardX: number,
+    boardY: number,
+    waitForLongPressRelease = false
+  ) => {
     const noteWidth = 256;
     const noteHeight = 256;
     const placeX = boardX - noteWidth / 2;
@@ -2200,8 +2365,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       variant: 'standard',
       color: '#FFFDF5'
     };
-    setEditingNote(newNote);
-    onToggleEditor(true);
+    beginNewBoardNoteIntro(newNote);
+    if (waitForLongPressRelease) {
+      boardLongPressPreviewNoteRef.current = newNote;
+    } else {
+      openNewBoardNoteEditorAfterIntro(newNote);
+    }
     setIsSelectingNotePosition(false);
   };
 
@@ -2222,9 +2391,105 @@ const createNoteAtCenter = () => {
          variant: 'standard',
          color: '#FFFDF5'
      };
-     setEditingNote(newNote);
-     onToggleEditor(true);
+     beginNewBoardNoteIntro(newNote);
+     openNewBoardNoteEditorAfterIntro(newNote);
   };
+
+  const clearBoardLongPress = useCallback(() => {
+    if (boardLongPressTimerRef.current !== null) {
+      window.clearTimeout(boardLongPressTimerRef.current);
+      boardLongPressTimerRef.current = null;
+    }
+    boardLongPressStartRef.current = null;
+  }, []);
+
+  useEffect(() => clearBoardLongPress, [clearBoardLongPress]);
+
+  const commitBoardLongPressPreview = useCallback(() => {
+    const note = boardLongPressPreviewNoteRef.current;
+    if (!note) return;
+    boardLongPressPreviewNoteRef.current = null;
+    openNewBoardNoteEditorAfterIntro(note, Date.now() - introStartedAtRef.current);
+  }, [openNewBoardNoteEditorAfterIntro]);
+
+  const cancelBoardLongPressPreview = useCallback(() => {
+    boardLongPressPreviewNoteRef.current = null;
+    if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
+    introTimerRef.current = null;
+    setIsIntroPending(false);
+    setIntroNote(null);
+    setEditingNote(null);
+  }, []);
+
+  const boardObjectContainsPosition = useCallback(
+    (boardX: number, boardY: number) => {
+      const fallsInside = (x: number, y: number, width: number, height: number) =>
+        boardX >= x && boardX <= x + width && boardY >= y && boardY <= y + height;
+
+      return (
+        notes.some((note) => {
+          const { width, height } = boardNoteDimensions(note);
+          return fallsInside(note.boardX, note.boardY, width, height);
+        }) || frames.some((frame) => fallsInside(frame.x, frame.y, frame.width, frame.height))
+      );
+    },
+    [frames, notes]
+  );
+
+  const startBoardLongPress = useCallback(
+    (e: React.PointerEvent) => {
+      if (
+        e.button !== 0 ||
+        isSelectingNotePosition ||
+        isDrawingFrame ||
+        isBoxSelecting ||
+        isZooming ||
+        resizingFrame ||
+        resizingImage ||
+        draggingFrameId
+      ) {
+        return;
+      }
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-is-note], button, input, select, textarea, a')) return;
+      if (target !== e.currentTarget && target.closest('.pointer-events-auto')) return;
+      const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const boardX = (e.clientX - rect.left - transform.x) / transform.scale;
+      const boardY = (e.clientY - rect.top - transform.y) / transform.scale;
+      if (boardObjectContainsPosition(boardX, boardY)) return;
+
+      clearBoardLongPress();
+      boardLongPressTriggeredRef.current = false;
+      boardLongPressStartRef.current = { clientX: e.clientX, clientY: e.clientY, boardX, boardY };
+      boardLongPressTimerRef.current = window.setTimeout(() => {
+        boardLongPressTimerRef.current = null;
+        const press = boardLongPressStartRef.current;
+        if (!press || boardObjectContainsPosition(press.boardX, press.boardY)) return;
+        boardLongPressTriggeredRef.current = true;
+        setIsPanning(false);
+        setIsDraggingBackground(false);
+        lastMousePos.current = null;
+        panStartPos.current = null;
+        if (navigator.vibrate) navigator.vibrate(VIBRATION_MEDIUM);
+        createNoteAtPosition(press.boardX, press.boardY, true);
+      }, 500);
+    },
+    [
+      boardObjectContainsPosition,
+      clearBoardLongPress,
+      draggingFrameId,
+      isBoxSelecting,
+      isDrawingFrame,
+      isSelectingNotePosition,
+      isZooming,
+      resizingFrame,
+      resizingImage,
+      transform.scale,
+      transform.x,
+      transform.y
+    ]
+  );
 
   const scheduleZoomTransformPersist = useCallback((x: number, y: number, scale: number) => {
     if (zoomSaveTimeoutRef.current) {
@@ -2275,7 +2540,6 @@ const createNoteAtCenter = () => {
     transformY: number;
   } | null>(null);
 
-  const [isZooming, setIsZooming] = useState(false);
   isZoomingRef.current = isZooming;
 
   // Use native event listeners for touch events to allow preventDefault
@@ -2472,6 +2736,8 @@ const createNoteAtCenter = () => {
       // 如果目标是 note，不清空长按计时器，让 note 自己处理
       const target = e.target as HTMLElement;
       const isNoteClick = target.closest('[data-is-note]') !== null;
+
+      if (!isNoteClick) startBoardLongPress(e);
       
       // 只有当目标不是 note 时，才取消长按检测和单击检测
       if (!isNoteClick) {
@@ -2519,6 +2785,12 @@ const createNoteAtCenter = () => {
   };
 
   const handleBoardPointerMove = (e: React.PointerEvent) => {
+      const longPressStart = boardLongPressStartRef.current;
+      if (longPressStart) {
+        const dx = e.clientX - longPressStart.clientX;
+        const dy = e.clientY - longPressStart.clientY;
+        if (Math.hypot(dx, dy) > 10) clearBoardLongPress();
+      }
       // 如果处于位置选择模式，更新预览位置
       if (isSelectingNotePosition && (containerRef.current || dragRectRef.current)) {
           const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
@@ -2682,6 +2954,23 @@ const createNoteAtCenter = () => {
 
   const handleBoardPointerUp = (e: React.PointerEvent) => {
       // 优先处理需要释放状态的操作，避免提前返回导致状态未释放
+      const didCreateFromLongPress = boardLongPressTriggeredRef.current;
+      clearBoardLongPress();
+      if (didCreateFromLongPress) {
+          boardLongPressTriggeredRef.current = false;
+          commitBoardLongPressPreview();
+          setIsPanning(false);
+          setIsDraggingBackground(false);
+          lastMousePos.current = null;
+          panStartPos.current = null;
+          dragRectRef.current = null;
+          try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          } catch {
+            /* pointer capture may already have been released */
+          }
+          return;
+      }
 
       // 如果正在调整Frame大小，结束调整
       if (resizingFrameRef.current || resizingFrame) {
@@ -3091,21 +3380,10 @@ const createNoteAtCenter = () => {
       
       // If multiple notes are selected, delete all selected notes
       if (selectedNoteIds.size > 1 && selectedNoteIds.has(id)) {
-        selectedNoteIds.forEach(selectedId => onDeleteNote?.(selectedId));
-        setSelectedNoteIds(new Set());
-        setSelectedNoteId(null);
+        deleteBoardNotesWithExit(Array.from(selectedNoteIds));
       } else {
         // Single note deletion
-      onDeleteNote?.(id);
-        // Also remove from selection if it was selected
-        if (selectedNoteIds.has(id)) {
-          const newSet = new Set(selectedNoteIds);
-          newSet.delete(id);
-          setSelectedNoteIds(newSet);
-          if (selectedNoteId === id) {
-            setSelectedNoteId(newSet.size > 0 ? Array.from(newSet)[0] : null);
-          }
-        }
+        deleteBoardNotesWithExit([id]);
       }
   };
 
@@ -3213,6 +3491,7 @@ const createNoteAtCenter = () => {
         onPointerDown={handleBoardPointerDown}
         onPointerMove={handleBoardPointerMove}
         onPointerLeave={(e) => {
+            clearBoardLongPress();
             // 当鼠标离开画布时，清除位置预览
             if (isSelectingNotePosition) {
                 setNotePositionPreview(null);
@@ -3224,6 +3503,16 @@ const createNoteAtCenter = () => {
         onDrop={handleDrop}
         onDragEnd={handleDragEnd}
         onPointerUp={handleBoardPointerUp}
+        onPointerCancel={() => {
+          clearBoardLongPress();
+          if (boardLongPressTriggeredRef.current) cancelBoardLongPressPreview();
+          boardLongPressTriggeredRef.current = false;
+          setIsPanning(false);
+          setIsDraggingBackground(false);
+          lastMousePos.current = null;
+          panStartPos.current = null;
+          dragRectRef.current = null;
+        }}
         onDoubleClick={handleBoardDoubleClick}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -3981,7 +4270,7 @@ const createNoteAtCenter = () => {
 
           {/* Board 视图不渲染连线（连线仅在 Graph 等视图展示） */}
 
-          {displayNotes
+          {boardDisplayNotes
             .filter((note) => notePassesBoardVisibilityFilters(note))
             .filter((note) =>
               isNoteVisibleInUnifiedLayer(note, mergedProjectBoardLayers, graphLayerGroupStandard)
@@ -3995,6 +4284,11 @@ const createNoteAtCenter = () => {
             .map((note) => {
               // Check layer visibility based on note variant
               const isImage = noteRendersAsBoardSticker(note);
+              // 淡黄明确表示“只存在于白板、没有可用地图坐标”。带有效坐标的
+              // 普通便签则保留自己的颜色，未设置颜色时回落到中性白。
+              const boardCardBackground = noteHasRenderableMapPosition(note)
+                ? note.color || '#FFFFFF'
+                : '#FFFDF5';
               
               let shouldShow = false;
               if (isImage && layerVisibility.image) shouldShow = true;
@@ -4004,6 +4298,13 @@ const createNoteAtCenter = () => {
               
               const isDragging = draggingNoteId === note.id;
               const isInMultiSelect = selectedNoteIds.has(note.id);
+              const noteMotionClass = introNote?.id === note.id && introNoteMotion === 'exit'
+                ? 'board-note-motion--exit'
+                : deletingNoteIds.has(note.id)
+                  ? 'board-note-motion--exit'
+                  : enteringNoteIds.has(note.id)
+                    ? 'board-note-motion--enter'
+                    : '';
               const currentX = note.boardX + (isDragging ? dragOffset.x : 0) + (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.x : 0);
               const currentY = note.boardY + (isDragging ? dragOffset.y : 0) + (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.y : 0);
               
@@ -4042,7 +4343,7 @@ const createNoteAtCenter = () => {
                         transform: `scale(${standardSizeScale})`,
                         transformOrigin: 'center',
                   }}
-                  className={`pointer-events-auto group ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
+                  className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
                     onPointerDown={(e) => {
                         lastMousePos.current = { x: e.clientX, y: e.clientY };
                         handleNotePointerDown(e, note.id, note);
@@ -4182,7 +4483,7 @@ const createNoteAtCenter = () => {
                       transform: `scale(${standardSizeScale})`,
                       transformOrigin: 'center',
                   }}
-                  className={`pointer-events-auto group ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
+                  className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
                   onPointerDown={(e) => {
                       lastMousePos.current = { x: e.clientX, y: e.clientY };
                       handleNotePointerDown(e, note.id, note);
@@ -4219,7 +4520,7 @@ const createNoteAtCenter = () => {
                           style={{
                               boxShadow: isDragging ? `0 0 0 4px ${themeColor}` : undefined,
                               transform: `rotate(${(parseInt(note.id.slice(-2), 36) % 6) - 3}deg)`,
-                              backgroundColor: note.color || '#FFFDF5'
+                              backgroundColor: boardCardBackground
                           }}
                       >
                           <div className="w-full h-full flex flex-col relative p-6 gap-2">
@@ -4422,15 +4723,7 @@ const createNoteAtCenter = () => {
               ) {
                 return;
               }
-              if (idsToDelete.length > 1 && onDeleteNotesBatch) {
-                onDeleteNotesBatch(idsToDelete);
-              } else {
-                idsToDelete.forEach(id => {
-                  if (onDeleteNote) onDeleteNote(id);
-                });
-              }
-              setSelectedNoteIds(new Set());
-              setSelectedNoteId(null);
+              deleteBoardNotesWithExit(idsToDelete);
               resetBlankClickCount();
               setMultiBatchPanel('none');
             };
@@ -4781,7 +5074,7 @@ const createNoteAtCenter = () => {
             }}
         />
 
-        {editingNote && (
+        {editingNote && !isIntroPending && (
           <NoteEditor 
               isOpen={!!editingNote}
               onClose={closeEditor}
@@ -4802,7 +5095,8 @@ const createNoteAtCenter = () => {
                       : fromProject.sketch
                 };
               })()}
-              onDelete={onDeleteNote}
+              isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
+              onDelete={(noteId) => deleteBoardNotesWithExit([noteId])}
               onSwitchToMapView={onSwitchToMapView}
               onSwitchToGraphView={onSwitchToGraphView}
               themeColor={themeColor}
@@ -4842,6 +5136,8 @@ const createNoteAtCenter = () => {
                           images: updated.images !== undefined ? updated.images : ((base as Note).images || []),
                           sketch: 'sketch' in updated ? updated.sketch : (base as Note).sketch
                       } as Note;
+                      // 这张卡片已作为临时便签完成过一次入场；保存后只接管内容，
+                      // 不再重复播放第二次出现动画。
                       onAddNote(fullNote);
                       setEditingNote(null);
                   }

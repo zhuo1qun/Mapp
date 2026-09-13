@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, ArrowUp, Locate, Check, Navigation } from 'lucide-react';
+import { Star, ArrowUp, Locate, Check, Navigation, X } from 'lucide-react';
 import { NoteIconButton } from './NoteIconButton';
 import { NoteEditorAddPillLabel } from './addPillStyles';
 
@@ -27,6 +27,9 @@ interface NoteHeaderProps {
   onLocateGraph?: () => void;
 
   onSave: () => void;
+  /** 新建空草稿可直接取消，不写入项目。 */
+  discardDraft?: boolean;
+  onDiscardDraft?: () => void;
 
 }
 
@@ -46,6 +49,8 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   showLocateGraph = false,
   onLocateGraph,
   onSave,
+  discardDraft = false,
+  onDiscardDraft,
 }) => {
   return (
     <div className="flex items-center gap-2 p-4 pb-2 flex-shrink-0 relative">
@@ -103,8 +108,13 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
           </NoteIconButton>
         )}
 
-        <NoteIconButton onClick={onSave} variant="neutral" label="保存" title="保存">
-          <Check size={22} strokeWidth={2.5} />
+        <NoteIconButton
+          onClick={discardDraft ? (onDiscardDraft ?? onSave) : onSave}
+          variant={discardDraft ? 'danger' : 'neutral'}
+          label={discardDraft ? '取消' : '保存'}
+          title={discardDraft ? '取消并删除便签' : '保存'}
+        >
+          {discardDraft ? <X size={22} strokeWidth={2.25} /> : <Check size={22} strokeWidth={2.5} />}
         </NoteIconButton>
       </div>
     </div>

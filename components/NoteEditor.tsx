@@ -35,6 +35,8 @@ interface NoteEditorProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (note: Partial<Note>) => void;
+  /** 调用方尚未把这条便签写入项目数据。 */
+  isNewNote?: boolean;
   onDelete?: (noteId: string) => void;
   onSwitchToMapView?: (coords?: { lat: number; lng: number }) => void;
   onSwitchToBoardView?: (coords?: { x: number; y: number }, mapInstance?: any) => void;
@@ -52,6 +54,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   isOpen,
   onClose,
   onSave,
+  isNewNote = false,
   onDelete,
   onSwitchToMapView,
   onSwitchToBoardView,
@@ -311,6 +314,18 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     const hasTime = noteData.startYear != null || noteData.endYear != null;
     return !hasText && !hasEmoji && !hasImages && !hasSketch && !hasMedia && !hasTags && !hasTime;
   };
+
+  const isDiscardableNewDraft = isNewNote && isEmptyNote({
+    text,
+    emoji,
+    tags,
+    startYear,
+    endYear,
+    images,
+    imageRefs,
+    sketch,
+    media: mediaItems,
+  });
 
   const handleSave = () => {
     void (async () => {
@@ -610,6 +625,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               onSave={() => {
                 dismissOverlays();
                 handleSave();
+              }}
+              discardDraft={isDiscardableNewDraft}
+              onDiscardDraft={() => {
+                dismissOverlays();
+                onClose();
               }}
             />
 

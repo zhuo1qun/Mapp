@@ -12,7 +12,8 @@ function createNoteIcon(
   themeColor: string,
   count: number | undefined,
   showTextLabels: boolean | undefined,
-  pinSize: number | undefined
+  pinSize: number | undefined,
+  motion: 'enter' | 'exit' | undefined
 ): L.DivIcon {
   const isFavorite = note.isFavorite === true;
   const mappedPinSize = pinSize ? mapPinSize(pinSize) : 1.0;
@@ -53,7 +54,9 @@ function createNoteIcon(
 
   return L.divIcon({
     className: 'custom-icon',
-    html: `<div style="
+    html: `<div class="mapp-map-pin-motion${motion ? ` mapp-map-pin-motion--${motion}` : ''}" style="
+      width:${size}px;height:${size}px;transform-origin:${size / 2}px ${size}px;
+    "><div style="
       position: relative; background-color: ${backgroundColor};
       width: ${size}px; height: ${size}px;
       border-radius: 50% 50% 50% 0;
@@ -62,7 +65,7 @@ function createNoteIcon(
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
       border: ${borderWidth}px solid ${themeColor};
       overflow: hidden;
-    ">${content}</div>${countBadge}`,
+    ">${content}</div>${countBadge}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size],
     popupAnchor: [0, -size]
@@ -84,6 +87,9 @@ interface NoteMarkerProps {
   onDragEnd?: (e: L.DragEndEvent) => void;
   // 拖拽过程中更新坐标（用于避免回弹）
   onDrag?: (e: any) => void;
+  /** 新建 / 删除时的锚点动效，外层动画不干扰图钉自身的旋转。 */
+  motion?: 'enter' | 'exit';
+  interactive?: boolean;
 }
 
 export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
@@ -99,10 +105,12 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
   onMouseLeave,
   draggable = false,
   onDragEnd,
-  onDrag
+  onDrag,
+  motion,
+  interactive = true
 }) {
   const icon = useMemo(
-    () => createNoteIcon(note, themeColor, clusterCount, showTextLabels, pinSize),
+    () => createNoteIcon(note, themeColor, clusterCount, showTextLabels, pinSize, motion),
     [
       note.id,
       note.images?.[0],
@@ -112,7 +120,8 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       themeColor,
       clusterCount,
       showTextLabels,
-      pinSize
+      pinSize,
+      motion
     ]
   );
 
@@ -134,6 +143,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       icon={icon}
       zIndexOffset={zIndexOffset}
       draggable={draggable}
+      interactive={interactive}
       eventHandlers={eventHandlers}
     />
   );

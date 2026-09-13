@@ -9,6 +9,12 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="format-detection" content="telephone=no" />
     <title>Mapp</title>
+    <!-- 默认及三种 Esri 底图共用同一图源；提前完成连接建立，缩短首批瓦片等待。 -->
+    <link rel="preconnect" href="https://server.arcgisonline.com" />
+    <!-- OSM 是可选底图，仅预解析其分片域名，不额外占用长连接。 -->
+    <link rel="dns-prefetch" href="//a.tile.openstreetmap.org" />
+    <link rel="dns-prefetch" href="//b.tile.openstreetmap.org" />
+    <link rel="dns-prefetch" href="//c.tile.openstreetmap.org" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="

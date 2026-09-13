@@ -3,15 +3,26 @@ import { useMap } from 'react-leaflet';
 import { Coordinates } from '../../types';
 
 interface MapLongPressHandlerProps {
+  /** 达到长按阈值：仅展示预览，尚未提交新便签。 */
   onLongPress: (coords: Coordinates) => void;
+  /** 松手后提交预览，让父级完成收稳并打开编辑器。 */
+  onLongPressRelease?: () => void;
+  /** 手势取消时撤销尚未提交的预览。 */
+  onLongPressCancel?: () => void;
   isPreviewMode?: boolean;
 }
 
-export const MapLongPressHandler: React.FC<MapLongPressHandlerProps> = ({ onLongPress, isPreviewMode = false }) => {
+export const MapLongPressHandler: React.FC<MapLongPressHandlerProps> = ({
+  onLongPress,
+  onLongPressRelease,
+  onLongPressCancel,
+  isPreviewMode = false
+}) => {
   const map = useMap();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPosRef = useRef<{ x: number, y: number } | null>(null);
   const touchCountRef = useRef<number>(0);
+  const longPressTriggeredRef = useRef(false);
 
   // Check if target element is a UI element or marker
   const isUIElement = (target: EventTarget | null): boolean => {
@@ -71,6 +82,12 @@ export const MapLongPressHandler: React.FC<MapLongPressHandlerProps> = ({ onLong
     // Global handler to clear state when pointer is released anywhere
     // This ensures state is cleared even if events are stopped on UI elements
     const handleGlobalEnd = (e: Event) => {
+      if (longPressTriggeredRef.current) {
+        longPressTriggeredRef.current = false;
+        startPosRef.current = null;
+        onLongPressRelease?.();
+        return;
+      }
       if (timerRef.current || startPosRef.current) {
         // Check if pointer is over a UI element
         let clientX = 0;
@@ -147,15 +164,21 @@ export const MapLongPressHandler: React.FC<MapLongPressHandlerProps> = ({ onLong
           const latlng = map.containerPointToLatLng([relativeX, relativeY]);
           if (navigator.vibrate) navigator.vibrate(50);
           onLongPress(latlng);
+          longPressTriggeredRef.current = true;
         } catch (error) {
           console.warn('MapLongPressHandler: Failed to handle long press:', error);
         }
-        startPosRef.current = null;
         timerRef.current = null;
       }, 600);
     };
 
     const handleMove = (e: TouchEvent | MouseEvent) => {
+       if ('touches' in e && longPressTriggeredRef.current && e.touches.length > 1) {
+         longPressTriggeredRef.current = false;
+         startPosRef.current = null;
+         onLongPressCancel?.();
+         return;
+       }
        if (!startPosRef.current || !timerRef.current) return;
 
        // Update touch count
@@ -219,10 +242,17 @@ export const MapLongPressHandler: React.FC<MapLongPressHandlerProps> = ({ onLong
 
        // Always clear timer and position on end, regardless of target
        // This ensures that if user started on map but ended on UI, we clear state
-       if (timerRef.current) {
-         clearTimeout(timerRef.current);
-         timerRef.current = null;
-       }
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+
+      if (longPressTriggeredRef.current) {
+        longPressTriggeredRef.current = false;
+        startPosRef.current = null;
+        onLongPressRelease?.();
+        return;
+      }
 
        // If clicked on UI element, clear immediately and return
        if (e && isUIElement(e.target)) {
@@ -268,12 +298,22 @@ export const MapLongPressHandler: React.FC<MapLongPressHandlerProps> = ({ onLong
        startPosRef.current = null;
     };
 
+    const handleCancel = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+      startPosRef.current = null;
+      if (longPressTriggeredRef.current) onLongPressCancel?.();
+      longPressTriggeredRef.current = false;
+      touchCountRef.current = 0;
+    };
+
     container.addEventListener('touchstart', handleStart, { passive: true });
     container.addEventListener('mousedown', handleStart);
     container.addEventListener('touchmove', handleMove, { passive: true });
     container.addEventListener('mousemove', handleMove);
     container.addEventListener('touchend', (e) => handleEnd(e));
     container.addEventListener('mouseup', handleEnd);
+    container.addEventListener('touchcancel', handleCancel);
 
     // Add global listeners to catch events even if stopped on UI elements
     // Use capture phase to catch events before they're stopped
@@ -288,11 +328,12 @@ export const MapLongPressHandler: React.FC<MapLongPressHandlerProps> = ({ onLong
       container.removeEventListener('mousemove', handleMove);
       container.removeEventListener('touchend', handleEnd);
       container.removeEventListener('mouseup', handleEnd);
+      container.removeEventListener('touchcancel', handleCancel);
       document.removeEventListener('mouseup', handleGlobalEnd, true);
       document.removeEventListener('touchend', handleGlobalEnd, true);
       document.removeEventListener('pointerup', handleGlobalEnd, true);
     };
-  }, [map, onLongPress]);
+  }, [map, onLongPress, onLongPressCancel, onLongPressRelease]);
 
   return null;
 };

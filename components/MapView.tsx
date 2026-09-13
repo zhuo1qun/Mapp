@@ -54,6 +54,7 @@ import { useRegisterEditInspector } from './editInspector/EditInspectorProvider'
 import { GraphConnectionPanel } from './graph/GraphConnectionPanel';
 import { useSimpleConnectionPanel } from './hooks/useSimpleConnectionPanel';
 import { ClusterMarkerLayer } from './map/layers/ClusterMarkerLayer';
+import { NoteMarker } from './map/markers/NoteMarker';
 import { MapClickHandler } from './map/MapClickHandler';
 import { MapShiftBoxSelect } from './map/MapShiftBoxSelect';
 import { MapConnectionLinesOverlay } from './map/MapConnectionLinesOverlay';
@@ -113,58 +114,59 @@ const MapTileZoomFallback: React.FC<{
   maxNativeZoom?: number;
 }> = ({ url, maxZoom, maxNativeZoom }) => {
   const map = useMap();
-  const layerRef = useRef<L.TileLayer | null>(null);
-
-  const updateFallbackZoom = useCallback(() => {
-    const layer = layerRef.current;
-    if (!layer) return;
-
-    const sourceMaxZoom = maxNativeZoom ?? maxZoom;
-    const fallbackZoom = Math.max(
-      map.getMinZoom(),
-      Math.min(sourceMaxZoom, Math.floor(map.getZoom()) - 2)
-    );
-
-    if (
-      layer.options.minNativeZoom === fallbackZoom &&
-      layer.options.maxNativeZoom === fallbackZoom
-    ) {
-      return;
-    }
-    // A one-level difference still makes a perfectly useful fallback. Avoid
-    // replacing it for tiny zoom adjustments; that keeps its coverage warm.
-    if (Math.abs((layer.options.maxNativeZoom ?? fallbackZoom) - fallbackZoom) < 2) {
-      return;
-    }
-    // Pin this layer to one parent zoom. `maxNativeZoom` alone only clamps
-    // zooming in; `minNativeZoom` also prevents it from jumping to a new grid
-    // while the user is zooming out.
-    layer.options.minNativeZoom = fallbackZoom;
-    layer.options.maxNativeZoom = fallbackZoom;
-    layer.redraw();
-  }, [map, maxNativeZoom, maxZoom]);
+  const activeLayerRef = useRef<L.TileLayer | null>(null);
+  const pendingLayerRef = useRef<L.TileLayer | null>(null);
 
   useEffect(() => {
     const sourceMaxZoom = maxNativeZoom ?? maxZoom;
-    const initialFallbackZoom = Math.max(
-      map.getMinZoom(),
-      Math.min(sourceMaxZoom, Math.floor(map.getZoom()) - 2)
-    );
-    const layer = L.tileLayer(url, {
-      attribution: '',
-      // The normal TileLayer renders at z-index 1; this one is intentionally
-      // below it and remains visible only where high-detail tiles are absent.
-      zIndex: 0,
-      maxZoom,
-      minNativeZoom: initialFallbackZoom,
-      maxNativeZoom: initialFallbackZoom,
-      updateWhenZooming: false,
-      updateWhenIdle: true,
-      keepBuffer: 2
-    });
+    const fallbackZoomForCurrentView = () =>
+      Math.min(
+        sourceMaxZoom,
+        Math.max(Math.ceil(map.getMinZoom()), Math.floor(map.getZoom()) - 2)
+      );
+    const createFallbackLayer = (fallbackZoom: number) =>
+      L.tileLayer(url, {
+        attribution: '',
+        // The normal TileLayer renders at z-index 1; this one is intentionally
+        // below it and remains visible only where high-detail tiles are absent.
+        zIndex: 0,
+        maxZoom,
+        minNativeZoom: fallbackZoom,
+        maxNativeZoom: fallbackZoom,
+        updateWhenZooming: false,
+        updateWhenIdle: true,
+        keepBuffer: 2
+      });
 
-    layerRef.current = layer;
-    layer.addTo(map);
+    const initialLayer = createFallbackLayer(fallbackZoomForCurrentView());
+    activeLayerRef.current = initialLayer;
+    initialLayer.addTo(map);
+
+    const rebaseFallbackLayer = () => {
+      const activeLayer = activeLayerRef.current;
+      if (!activeLayer) return;
+      const fallbackZoom = fallbackZoomForCurrentView();
+      const activeZoom = activeLayer.options.maxNativeZoom;
+      if (activeZoom === fallbackZoom || Math.abs((activeZoom ?? fallbackZoom) - fallbackZoom) < 2) return;
+
+      const pendingLayer = pendingLayerRef.current;
+      if (pendingLayer?.options.maxNativeZoom === fallbackZoom) return;
+      pendingLayer?.remove();
+
+      // 绝不对现有层 redraw：它会先清空已显示瓦片。新层叠在旧层之上，
+      // 只有自身完整可用后才接管，再移除旧层，避免闪出纯底色。
+      const nextLayer = createFallbackLayer(fallbackZoom);
+      pendingLayerRef.current = nextLayer;
+      nextLayer.once('load', () => {
+        if (pendingLayerRef.current !== nextLayer) return;
+        pendingLayerRef.current = null;
+        const previousLayer = activeLayerRef.current;
+        activeLayerRef.current = nextLayer;
+        previousLayer?.remove();
+      });
+      nextLayer.addTo(map);
+    };
+
     // Keep the parent grid stable throughout a gesture. Replacing it at every
     // integer zoom would briefly clear precisely the fallback we need. Once
     // the gesture has settled, rebase it in the background for the next move.
@@ -182,8 +184,10 @@ const MapTileZoomFallback: React.FC<{
           scheduleRebase();
           return;
         }
-        updateFallbackZoom();
-      }, 900);
+        rebaseFallbackLayer();
+        // 高精度层会在 zoomend 立刻请求；稍作让位后便补齐低清底图，
+        // 避免此前 900ms 的人为等待让缩小后的新区域长时间没有可用画面。
+      }, 180);
     };
     map.on('zoomstart', cancelRebase);
     map.on('zoomend', scheduleRebase);
@@ -192,16 +196,130 @@ const MapTileZoomFallback: React.FC<{
       cancelRebase();
       map.off('zoomstart', cancelRebase);
       map.off('zoomend', scheduleRebase);
-      layer.remove();
-      layerRef.current = null;
+      activeLayerRef.current?.remove();
+      pendingLayerRef.current?.remove();
+      activeLayerRef.current = null;
+      pendingLayerRef.current = null;
     };
-  }, [map, url, maxNativeZoom, maxZoom, updateFallbackZoom]);
+  }, [map, url, maxNativeZoom, maxZoom]);
+
+  return null;
+};
+
+/**
+ * 一次平移结束后，低优先级预取移动方向前方的一列低清瓦片。
+ * 不在拖动中发请求，且在省流量或低速网络时自动关闭，避免影响当前视口。
+ */
+const MapTileDirectionalPrefetch: React.FC<{
+  url: string;
+  maxZoom: number;
+  maxNativeZoom?: number;
+}> = ({ url, maxZoom, maxNativeZoom }) => {
+  const map = useMap();
+  const previousCenterRef = useRef<L.LatLng | null>(null);
+  const prefetchedAtRef = useRef(new Map<string, number>());
+  const pendingImagesRef = useRef(new Map<string, HTMLImageElement>());
+
+  useEffect(() => {
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    if (connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') {
+      return;
+    }
+
+    const tileUrlFor = (x: number, y: number, z: number) => {
+      const subdomains = 'abc';
+      const s = subdomains[Math.abs((x + y) % subdomains.length)];
+      return L.Util.template(url, { x, y, z, s, r: '' });
+    };
+    const prunePrefetches = (now: number) => {
+      for (const [tileUrl, startedAt] of prefetchedAtRef.current) {
+        if (now - startedAt > 10 * 60 * 1000) prefetchedAtRef.current.delete(tileUrl);
+      }
+    };
+
+    let prefetchTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleDirectionalPrefetch = () => {
+      if (prefetchTimer) clearTimeout(prefetchTimer);
+      prefetchTimer = setTimeout(() => {
+        prefetchTimer = null;
+        const center = map.getCenter();
+        const previousCenter = previousCenterRef.current;
+        previousCenterRef.current = center;
+        if (!previousCenter) return;
+
+        const targetZoom = Math.max(
+          map.getMinZoom(),
+          Math.min(maxNativeZoom ?? maxZoom, Math.floor(map.getZoom()) - 2)
+        );
+        const current = map.project(center, targetZoom);
+        const previous = map.project(previousCenter, targetZoom);
+        const dx = current.x - previous.x;
+        const dy = current.y - previous.y;
+        // 缩放但没有明显平移时，交给低清回退层处理，避免无方向预取。
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 32) return;
+
+        const bounds = map.getBounds();
+        const northWest = map.project(bounds.getNorthWest(), targetZoom).divideBy(256).floor();
+        const southEast = map.project(bounds.getSouthEast(), targetZoom).divideBy(256).floor();
+        const xDirection = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
+        const yDirection = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+        const candidates: Array<[number, number]> = [];
+
+        if (xDirection !== 0) {
+          const x = xDirection > 0 ? southEast.x + 1 : northWest.x - 1;
+          for (let y = northWest.y; y <= southEast.y; y += 1) candidates.push([x, y]);
+        } else if (yDirection !== 0) {
+          const y = yDirection > 0 ? southEast.y + 1 : northWest.y - 1;
+          for (let x = northWest.x; x <= southEast.x; x += 1) candidates.push([x, y]);
+        }
+
+        const worldTiles = 2 ** targetZoom;
+        const now = Date.now();
+        prunePrefetches(now);
+        // 低清层的一列通常只需 2–4 张；超宽屏也保持这个上限。
+        candidates.slice(0, 4).forEach(([rawX, y]) => {
+          if (y < 0 || y >= worldTiles) return;
+          const x = ((rawX % worldTiles) + worldTiles) % worldTiles;
+          const tileUrl = tileUrlFor(x, y, targetZoom);
+          if (prefetchedAtRef.current.has(tileUrl) || pendingImagesRef.current.has(tileUrl)) return;
+
+          const image = new Image();
+          image.decoding = 'async';
+          image.fetchPriority = 'low';
+          const complete = () => pendingImagesRef.current.delete(tileUrl);
+          image.onload = complete;
+          image.onerror = complete;
+          pendingImagesRef.current.set(tileUrl, image);
+          prefetchedAtRef.current.set(tileUrl, now);
+          image.src = tileUrl;
+        });
+      }, 500);
+    };
+
+    previousCenterRef.current = map.getCenter();
+    map.on('moveend', scheduleDirectionalPrefetch);
+    return () => {
+      if (prefetchTimer) clearTimeout(prefetchTimer);
+      map.off('moveend', scheduleDirectionalPrefetch);
+      pendingImagesRef.current.forEach((image) => {
+        image.onload = null;
+        image.onerror = null;
+        image.src = '';
+      });
+      pendingImagesRef.current.clear();
+    };
+  }, [map, maxNativeZoom, maxZoom, url]);
 
   return null;
 };
 
 /** 空项目自动定位按项目只发起一次，切视图卸载 MapView 后不重跑。 */
 const emptyProjectLocateStarted = new Set<string>();
+const MAP_NOTE_INTRO_MS = 560;
+const MAP_NOTE_INTRO_DISMISS_DELAY_MS = 560;
+const MAP_NOTE_EXIT_MS = 220;
 
 interface MapViewProps {
   project: Project;
@@ -285,6 +403,11 @@ export const MapView: React.FC<MapViewProps> = ({
   setWaypoints: _setWaypoints,
   panelChromeStyle: panelChromeStyleProp
 }) => {
+  // 触摸设备在拖动时只在停下后补瓦片，避免请求队列反过来拖慢手势；
+  // 鼠标设备则沿用 Leaflet 的实时补图路径，横向平移不会等到松手才开始加载。
+  const [isTouchFirstInput] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+  );
   if (!project) return null;
   const notes = project.notes;
   const connections = project.connections || [];
@@ -305,6 +428,15 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapChromeHoverBg = mapChromeControlHoverBackground(mapUiChromeOpacity, mapStyleId);
   const [editingNote, setEditingNote] = useState<Partial<Note> | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
+  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'exit'>('enter');
+  const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
+  const introTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const introDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const introExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const introStartedAtRef = useRef(0);
+  const longPressPreviewNoteRef = useRef<Partial<Note> | null>(null);
+  const deletingNoteIdsRef = useRef(new Set<string>());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(() => new Set());
   const [preSelectedNotes, setPreSelectedNotes] = useState<Note[] | null>(null);
@@ -317,6 +449,16 @@ export const MapView: React.FC<MapViewProps> = ({
   const isMarkerDraggingRef = useRef(false);
   const ignoreNextMarkerClickRef = useRef(false);
   const ignoreNextMapClickRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      if (introTimerRef.current) clearTimeout(introTimerRef.current);
+      if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
+      if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
+      longPressPreviewNoteRef.current = null;
+    },
+    []
+  );
 
   const selectedNoteRaw = useMemo(
     () => (selectedNoteId ? notes.find((n) => n.id === selectedNoteId) : null),
@@ -973,11 +1115,33 @@ export const MapView: React.FC<MapViewProps> = ({
     onMapStyleChange
   });
 
+  const beginNewNoteIntro = useCallback((note: Partial<Note>) => {
+      if (introTimerRef.current) clearTimeout(introTimerRef.current);
+      if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
+      if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
+      setEditingNote(note);
+      setIntroNote(note);
+      setIntroNoteMotion('enter');
+      introStartedAtRef.current = Date.now();
+    }, []);
 
-  const handleLongPress = useCallback(
-    (coords: Coordinates) => {
+  const openNewNoteEditorAfterIntro = useCallback(
+    (note: Partial<Note>, elapsedMs = 0) => {
+      const remainingIntroMs = Math.max(140, MAP_NOTE_INTRO_MS - elapsedMs);
+      if (introTimerRef.current) clearTimeout(introTimerRef.current);
+      introTimerRef.current = setTimeout(() => {
+        introTimerRef.current = null;
+        setIsEditorOpen(true);
+        onToggleEditor(true);
+      }, remainingIntroMs);
+    },
+    [onToggleEditor]
+  );
+
+  const createNewMapNote = useCallback(
+    (coords: Coordinates): Partial<Note> => {
       const { boardX, boardY } = computeBoardPosition();
-      const newNote: Partial<Note> = {
+      return {
         id: generateId(),
         createdAt: Date.now(),
         coords,
@@ -988,16 +1152,37 @@ export const MapView: React.FC<MapViewProps> = ({
         tags: [],
         variant: 'standard',
         isFavorite: false,
-        color: '#FFFDF5',
+        color: '#FFFFFF',
         boardX,
         boardY
       };
-      setEditingNote(newNote);
-      setIsEditorOpen(true);
-      onToggleEditor(true);
     },
-    [computeBoardPosition, onToggleEditor]
+    [computeBoardPosition]
   );
+
+  const handleLongPress = useCallback(
+    (coords: Coordinates) => {
+      const newNote = createNewMapNote(coords);
+      longPressPreviewNoteRef.current = newNote;
+      beginNewNoteIntro(newNote);
+    },
+    [beginNewNoteIntro, createNewMapNote]
+  );
+
+  const handleLongPressRelease = useCallback(() => {
+    const note = longPressPreviewNoteRef.current;
+    if (!note) return;
+    longPressPreviewNoteRef.current = null;
+    openNewNoteEditorAfterIntro(note, Date.now() - introStartedAtRef.current);
+  }, [openNewNoteEditorAfterIntro]);
+
+  const handleLongPressCancel = useCallback(() => {
+    longPressPreviewNoteRef.current = null;
+    if (introTimerRef.current) clearTimeout(introTimerRef.current);
+    introTimerRef.current = null;
+    setIntroNote(null);
+    setEditingNote(null);
+  }, []);
 
   const handleCreateAtCurrentLocation = useCallback(async () => {
     try {
@@ -1009,13 +1194,15 @@ export const MapView: React.FC<MapViewProps> = ({
       if (map) {
         map.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
       }
-      handleLongPress({ lat: loc.lat, lng: loc.lng });
+      const newNote = createNewMapNote({ lat: loc.lat, lng: loc.lng });
+      beginNewNoteIntro(newNote);
+      openNewNoteEditorAfterIntro(newNote);
     } catch (error) {
       console.error('Create at current location failed:', error);
     } finally {
       setIsCreatingAtLocation(false);
     }
-  }, [requestLocation, setLocationError, handleLongPress]);
+  }, [requestLocation, setLocationError, beginNewNoteIntro, createNewMapNote, openNewNoteEditorAfterIntro]);
 
   const handleImportFromPhotos = useCallback(() => {
     fileInputRef.current?.click();
@@ -1204,10 +1391,51 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  const closeEditor = () => {
-      setIsEditorOpen(false);
-      onToggleEditor(false);
-  };
+  const closeEditor = useCallback(() => {
+    setIsEditorOpen(false);
+    onToggleEditor(false);
+    if (!introNote) return;
+
+    if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
+    if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
+    const introNoteId = introNote.id;
+    introDismissTimerRef.current = setTimeout(() => {
+      introDismissTimerRef.current = null;
+      setIntroNoteMotion('exit');
+      introExitTimerRef.current = setTimeout(() => {
+        introExitTimerRef.current = null;
+        setIntroNote((current) => (current?.id === introNoteId ? null : current));
+      }, MAP_NOTE_EXIT_MS);
+    }, MAP_NOTE_INTRO_DISMISS_DELAY_MS);
+  }, [introNote, onToggleEditor]);
+
+  const handleDeleteNoteWithExit = useCallback(
+    async (noteId: string) => {
+      if (!onDeleteNote || deletingNoteIdsRef.current.has(noteId)) return;
+      deletingNoteIdsRef.current.add(noteId);
+      setDeletingNoteIds(new Set(deletingNoteIdsRef.current));
+      setSelectedNoteId(null);
+      setSelectedNoteIds((current) => {
+        const next = new Set(current);
+        next.delete(noteId);
+        return next;
+      });
+      setHoveredNoteId((current) => (current === noteId ? null : current));
+      setPreSelectedNotes(null);
+      setConnectionHighlightNoteIds(null);
+      setEditingNote(null);
+      closeEditor();
+
+      try {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, MAP_NOTE_EXIT_MS));
+        await Promise.resolve(onDeleteNote(noteId));
+      } finally {
+        deletingNoteIdsRef.current.delete(noteId);
+        setDeletingNoteIds(new Set(deletingNoteIdsRef.current));
+      }
+    },
+    [closeEditor, onDeleteNote]
+  );
 
   // 侧栏「编辑」按钮或地图 label 双击：打开完整便签编辑器
   const handleEditNoteFromLabel = useCallback((noteId: string) => {
@@ -1497,20 +1725,50 @@ export const MapView: React.FC<MapViewProps> = ({
             maxNativeZoom={tileLayerConfig.maxNativeZoom}
           />
         )}
+        {effectiveMapStyle !== 'blank' && (
+          <MapTileDirectionalPrefetch
+            url={tileLayerConfig.url}
+            maxZoom={tileLayerConfig.maxZoom}
+            maxNativeZoom={tileLayerConfig.maxNativeZoom}
+          />
+        )}
         <TileLayer 
           key={effectiveMapStyle}
           {...tileLayerConfig}
+          // 回退层显式为 0；主图层也必须显式抬高，不能依赖 DOM 挂载顺序。
+          // 否则回退层中心的大瓦片会偶尔盖在已到达的高精瓦片上，出现
+          // “中间低清、周围高清”的反直觉画面。
+          zIndex={1}
           tileSize={256}
           zoomOffset={0}
-          updateWhenZooming={false}
-          // Do not discard the visible tile neighbourhood during a touch pan.
-          // This makes the just-loaded map remain available while the next
-          // zoom level is fetched on slower mobile networks.
-          updateWhenIdle
+          // 原生双指缩放在跨越整数层级时开始补图；自定义桌面平滑缩放会拦截
+          // 中间层级更新，因此不会产生错误坐标的瓦片请求。
+          updateWhenZooming
+          // Leaflet 对移动端的推荐策略是等拖动停下再补图；桌面端则实时补图，
+          // 让长距离平移无需等到松手才出现新区域。
+          updateWhenIdle={isTouchFirstInput}
           keepBuffer={6}
         />
         
-        <MapLongPressHandler onLongPress={handleLongPress} isPreviewMode={!isUIVisible} />
+        <MapLongPressHandler
+          onLongPress={handleLongPress}
+          onLongPressRelease={handleLongPressRelease}
+          onLongPressCancel={handleLongPressCancel}
+          isPreviewMode={!isUIVisible}
+        />
+
+        {introNote?.coords ? (
+          <NoteMarker
+            note={introNote as Note}
+            position={[introNote.coords.lat, introNote.coords.lng]}
+            pinSize={pinSize}
+            themeColor={themeColor}
+            zIndexOffset={10000}
+            motion={introNoteMotion}
+            interactive={false}
+            onClick={() => {}}
+          />
+        ) : null}
 
         {pendingPlaceNote && (
           <Marker
@@ -1708,6 +1966,7 @@ export const MapView: React.FC<MapViewProps> = ({
           isPreviewMode={!isUIVisible}
           onMarkerDragEnd={handleMarkerDragEnd}
           onMarkerDrag={handleMarkerDrag}
+          deletingNoteIds={deletingNoteIds}
         />
 
         {/* Import preview markers */}
@@ -1954,8 +2213,9 @@ export const MapView: React.FC<MapViewProps> = ({
           isOpen={isEditorOpen}
           onClose={closeEditor}
           onSave={handleSaveNote}
-          onDelete={onDeleteNote}
+          onDelete={handleDeleteNoteWithExit}
           initialNote={editingNote || {}}
+          isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
           onSwitchToBoardView={(coords) => onSwitchToBoardView(coords, mapInstance)}
           themeColor={themeColor}
           panelChromeStyle={mapChromeContentSurface}

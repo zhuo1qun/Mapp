@@ -33,16 +33,15 @@ export default defineConfig(({ mode }) => {
             cleanupOutdatedCaches: true,
             runtimeCaching: [
               {
-                // OSM + Esri are the keyless raster sources used by the map. Return the
-                // last tile immediately, then refresh it in the background to prevent
-                // white gaps while keeping long-lived maps current.
+                // 底图变化频率远低于用户的平移/缩放频率。短期 Cache First 能让已
+                // 访问区域不再与当前视口争抢重验证请求；过期后才向图源取新版本。
                 urlPattern: /^https:\/(?:\/.*\.tile\.openstreetmap\.org|\/server\.arcgisonline\.com\/ArcGIS\/rest\/services)\/.*/i,
-                handler: 'StaleWhileRevalidate',
+                handler: 'CacheFirst',
                 options: {
                   cacheName: 'map-tiles',
                   expiration: {
                     maxEntries: 800,
-                    maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                    maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
                   },
                   cacheableResponse: {
                     statuses: [0, 200],
