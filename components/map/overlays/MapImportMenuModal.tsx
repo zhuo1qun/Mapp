@@ -3,6 +3,7 @@ import { FileJson, Image as ImageIcon, Plus } from 'lucide-react';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 import { ChromeMenuItem } from '../../ui/ChromeMenuItem';
 import { ChromeMenuShell } from '../../ui/ChromeMenuShell';
+import { ChromePresence } from '../../ui/ChromeSheetPresence';
 
 type Props = {
   open: boolean;
@@ -27,15 +28,16 @@ export const MapImportMenuModal: React.FC<Props> = ({
   onImportCamera,
   cameraAvailable
 }) => {
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[var(--z-map-modal)] flex items-end justify-center p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="导入内容">
-      <button type="button" className="fixed inset-0 bg-black/20 backdrop-blur-[2px]" aria-label="关闭导入菜单" onClick={onClose} />
-      <ChromeMenuShell
-        appearance={chromeAppearance}
-        className="relative z-10 w-full max-w-md rounded-2xl py-1.5 animate-in slide-in-from-bottom-4 fade-in sm:w-48 sm:rounded-xl sm:py-1 sm:zoom-in-95"
-        style={chromeSurfaceStyle}
-      >
+    <ChromePresence open={open} kind="sheet">
+      {(phase) => (
+        <div className={`fixed inset-0 z-[var(--z-map-modal)] flex items-end justify-center p-2 sm:items-center sm:p-4 chrome-dialog-backdrop-${phase}`} role="dialog" aria-modal="true" aria-label="导入内容">
+          <button type="button" className="fixed inset-0 bg-black/20 backdrop-blur-[2px]" aria-label="关闭导入菜单" onClick={onClose} />
+          <ChromeMenuShell
+            appearance={chromeAppearance}
+            className={`relative z-10 w-full max-w-md rounded-2xl py-1.5 chrome-responsive-sheet-${phase} sm:w-48 sm:rounded-xl sm:py-1`}
+            style={chromeSurfaceStyle}
+          >
         <div className="px-3 pb-1 pt-2 text-xs font-bold text-gray-500 sm:hidden">导入</div>
         <ChromeMenuItem
           icon={<ImageIcon size={16} />}
@@ -77,7 +79,9 @@ export const MapImportMenuModal: React.FC<Props> = ({
             <span>Camera requires HTTPS</span>
           </div>
         )}
-      </ChromeMenuShell>
-    </div>
+          </ChromeMenuShell>
+        </div>
+      )}
+    </ChromePresence>
   );
 };

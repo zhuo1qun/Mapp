@@ -13,7 +13,7 @@ function createNoteIcon(
   count: number | undefined,
   showTextLabels: boolean | undefined,
   pinSize: number | undefined,
-  motion: 'enter' | 'exit' | undefined
+  motion: 'enter' | 'settle' | 'exit' | undefined
 ): L.DivIcon {
   const isFavorite = note.isFavorite === true;
   const mappedPinSize = pinSize ? mapPinSize(pinSize) : 1.0;
@@ -88,7 +88,7 @@ interface NoteMarkerProps {
   // 拖拽过程中更新坐标（用于避免回弹）
   onDrag?: (e: any) => void;
   /** 新建 / 删除时的锚点动效，外层动画不干扰图钉自身的旋转。 */
-  motion?: 'enter' | 'exit';
+  motion?: 'enter' | 'settle' | 'exit';
   interactive?: boolean;
 }
 

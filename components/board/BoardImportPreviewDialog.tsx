@@ -2,6 +2,7 @@ import React, { CSSProperties } from 'react';
 import { Check, X } from 'lucide-react';
 import { mapChromeSurfaceStyle } from '../../utils/map/mapChromeStyle';
 import { ChromeDialogSurface } from '../ui/ChromeDialogSurface';
+import { ChromePresence } from '../ui/ChromeSheetPresence';
 
 export type BoardImportPreviewItem = {
   file: File;
@@ -50,15 +51,15 @@ export const BoardImportPreviewDialog: React.FC<BoardImportPreviewDialogProps> =
   onCancel,
   onConfirm
 }) => {
-  if (!open) return null;
-
   const importable = importPreview.filter((p) => !p.error && !p.isDuplicate).length;
   const duplicate = importPreview.filter((p) => !p.error && p.isDuplicate).length;
   const failed = importPreview.filter((p) => p.error).length;
 
   return (
-    <div
-      className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50"
+    <ChromePresence open={open} kind="dialog">
+      {(phase) => (
+        <div
+      className={`fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 chrome-dialog-backdrop-${phase}`}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -72,7 +73,7 @@ export const BoardImportPreviewDialog: React.FC<BoardImportPreviewDialogProps> =
       }}
     >
       <ChromeDialogSurface
-        className="mx-4 flex max-h-[80vh] max-w-2xl flex-col overflow-hidden"
+        className={`mx-4 flex max-h-[80vh] max-w-2xl flex-col overflow-hidden chrome-dialog-${phase}`}
         style={panelChromeStyle ?? mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
         onClick={(e) => {
           e.preventDefault();
@@ -183,6 +184,8 @@ export const BoardImportPreviewDialog: React.FC<BoardImportPreviewDialogProps> =
           </button>
         </div>
       </ChromeDialogSurface>
-    </div>
+        </div>
+      )}
+    </ChromePresence>
   );
 };

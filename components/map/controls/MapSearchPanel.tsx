@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Copy, Loader2 } from 'lucide-react';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { ChromeSegmentedControl } from '../../ui/ChromeSegmentedControl';
+import { ChromePresence } from '../../ui/ChromeSheetPresence';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
@@ -62,6 +63,11 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuTop = useChromeMenuTop(isOpen, wrapRef, 8);
+  const [lastMenuTop, setLastMenuTop] = useState<number | null>(null);
+  useEffect(() => {
+    if (menuTop != null) setLastMenuTop(menuTop);
+  }, [menuTop]);
+  const panelTop = menuTop ?? lastMenuTop;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -76,19 +82,20 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
     return () => document.removeEventListener('pointerdown', onPointerDownCapture, true);
   }, [isOpen, onClose]);
 
-  const panel =
-    isOpen && menuTop != null ? (
-      <>
+  const panel = panelTop != null ? (
+      <ChromePresence open={isOpen} kind="sheet">
+        {(phase) => (
+          <>
         <button
           type="button"
-          className="fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden"
+          className={`fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden chrome-dialog-backdrop-${phase}`}
           aria-label="关闭检索"
           onClick={onClose}
         />
         <div
           data-map-search-chrome-panel
-          className={`map-chrome-content-${menuChromeAppearance} ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-3 animate-in fade-in slide-in-from-top-4 ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
-          style={{ top: menuTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
+          className={`map-chrome-content-${menuChromeAppearance} ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-3 chrome-responsive-anchored-${phase} ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
+          style={{ top: panelTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
@@ -199,7 +206,9 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
           </div>
         )}
         </div>
-      </>
+          </>
+        )}
+      </ChromePresence>
     ) : null;
 
   return (

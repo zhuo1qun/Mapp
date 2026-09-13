@@ -2040,9 +2040,9 @@ export const GraphView: React.FC<GraphViewProps> = ({
         onDeleteGraphPreset={handleDeleteGraphPreset}
       />
 
-      {graphEditorOpen && editorInitialNote && (
+      {
         <NoteEditor
-          isOpen
+          isOpen={graphEditorOpen && !!editorInitialNote}
           onClose={closeGraphNoteEditor}
           initialNote={editorInitialNote}
           onSave={(updated) => {
@@ -2074,9 +2074,10 @@ export const GraphView: React.FC<GraphViewProps> = ({
             focusNoteOnGraphFromPanel(noteId);
           }}
           themeColor={themeColor}
-          panelChromeStyle={panelChromeStyle}
+          mapUiChromeOpacity={mapUiChromeOpacity}
+          mapUiChromeBlurPx={mapUiChromeBlurPx}
         />
-      )}
+      }
 
       {showConnectionPanel && isGraphToolbarEditMode && onUpdateConnections && isUIVisible && (
         <GraphConnectionPanel

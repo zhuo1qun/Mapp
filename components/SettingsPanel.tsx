@@ -9,10 +9,12 @@ import { ThemeColorPicker } from './ThemeColorPicker';
 import { HelpHint } from './ui/HelpHint';
 import { SettingsCompactSlider } from './ui/SettingsCompactSlider';
 import { SettingsToggleSwitch } from './ui/SettingsToggleSwitch';
+import { ChromePresence } from './ui/ChromeSheetPresence';
 import { chromePanelFieldClass } from './ui/chromePanelField';
 import {
   mapChromeAppearance,
   mapChromeContentStyle,
+  mapChromeModalBackdropStyle,
   mapChromeSurfaceStyle
 } from '../utils/map/mapChromeStyle';
 import { PORTAL_TOOLTIP_Z } from './ui/PortalTooltip';
@@ -117,7 +119,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   useLayoutEffect(() => {
     if (!isOpen) {
-      setPanelRect(null);
       return;
     }
     const update = () => {
@@ -141,7 +142,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   useLayoutEffect(() => {
     if (!mapBgMenuOpen || !mapBgTriggerRef.current) {
-      setMapBgMenuRect(null);
       return;
     }
     const update = () => {
@@ -203,7 +203,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [mapBgMenuOpen]);
 
-  if (!isOpen || typeof document === 'undefined' || !panelRect) return null;
+  if (typeof document === 'undefined' || !panelRect) return null;
 
   const handleMapStyleSelect = (styleId: string) => {
     onMapStyleChange(styleId);
@@ -222,10 +222,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       : mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
 
   return createPortal(
+    <ChromePresence open={isOpen} kind={isCompactViewport ? 'sheet' : 'menu'}>
+      {(phase) => (
     <>
       <button
         type="button"
-        className="fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden"
+        className={`fixed inset-0 z-[var(--z-map-sheet-backdrop)] sm:hidden chrome-dialog-backdrop-${phase}`}
+        style={mapChromeModalBackdropStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
         aria-label="关闭设置"
         onClick={onClose}
       />
@@ -236,7 +239,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         role="dialog"
         aria-label="设置"
         className={`map-chrome-content-${settingsAppearance} ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-left overflow-hidden rounded-xl border border-gray-100/80 shadow-xl flex flex-col ${
-          isCompactViewport ? 'chrome-bottom-sheet-shift-in' : 'chrome-anchored-panel-shift-in'
+          `chrome-responsive-anchored-${phase}`
         }`}
         style={{
           top: panelRect.top,
@@ -269,11 +272,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   />
                 </button>
               </div>
-              {mapBgMenuOpen && isCompactViewport ? (
+              {isCompactViewport ? (
+                <ChromePresence open={mapBgMenuOpen} kind="menu">
+                  {(menuPhase) => (
                 <div
                   ref={mapBgMenuRef}
                   role="listbox"
-                  className="chrome-content-shift-in overflow-hidden rounded-xl border border-gray-200 py-1"
+                  className={`overflow-hidden rounded-xl border border-gray-200 py-1 chrome-menu-${menuPhase}`}
                 >
                   {MAP_STYLE_OPTIONS.map((style) => (
                     <button
@@ -297,6 +302,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     </button>
                   ))}
                 </div>
+                  )}
+                </ChromePresence>
               ) : null}
               {showTextLabels !== undefined && onShowTextLabelsChange ? (
                 <SettingsToggleSwitch
@@ -429,26 +436,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </div>
       </div>
 
-      {showThemeColorPicker && (
-        <ThemeColorPicker
-          isOpen={showThemeColorPicker}
-          onClose={() => setShowThemeColorPicker(false)}
-          currentColor={themeColor}
-          panelChromeStyle={settingsCardChrome}
-          onColorChange={(c) => {
-            onThemeColorChange?.(c);
-          }}
-        />
-      )}
+      <ThemeColorPicker
+        isOpen={showThemeColorPicker}
+        onClose={() => setShowThemeColorPicker(false)}
+        currentColor={themeColor}
+        panelChromeStyle={settingsCardChrome}
+        onColorChange={(c) => {
+          onThemeColorChange?.(c);
+        }}
+      />
 
-      {mapBgMenuOpen &&
+      {mapBgMenuRect &&
         !isCompactViewport &&
-        mapBgMenuRect &&
         createPortal(
+          <ChromePresence open={mapBgMenuOpen} kind="menu">
+            {(menuPhase) => (
           <div
             ref={mapBgMenuRef}
             role="listbox"
-            className={`map-chrome-content-${settingsAppearance} chrome-content-shift-in fixed overflow-hidden rounded-lg border border-gray-200 py-1 shadow-xl theme-surface-scrollbar`}
+            className={`map-chrome-content-${settingsAppearance} chrome-menu-${menuPhase} fixed overflow-hidden rounded-lg border border-gray-200 py-1 shadow-xl theme-surface-scrollbar`}
             style={{
               ...settingsCardChrome,
               zIndex: PORTAL_TOOLTIP_Z,
@@ -480,10 +486,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 {style.name}
               </button>
             ))}
-          </div>,
+          </div>
+            )}
+          </ChromePresence>,
           document.body
         )}
-    </>,
+    </>
+      )}
+    </ChromePresence>,
     document.body
   );
 };

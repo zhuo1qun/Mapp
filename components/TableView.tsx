@@ -585,10 +585,10 @@ export const TableView: React.FC<TableViewProps> = ({
         />
       )}
 
-      {editorNoteId && (
+      {
         <NoteEditor
           initialNote={project.notes.find(n => n.id === editorNoteId)}
-          isOpen={true}
+          isOpen={!!editorNoteId}
           onClose={() => setEditorNoteId(null)}
           onSave={(updatedNote) => {
             if (editorNoteId) {
@@ -603,9 +603,10 @@ export const TableView: React.FC<TableViewProps> = ({
           onSwitchToMapView={onSwitchToMapView}
           onSwitchToGraphView={onSwitchToGraphView}
           themeColor={themeColor}
-          panelChromeStyle={panelChromeStyle}
+          mapUiChromeOpacity={mapUiChromeOpacity}
+          mapUiChromeBlurPx={mapUiChromeBlurPx}
         />
-      )}
+      }
       </div>
 
       {edgesTableEnabled ? (
@@ -651,4 +652,3 @@ export const TableView: React.FC<TableViewProps> = ({
     </div>
   );
 };
-

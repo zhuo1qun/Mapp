@@ -317,7 +317,9 @@ const MapTileDirectionalPrefetch: React.FC<{
 
 /** 空项目自动定位按项目只发起一次，切视图卸载 MapView 后不重跑。 */
 const emptyProjectLocateStarted = new Set<string>();
-const MAP_NOTE_INTRO_MS = 560;
+// 长按期间只完成图钉的放大；松手后才进入回缩收稳，避免两段动画抢在一起。
+const MAP_NOTE_GROW_MS = 320;
+const MAP_NOTE_SETTLE_MS = 240;
 const MAP_NOTE_INTRO_DISMISS_DELAY_MS = 560;
 const MAP_NOTE_EXIT_MS = 220;
 
@@ -429,7 +431,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const [editingNote, setEditingNote] = useState<Partial<Note> | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
-  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'exit'>('enter');
+  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'settle' | 'exit'>('enter');
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const introTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const introDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -593,6 +595,13 @@ export const MapView: React.FC<MapViewProps> = ({
   const { mapInstance, mapRefCallback } = useMapInitialization();
   const mapInstanceRef = useRef(mapInstance);
   mapInstanceRef.current = mapInstance;
+  const noteEditorAnimationAnchor = useMemo(() => {
+    const coords = editingNote?.coords;
+    if (!coords || !mapInstance) return undefined;
+    const mapRect = mapInstance.getContainer().getBoundingClientRect();
+    const point = mapInstance.latLngToContainerPoint([coords.lat, coords.lng]);
+    return { x: mapRect.left + point.x, y: mapRect.top + point.y };
+  }, [editingNote?.coords?.lat, editingNote?.coords?.lng, mapInstance]);
   const navigateToCoordsRef = useRef(navigateToCoords);
   navigateToCoordsRef.current = navigateToCoords;
   const mapViewMountedRef = useRef(true);
@@ -1127,13 +1136,16 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const openNewNoteEditorAfterIntro = useCallback(
     (note: Partial<Note>, elapsedMs = 0) => {
-      const remainingIntroMs = Math.max(140, MAP_NOTE_INTRO_MS - elapsedMs);
+      const remainingGrowMs = Math.max(0, MAP_NOTE_GROW_MS - elapsedMs);
       if (introTimerRef.current) clearTimeout(introTimerRef.current);
       introTimerRef.current = setTimeout(() => {
-        introTimerRef.current = null;
-        setIsEditorOpen(true);
-        onToggleEditor(true);
-      }, remainingIntroMs);
+        setIntroNoteMotion('settle');
+        introTimerRef.current = setTimeout(() => {
+          introTimerRef.current = null;
+          setIsEditorOpen(true);
+          onToggleEditor(true);
+        }, MAP_NOTE_SETTLE_MS);
+      }, remainingGrowMs);
     },
     [onToggleEditor]
   );
@@ -1391,13 +1403,18 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  const closeEditor = useCallback(() => {
+  const closeEditor = useCallback((reason: 'saved' | 'discarded' = 'discarded') => {
     setIsEditorOpen(false);
     onToggleEditor(false);
     if (!introNote) return;
 
     if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
     if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
+    if (reason === 'saved') {
+      // 已保存的新便签直接切换到项目中的正式图钉，不播放取消/删除退场。
+      setIntroNote(null);
+      return;
+    }
     const introNoteId = introNote.id;
     introDismissTimerRef.current = setTimeout(() => {
       introDismissTimerRef.current = null;
@@ -2208,20 +2225,23 @@ export const MapView: React.FC<MapViewProps> = ({
         />
       )}
       
-      {isEditorOpen && (
+      {
         <NoteEditor 
           isOpen={isEditorOpen}
           onClose={closeEditor}
+          onSaveClose={() => closeEditor('saved')}
           onSave={handleSaveNote}
           onDelete={handleDeleteNoteWithExit}
           initialNote={editingNote || {}}
+          animationAnchor={noteEditorAnimationAnchor}
           isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
           onSwitchToBoardView={(coords) => onSwitchToBoardView(coords, mapInstance)}
           themeColor={themeColor}
-          panelChromeStyle={mapChromeContentSurface}
+          mapUiChromeOpacity={mapUiChromeOpacity}
+          mapUiChromeBlurPx={mapUiChromeBlurPx}
           chromeAppearance={mapChromeTone}
         />
-      )}
+      }
 
       {/* Tab 预览没有左上按钮组，继续使用独立 fixed 详情卡。 */}
       {!isUIVisible && (hoveredNote ?? selectedNote) && (

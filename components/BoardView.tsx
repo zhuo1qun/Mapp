@@ -495,6 +495,16 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   });
   const transformRef = useRef(transform);
   transformRef.current = transform;
+
+  const noteEditorAnimationAnchor = useMemo(() => {
+    if (!editingNote || editingNote.boardX == null || editingNote.boardY == null || !containerRef.current) return undefined;
+    const rect = containerRef.current.getBoundingClientRect();
+    const { width, height } = boardNoteDimensions(editingNote);
+    return {
+      x: rect.left + transform.x + (editingNote.boardX + width / 2) * transform.scale,
+      y: rect.top + transform.y + (editingNote.boardY + height / 2) * transform.scale,
+    };
+  }, [editingNote?.id, editingNote?.boardX, editingNote?.boardY, transform.x, transform.y, transform.scale]);
   const [isPanning, setIsPanning] = useState(false);
   const isPanningRef = useRef(false);
   isPanningRef.current = isPanning;
@@ -1784,7 +1794,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   }, [navigateToCoords, projectId]); // Significant reduction in dependencies
 
-  const closeEditor = () => {
+  const closeEditor = (reason: 'saved' | 'discarded' = 'discarded') => {
     if (introTimerRef.current !== null) {
       window.clearTimeout(introTimerRef.current);
       introTimerRef.current = null;
@@ -1793,6 +1803,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     if (introNote) {
       if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
       if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
+      if (reason === 'saved') {
+        // 保存后的临时卡应由已写入项目的正式卡直接接管，不走删除退场。
+        setIntroNote(null);
+      } else {
       const introNoteId = introNote.id;
       introDismissTimerRef.current = window.setTimeout(() => {
         introDismissTimerRef.current = null;
@@ -1802,6 +1816,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           setIntroNote((current) => (current?.id === introNoteId ? null : current));
         }, BOARD_NOTE_EXIT_MS);
       }, BOARD_NOTE_INTRO_DISMISS_DELAY_MS);
+      }
     }
     // Delay clearing editingNote to ensure any pending state updates are processed
     setTimeout(() => {
@@ -5074,11 +5089,14 @@ const createNoteAtCenter = () => {
             }}
         />
 
-        {editingNote && !isIntroPending && (
+        {
           <NoteEditor 
-              isOpen={!!editingNote}
+              isOpen={!!editingNote && !isIntroPending}
               onClose={closeEditor}
+              onSaveClose={() => closeEditor('saved')}
+              animationAnchor={noteEditorAnimationAnchor}
               initialNote={(() => {
+                if (!editingNote) return {};
                 const fromProject = notes.find((n) => n.id === editingNote.id);
                 if (!fromProject) return editingNote;
                 // editingNote 可能已 hydrate 出展示 URL；项目态仍是 img-*，合并以免编辑器重解析失败/卡加载
@@ -5100,7 +5118,8 @@ const createNoteAtCenter = () => {
               onSwitchToMapView={onSwitchToMapView}
               onSwitchToGraphView={onSwitchToGraphView}
               themeColor={themeColor}
-              panelChromeStyle={panelChromeStyle}
+              mapUiChromeOpacity={mapUiChromeOpacity}
+              mapUiChromeBlurPx={mapUiChromeBlurPx}
               onSave={(updated) => {
                   // Text variant removed
                   if (updated.id && notes.some(n => n.id === updated.id)) {
@@ -5143,7 +5162,7 @@ const createNoteAtCenter = () => {
                   }
               }}
           />
-        )}
+        }
 
         <BoardImportPreviewDialog
           open={showImportDialog}

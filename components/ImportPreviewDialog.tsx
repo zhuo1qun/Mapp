@@ -3,6 +3,7 @@ import { X, Check } from 'lucide-react';
 import { ImportPreview } from './hooks/useImageImport';
 import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY, mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
 import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
+import { ChromePresence } from './ui/ChromeSheetPresence';
 
 interface ImportPreviewDialogProps {
   isOpen: boolean;
@@ -25,8 +26,6 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
   showCloseButton = false,
   showCoordinates = true
 }) => {
-  if (!isOpen) return null;
-
   const cardChrome =
     panelChromeStyle ??
     mapChromeSurfaceStyle(DEFAULT_MAP_UI_CHROME_OPACITY, DEFAULT_MAP_UI_CHROME_BLUR_PX);
@@ -36,9 +35,11 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
   const errorCount = importPreview.filter(p => p.error).length;
 
   return (
-    <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50">
+    <ChromePresence open={isOpen} kind="dialog">
+      {(phase) => (
+        <div className={`fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 chrome-dialog-backdrop-${phase}`}>
       <ChromeDialogSurface
-        className="max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col"
+        className={`max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col chrome-dialog-${phase}`}
         style={cardChrome}
       >
         {/* Header */}
@@ -142,6 +143,8 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
           </button>
         </div>
       </ChromeDialogSurface>
-    </div>
+        </div>
+      )}
+    </ChromePresence>
   );
 };

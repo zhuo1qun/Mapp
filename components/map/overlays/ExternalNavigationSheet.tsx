@@ -7,6 +7,7 @@ import {
   type ExternalMapAppId
 } from '../../../utils/map/openExternalNavigation';
 import { MODAL_BACKDROP_MASK_STYLE, type MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
+import { ChromePresence } from '../../ui/ChromeSheetPresence';
 
 type Props = {
   open: boolean;
@@ -34,7 +35,7 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
   panelChromeStyle,
   chromeAppearance = 'light'
 }) => {
-  if (!open || typeof document === 'undefined') return null;
+  if (typeof document === 'undefined') return null;
 
   const apps = listExternalMapApps();
 
@@ -44,13 +45,15 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
   };
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={MODAL_BACKDROP_MASK_STYLE}
-      role="dialog"
-      aria-modal="true"
-      aria-label="选择地图应用"
-    >
+    <ChromePresence open={open} kind="sheet">
+      {(phase) => (
+        <div
+          className={`fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4 chrome-dialog-backdrop-${phase}`}
+          style={MODAL_BACKDROP_MASK_STYLE}
+          role="dialog"
+          aria-modal="true"
+          aria-label="选择地图应用"
+        >
       <button
         type="button"
         className="absolute inset-0 border-0 cursor-default"
@@ -58,7 +61,7 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
         onClick={onClose}
       />
       <div
-        className={`map-chrome-content-${chromeAppearance} relative w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-100/80 overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 fade-in duration-200 ${
+        className={`map-chrome-content-${chromeAppearance} relative w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-100/80 overflow-hidden chrome-responsive-sheet-${phase} ${
           panelChromeStyle ? '' : 'bg-white'
         }`}
         style={panelChromeStyle}
@@ -108,7 +111,9 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
           </button>
         </div>
       </div>
-    </div>,
+        </div>
+      )}
+    </ChromePresence>,
     document.body
   );
 };

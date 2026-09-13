@@ -7,7 +7,7 @@ import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon } from 'luc
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { ChromeMenuItem } from '../ui/ChromeMenuItem';
 import { ChromeMenuShell } from '../ui/ChromeMenuShell';
-import { ChromeSheetPresence } from '../ui/ChromeSheetPresence';
+import { ChromePresence, ChromeSheetPresence } from '../ui/ChromeSheetPresence';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface MapControlsProps {
@@ -280,37 +280,39 @@ export const MapControls: React.FC<MapControlsProps> = ({
       </div>
 
       {/* 菜单左缘与顶栏左侧（本控件左缘）对齐，而非与定位按钮齐平 */}
-      {showLocateMenu && !isCompactViewport && (
-        <ChromeMenuShell
-          data-locate-menu
-          appearance={menuChromeAppearance}
-          className={`absolute left-0 top-full z-[var(--z-map-anchored-panel)] mt-2 w-48 ${neutralStyle ? '' : 'bg-white'}`}
-          style={menuChromeSurfaceStyle ?? neutralStyle}
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerMove={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onMouseMove={(e) => e.stopPropagation()}
-        >
-          {locateMenuItems}
-        </ChromeMenuShell>
-      )}
-
-      {showCreateMenu && !isCompactViewport && (
-        <ChromeMenuShell
-          data-create-node-menu
-          appearance={menuChromeAppearance}
-          className={`absolute left-0 top-full z-[var(--z-map-anchored-panel)] mt-2 w-52 ${neutralStyle ? '' : 'bg-white'}`}
-          style={menuChromeSurfaceStyle ?? neutralStyle}
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerMove={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onMouseMove={(e) => e.stopPropagation()}
-        >
-          {createMenuItems}
-        </ChromeMenuShell>
-      )}
+      <ChromePresence open={(showLocateMenu || showCreateMenu) && !isCompactViewport} kind="menu">
+        {(phase) =>
+          renderedCompactMenuKind === 'locate' ? (
+            <ChromeMenuShell
+              data-locate-menu
+              appearance={menuChromeAppearance}
+              className={`absolute left-0 top-full z-[var(--z-map-anchored-panel)] mt-2 w-48 chrome-menu-${phase} ${neutralStyle ? '' : 'bg-white'}`}
+              style={menuChromeSurfaceStyle ?? neutralStyle}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerMove={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseMove={(e) => e.stopPropagation()}
+            >
+              {locateMenuItems}
+            </ChromeMenuShell>
+          ) : renderedCompactMenuKind === 'create' ? (
+            <ChromeMenuShell
+              data-create-node-menu
+              appearance={menuChromeAppearance}
+              className={`absolute left-0 top-full z-[var(--z-map-anchored-panel)] mt-2 w-52 chrome-menu-${phase} ${neutralStyle ? '' : 'bg-white'}`}
+              style={menuChromeSurfaceStyle ?? neutralStyle}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerMove={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseMove={(e) => e.stopPropagation()}
+            >
+              {createMenuItems}
+            </ChromeMenuShell>
+          ) : null
+        }
+      </ChromePresence>
     </div>
     {isCompactViewport && typeof document !== 'undefined'
       ? createPortal(

@@ -3,7 +3,13 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { get, set } from 'idb-keyval';
 import { getThemeChromeForegroundHex } from '../utils/theme/themeChrome';
-import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY, mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
+import {
+  DEFAULT_MAP_UI_CHROME_BLUR_PX,
+  DEFAULT_MAP_UI_CHROME_OPACITY,
+  mapChromeModalBackdropFromSurfaceStyle,
+  mapChromeSurfaceStyle
+} from '../utils/map/mapChromeStyle';
+import { ChromePresence } from './ui/ChromeSheetPresence';
 
 interface ThemeColorPickerProps {
   isOpen: boolean;
@@ -243,16 +249,18 @@ export const ThemeColorPicker: React.FC<ThemeColorPickerProps> = ({
   const cardChrome =
     panelChromeStyle ??
     mapChromeSurfaceStyle(DEFAULT_MAP_UI_CHROME_OPACITY, DEFAULT_MAP_UI_CHROME_BLUR_PX);
-
-  if (!isOpen) return null;
+  const modalBackdropStyle = mapChromeModalBackdropFromSurfaceStyle(cardChrome);
 
   const content = (
+    <ChromePresence open={isOpen} kind="dialog">
+      {(phase) => (
     <div
       className={`km-theme-color-picker ${
         isInline
           ? 'w-full'
-          : 'fixed inset-0 z-[9000] min-h-[100dvh] min-h-screen w-full bg-black/50 flex items-center justify-center p-4'
+          : `fixed inset-0 z-[9000] min-h-[100dvh] min-h-screen w-full flex items-center justify-center p-4 chrome-dialog-backdrop-${phase}`
       }`}
+      style={isInline ? undefined : modalBackdropStyle}
     >
       <style>{`
         .km-theme-color-picker input[type="range"] {
@@ -309,7 +317,7 @@ export const ThemeColorPicker: React.FC<ThemeColorPickerProps> = ({
       `}</style>
       <div
         className={`rounded-xl shadow-2xl w-full ${
-          isInline ? 'max-w-none' : 'max-w-md animate-in zoom-in-95'
+          isInline ? 'max-w-none' : `max-w-md chrome-dialog-${phase}`
         } p-4 border border-gray-100/80`}
         style={cardChrome}
       >
@@ -426,6 +434,8 @@ export const ThemeColorPicker: React.FC<ThemeColorPickerProps> = ({
         </div>
       </div>
     </div>
+      )}
+    </ChromePresence>
   );
 
   // modal 模式强制挂到 body，避免父级 transform/stacking context 影响 z-index

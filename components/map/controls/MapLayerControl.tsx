@@ -5,6 +5,7 @@ import type { Frame } from '../../../types';
 import type { GraphLayerGroupStandard } from '../../../utils/graph/graphRuntimeCore';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { LayerToolbarIcon } from '../../ui/LayerToolbarIcon';
+import { ChromePresence } from '../../ui/ChromeSheetPresence';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
@@ -60,22 +61,28 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
   const ch = chromeSurfaceStyle;
   const menuCh = menuChromeSurfaceStyle ?? ch;
   const menuTop = useChromeMenuTop(showPanel, frameLayerRef, 8);
+  const [lastMenuTop, setLastMenuTop] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (menuTop != null) setLastMenuTop(menuTop);
+  }, [menuTop]);
+  const panelTop = menuTop ?? lastMenuTop;
   const edgeCls =
     dropdownAlign === 'start' ? 'ui-chrome-menu-page-left' : 'ui-chrome-menu-page-right';
 
-  const panel =
-    showPanel && menuTop != null ? (
-      <>
+  const panel = panelTop != null ? (
+      <ChromePresence open={showPanel} kind="sheet">
+        {(phase) => (
+          <>
         <button
           type="button"
-          className="fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden"
+          className={`fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden chrome-dialog-backdrop-${phase}`}
           aria-label="关闭图层"
           onClick={onTogglePanel}
         />
         <div
           data-map-layer-chrome-panel
-          className={`map-layer-chrome-panel ui-compact-bottom-sheet map-chrome-content-${menuChromeAppearance} fixed z-[var(--z-map-anchored-panel)] ${edgeCls} flex gap-2 items-start pointer-events-none`}
-          style={{ top: menuTop }}
+          className={`map-layer-chrome-panel ui-compact-bottom-sheet map-chrome-content-${menuChromeAppearance} fixed z-[var(--z-map-anchored-panel)] ${edgeCls} flex gap-2 items-start pointer-events-none chrome-responsive-anchored-${phase}`}
+          style={{ top: panelTop }}
         >
         {unifiedNotesLayerSlot ? (
           <div
@@ -88,7 +95,7 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
         ) : null}
         {activeFrame && (
           <div
-            className={`w-72 sm:w-80 rounded-xl shadow-xl border border-gray-100 flex flex-col pointer-events-auto overflow-hidden animate-in fade-in slide-in-from-right-4 ${menuCh ? '' : 'bg-white'}`}
+            className={`w-72 sm:w-80 rounded-xl shadow-xl border border-gray-100 flex flex-col pointer-events-auto overflow-hidden ${menuCh ? '' : 'bg-white'}`}
             style={{ maxHeight: '60vh', ...menuCh }}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
@@ -140,7 +147,9 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
           </div>
         )}
         </div>
-      </>
+          </>
+        )}
+      </ChromePresence>
     ) : null;
 
   return (

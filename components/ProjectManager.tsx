@@ -22,11 +22,16 @@ import {
 } from '../constants';
 import { ThemeColorPicker } from './ThemeColorPicker';
 import { AppearanceSettingsBlock } from './AppearanceSettingsBlock';
-import { mapChromeSurfaceStyle, mapChromeHoverBackground } from '../utils/map/mapChromeStyle';
+import {
+  mapChromeSurfaceStyle,
+  mapChromeHoverBackground,
+  mapChromeModalBackdropStyle
+} from '../utils/map/mapChromeStyle';
 import { MotionDiv } from './ui/MotionDiv';
 import { ChromeMenuItem } from './ui/ChromeMenuItem';
 import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
 import { ChromeMenuShell } from './ui/ChromeMenuShell';
+import { ChromePresence } from './ui/ChromeSheetPresence';
 
 /** 项目「更多」菜单 portal：高于侧栏与覆盖层，低于删除项目阻断层 10000 */
 const PM_PROJECT_MORE_MENU_Z = 9901;
@@ -517,6 +522,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   
   const themeColorDark = getDarkerColor(themeColor);
   const mapChromeSurface = mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
+  const mapChromeModalBackdrop = mapChromeModalBackdropStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
   const mapChromeHoverBg = mapChromeHoverBackground(mapUiChromeOpacity);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -1483,19 +1489,21 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               ) : null}
             </div>
           ) : null}
-          {showHomeSettings &&
-            typeof document !== 'undefined' &&
+          {typeof document !== 'undefined' &&
             createPortal(
-              <>
+              <ChromePresence open={showHomeSettings} kind="dialog">
+                {(phase) => (
+                  <>
                 <div
-                  className="fixed inset-0 z-[5000] bg-black/50 min-h-[100dvh] min-h-screen w-full"
+                  className={`fixed inset-0 z-[5000] min-h-[100dvh] min-h-screen w-full chrome-dialog-backdrop-${phase}`}
+                  style={mapChromeModalBackdrop}
                   onClick={() => setShowHomeSettings(false)}
                   onPointerDown={(e) => e.stopPropagation()}
                   aria-hidden
                 />
                 <div
                   data-allow-context-menu
-                  className="fixed top-1/2 left-3 right-3 z-[5001] mx-auto w-full max-w-md sm:max-w-lg sm:left-4 sm:right-4 -translate-y-1/2 transform"
+                  className={`fixed top-1/2 left-3 right-3 z-[5001] mx-auto w-full max-w-md sm:max-w-lg sm:left-4 sm:right-4 -translate-y-1/2 transform chrome-dialog-${phase}`}
                 >
                   <div
                     className="rounded-xl shadow-2xl flex flex-col max-h-[min(85dvh,85vh)] overflow-hidden border border-gray-100/80"
@@ -1538,7 +1546,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     </div>
                   </div>
                 </div>
-              </>,
+                  </>
+                )}
+              </ChromePresence>,
               document.body
             )}
         </>

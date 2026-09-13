@@ -485,11 +485,11 @@ body {
 }
 
 .chrome-sheet-entering {
-  animation: chrome-sheet-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: chrome-sheet-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .chrome-sheet-exiting {
-  animation: chrome-sheet-exit 180ms ease-in both;
+  animation: chrome-sheet-exit 220ms ease-in both;
   pointer-events: none;
 }
 
@@ -501,11 +501,98 @@ body {
   animation: chrome-sheet-backdrop-exit 160ms ease-in both;
 }
 
+/* 半透明菜单与居中窗口共享对称的出现/退出节奏；关闭时由 ChromePresence
+ * 保持挂载直到动画结束，避免页面直接闪断。 */
+@keyframes chrome-menu-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes chrome-menu-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-3px) scale(0.985); }
+}
+
+@keyframes chrome-dialog-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes chrome-dialog-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(6px) scale(0.96); }
+}
+
+.chrome-menu-entering { animation: chrome-menu-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.chrome-menu-exiting { animation: chrome-menu-exit 180ms ease-in both; pointer-events: none; }
+.chrome-dialog-entering { animation: chrome-dialog-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.chrome-dialog-exiting { animation: chrome-dialog-exit 220ms ease-in both; pointer-events: none; }
+.chrome-dialog-backdrop-entering { animation: chrome-sheet-backdrop-enter 180ms ease-out both; }
+.chrome-dialog-backdrop-exiting { animation: chrome-sheet-backdrop-exit 180ms ease-in both; pointer-events: none; }
+
+/* NoteEditor 的玻璃面不参与缩放；它只负责与普通对话框相同的 backdrop-filter。
+ * 缩放 / 锚点动画落在内部内容层，避免 transform 改变玻璃的合成与模糊表现。 */
+.note-editor-panel--glass-entering { animation: note-editor-glass-enter 220ms ease-out both; }
+.note-editor-panel--glass-exiting { animation: note-editor-glass-exit 180ms ease-in both; }
+@keyframes note-editor-glass-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes note-editor-glass-exit { from { opacity: 1; } to { opacity: 0; } }
+
+.note-editor-motion-content--anchored {
+  will-change: transform, opacity;
+  /* 内容层与面板同尺寸，横轴仍须扣除工作区左 inset 的一半。 */
+  transform-origin:
+    calc(50% + var(--note-editor-anchor-x) - ((100vw + var(--workspace-ui-left-inset, 0px)) / 2))
+    calc(50% + var(--note-editor-anchor-y) - 50dvh);
+}
+.note-editor-motion-content--anchored.note-editor-motion-content--anchored-entering {
+  animation: note-editor-anchor-enter 300ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.note-editor-motion-content--anchored.note-editor-motion-content--anchored-exiting {
+  animation: note-editor-anchor-exit 200ms cubic-bezier(0.55, 0, 0.9, 0.35) both;
+  pointer-events: none;
+}
+@keyframes note-editor-anchor-enter {
+  from { opacity: 0.62; transform: scale(0.07); }
+  72% { opacity: 1; transform: scale(1.018); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes note-editor-anchor-exit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0.58; transform: scale(0.07); }
+}
+
+.chrome-responsive-sheet-entering { animation: chrome-sheet-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.chrome-responsive-sheet-exiting { animation: chrome-sheet-exit 220ms ease-in both; pointer-events: none; }
+
+.chrome-responsive-anchored-entering { animation: chrome-sheet-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.chrome-responsive-anchored-exiting { animation: chrome-sheet-exit 220ms ease-in both; pointer-events: none; }
+
+@media (min-width: 640px) {
+  .chrome-responsive-sheet-entering { animation: chrome-dialog-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .chrome-responsive-sheet-exiting { animation: chrome-dialog-exit 220ms ease-in both; }
+  .chrome-responsive-anchored-entering { animation: chrome-menu-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .chrome-responsive-anchored-exiting { animation: chrome-menu-exit 180ms ease-in both; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chrome-sheet-entering,
   .chrome-sheet-exiting,
   .chrome-sheet-backdrop-entering,
-  .chrome-sheet-backdrop-exiting {
+  .chrome-sheet-backdrop-exiting,
+  .chrome-menu-entering,
+  .chrome-menu-exiting,
+  .chrome-dialog-entering,
+  .chrome-dialog-exiting,
+  .note-editor-panel--glass-entering,
+  .note-editor-panel--glass-exiting,
+  .note-editor-motion-content--anchored.note-editor-motion-content--anchored-entering,
+  .note-editor-motion-content--anchored.note-editor-motion-content--anchored-exiting,
+  .chrome-dialog-backdrop-entering,
+  .chrome-dialog-backdrop-exiting,
+  .chrome-responsive-sheet-entering,
+  .chrome-responsive-sheet-exiting,
+  .chrome-responsive-anchored-entering,
+  .chrome-responsive-anchored-exiting {
     animation-duration: 1ms;
   }
 }
@@ -753,7 +840,12 @@ body {
 }
 
 .mapp-map-pin-motion--enter {
-  animation: mapp-map-pin-enter 560ms cubic-bezier(0.22, 1.45, 0.36, 1) both;
+  animation: mapp-map-pin-enter 320ms cubic-bezier(0.22, 1.15, 0.36, 1) both;
+}
+
+/* 长按时停在放大态；只有松手才进入收缩、收稳阶段。 */
+.mapp-map-pin-motion--settle {
+  animation: mapp-map-pin-settle 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .mapp-map-pin-motion--exit {
@@ -763,8 +855,12 @@ body {
 
 @keyframes mapp-map-pin-enter {
   from { opacity: 0; transform: translateY(18px) scale(0.12); }
-  58% { opacity: 1; transform: translateY(-7px) scale(1.34); }
-  78% { opacity: 1; transform: translateY(2px) scale(0.94); }
+  to { opacity: 1; transform: translateY(-7px) scale(1.34); }
+}
+
+@keyframes mapp-map-pin-settle {
+  from { opacity: 1; transform: translateY(-7px) scale(1.34); }
+  58% { opacity: 1; transform: translateY(2px) scale(0.94); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -775,6 +871,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .mapp-map-pin-motion--enter,
+  .mapp-map-pin-motion--settle,
   .mapp-map-pin-motion--exit {
     animation-duration: 1ms;
   }

@@ -128,6 +128,24 @@
   // utils/map/mapChromeStyle.ts
   var DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
   var DEFAULT_MAP_UI_CHROME_BLUR_PX = 8;
+  function mapChromeModalBackdropStyle(opacity, blurPx) {
+    const o = Math.min(1, Math.max(0, opacity));
+    const b = Math.min(48, Math.max(0, blurPx));
+    const style = {
+      // 透明面板对应更轻的背景压暗；满不透明面板也只到 20%，保持地图/画布仍可辨认。
+      backgroundColor: `rgba(0, 0, 0, ${0.04 + o * 0.16})`
+    };
+    if (b > 0) {
+      const f = `blur(${b}px)`;
+      style.backdropFilter = f;
+      style.WebkitBackdropFilter = f;
+    }
+    return style;
+  }
+  var MODAL_BACKDROP_MASK_STYLE = mapChromeModalBackdropStyle(
+    DEFAULT_MAP_UI_CHROME_OPACITY,
+    DEFAULT_MAP_UI_CHROME_BLUR_PX
+  );
   var MAP_CHROME_SURFACE_BORDER_CLASS = "border border-gray-100/80";
   var MAP_CHROME_SURFACE_SHELL_CLASS = `rounded-lg shadow-lg ${MAP_CHROME_SURFACE_BORDER_CLASS}`;
   function mapChromeSurfaceStyle(opacity, blurPx) {

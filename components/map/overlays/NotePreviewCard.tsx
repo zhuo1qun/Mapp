@@ -157,12 +157,13 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="p-4 pb-2 flex items-start justify-between gap-3 border-b border-gray-100 shrink-0">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
+      {/* 与 NoteEditor 标题栏共用 16px 外边距、36px 操作命中区和同一条顶部对齐线。 */}
+      <div className="flex items-start gap-2 p-4 pb-2 border-b border-gray-100 shrink-0">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
           {note.emoji && (
-            <span className="text-2xl mt-0.5 shrink-0">{note.emoji}</span>
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-2xl">{note.emoji}</span>
           )}
-          <div className="min-w-0 flex-1">
+          <div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
             <h3 className="text-lg font-bold text-gray-900 leading-tight whitespace-pre-line break-words">
               {formatPreviewTitle(note.text || '')}
             </h3>
@@ -186,7 +187,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
           </div>
         </div>
         {showGo || showEdit ? (
-          <div className="flex shrink-0 items-center gap-0.5 mt-0.5">
+          <div className="relative z-10 flex shrink-0 items-center gap-1.5">
             {showGo ? (
               <NoteIconButton
                 label="导航"
@@ -198,7 +199,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <Navigation size={18} strokeWidth={2} aria-hidden />
+                <Navigation size={22} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
             {showEdit ? (
@@ -212,7 +213,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <Pencil size={18} strokeWidth={2} aria-hidden />
+                <Pencil size={22} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
           </div>

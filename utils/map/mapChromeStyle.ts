@@ -1,13 +1,6 @@
 import type { CSSProperties } from 'react';
 import { parseHexToRgb } from '../theme/themeChrome';
 
-/** 全屏模态遮罩（便签编辑器等）：轻半透明 + 背景模糊，避免过重黑层 */
-export const MODAL_BACKDROP_MASK_STYLE: CSSProperties = {
-  backgroundColor: 'rgba(0, 0, 0, 0.15)',
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)'
-};
-
 /** 项目菜单等轻覆盖：模糊强度与 map UI chrome 一致，避免平整灰色遮罩 */
 export function mapChromeMenuBackdropStyle(blurPx: number): CSSProperties {
   const b = Math.min(48, Math.max(0, blurPx));
@@ -24,6 +17,49 @@ export function mapChromeMenuBackdropStyle(blurPx: number): CSSProperties {
 
 export const DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
 export const DEFAULT_MAP_UI_CHROME_BLUR_PX = 8;
+
+/**
+ * 对话框的背景遮罩也跟随「面板背景透明度 / 模糊半径」。
+ *
+ * 遮罩仍保留少量明暗分离，避免低透明度时编辑器和背景完全融在一起；但不会再
+ * 固定为一层 50% 黑色或 10px 模糊，因而 0px 模糊与低透明度会立刻体现在弹窗上。
+ */
+export function mapChromeModalBackdropStyle(opacity: number, blurPx: number): CSSProperties {
+  const o = Math.min(1, Math.max(0, opacity));
+  const b = Math.min(48, Math.max(0, blurPx));
+  const style: CSSProperties = {
+    // 透明面板对应更轻的背景压暗；满不透明面板也只到 20%，保持地图/画布仍可辨认。
+    backgroundColor: `rgba(0, 0, 0, ${0.04 + o * 0.16})`
+  };
+  if (b > 0) {
+    const f = `blur(${b}px)`;
+    style.backdropFilter = f;
+    style.WebkitBackdropFilter = f;
+  }
+  return style;
+}
+
+/**
+ * 已拿到面板玻璃样式的组件（例如 NoteEditor / ThemeColorPicker）可用此函数让
+ * 其 sibling 遮罩复用同一组参数，而无需额外穿透两层 props。
+ */
+export function mapChromeModalBackdropFromSurfaceStyle(surface?: CSSProperties): CSSProperties {
+  const background = typeof surface?.backgroundColor === 'string' ? surface.backgroundColor : '';
+  const alpha = /rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\s*\)/i.exec(background)?.[1];
+  const backdrop = typeof surface?.backdropFilter === 'string' ? surface.backdropFilter : '';
+  const blur = /blur\(\s*([\d.]+)px\s*\)/i.exec(backdrop)?.[1];
+
+  return mapChromeModalBackdropStyle(
+    alpha === undefined ? DEFAULT_MAP_UI_CHROME_OPACITY : Number(alpha),
+    blur === undefined ? DEFAULT_MAP_UI_CHROME_BLUR_PX : Number(blur)
+  );
+}
+
+/** 兼容尚未传入具体玻璃面参数的旧弹窗。 */
+export const MODAL_BACKDROP_MASK_STYLE = mapChromeModalBackdropStyle(
+  DEFAULT_MAP_UI_CHROME_OPACITY,
+  DEFAULT_MAP_UI_CHROME_BLUR_PX
+);
 
 /**
  * 地图上的小型悬浮控件使用与底图相称的中性色。这里刻意按「底图类型」切换，

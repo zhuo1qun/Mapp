@@ -1,6 +1,7 @@
 import React from 'react';
 import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY, mapChromeSurfaceStyle } from '../../utils/map/mapChromeStyle';
 import { ChromeDialogSurface } from './ChromeDialogSurface';
+import { ChromePresence } from './ChromeSheetPresence';
 
 export type DeleteConfirmVariant = 'note' | 'connection' | 'notes-batch';
 
@@ -32,19 +33,19 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   themeColor,
   panelChromeStyle
 }) => {
-  if (!open) return null;
-
   const cardChrome =
     panelChromeStyle ??
     mapChromeSurfaceStyle(DEFAULT_MAP_UI_CHROME_OPACITY, DEFAULT_MAP_UI_CHROME_BLUR_PX);
 
   return (
-    <div
-      className="fixed inset-0 z-[var(--z-blocking-dialog)] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="delete-confirm-dialog-title"
-    >
+    <ChromePresence open={open} kind="dialog">
+      {(phase) => (
+        <div
+          className={`fixed inset-0 z-[var(--z-blocking-dialog)] flex items-center justify-center p-4 chrome-dialog-backdrop-${phase}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-confirm-dialog-title"
+        >
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
@@ -52,7 +53,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
         onClick={() => !confirming && onCancel()}
       />
       <ChromeDialogSurface
-        className="max-w-sm p-5 text-sm"
+        className={`max-w-sm p-5 text-sm chrome-dialog-${phase}`}
         style={cardChrome}
       >
         <h2 id="delete-confirm-dialog-title" className="font-bold text-gray-900 mb-2 text-base">
@@ -98,6 +99,8 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
           </button>
         </div>
       </ChromeDialogSurface>
-    </div>
+        </div>
+      )}
+    </ChromePresence>
   );
 };

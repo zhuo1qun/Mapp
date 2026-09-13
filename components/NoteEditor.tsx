@@ -4,7 +4,6 @@ import { THEME_COLOR } from '../constants';
 import { generateId, parseNoteContent } from '../utils';
 import { buildEditorModel, fromEditorModel } from '../utils/note/editorModel';
 import { DrawingCanvas } from './DrawingCanvas';
-import { motion } from 'framer-motion';
 import { useTiptapEditor } from './hooks/useTiptapEditor';
 import { useNoteState } from './hooks/useNoteState';
 import { useMediaHandler } from './hooks/useMediaHandler';
@@ -24,16 +23,25 @@ import {
   NoteEditorAddPillLabel
 } from './note-editor/addPillStyles';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
-import { MODAL_BACKDROP_MASK_STYLE, type MapChromeAppearance } from '../utils/map/mapChromeStyle';
+import {
+  DEFAULT_MAP_UI_CHROME_BLUR_PX,
+  DEFAULT_MAP_UI_CHROME_OPACITY,
+  mapChromeContentStyle,
+  type MapChromeAppearance
+} from '../utils/map/mapChromeStyle';
 import {
   hasNavigableGpsCoords
 } from '../utils/map/openExternalNavigation';
 import { ExternalNavigationSheet } from './map/overlays/ExternalNavigationSheet';
+import { ChromePresence } from './ui/ChromeSheetPresence';
+import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from './ui/ChromeDialogSurface';
 
 interface NoteEditorProps {
   initialNote?: Partial<Note>;
   isOpen: boolean;
   onClose: () => void;
+  /** 保存成功后的关闭路径；可与取消草稿的关闭过渡不同。 */
+  onSaveClose?: () => void;
   onSave: (note: Partial<Note>) => void;
   /** 调用方尚未把这条便签写入项目数据。 */
   isNewNote?: boolean;
@@ -43,16 +51,20 @@ interface NoteEditorProps {
   /** Graph 项目：关闭编辑器并在图谱中聚焦该便签 */
   onSwitchToGraphView?: (noteId: string) => void;
   themeColor?: string;
-  /** 与全局「界面外观」一致：主面板及内嵌白底控件玻璃化 */
-  panelChromeStyle?: React.CSSProperties;
+  /** 编辑器自行使用这组全局「界面外观」参数生成表面，不依赖调用方传入样式对象。 */
+  mapUiChromeOpacity?: number;
+  mapUiChromeBlurPx?: number;
   /** 地图深色/卫星底图传入 dark；其它视图维持 regular 浅色编辑面。 */
   chromeAppearance?: MapChromeAppearance;
+  /** 视口坐标中的点位锚点；存在时编辑器像从该点位展开、收回。 */
+  animationAnchor?: { x: number; y: number };
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
   initialNote,
   isOpen,
   onClose,
+  onSaveClose,
   onSave,
   isNewNote = false,
   onDelete,
@@ -60,12 +72,31 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onSwitchToBoardView,
   onSwitchToGraphView,
   themeColor = THEME_COLOR,
-  panelChromeStyle,
-  chromeAppearance = 'light'
+  mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
+  mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
+  chromeAppearance = 'light',
+  animationAnchor
 }) => {
-  const MotionDiv = (motion.div as unknown) as React.ComponentType<any>;
+  // 关闭时父级可能已清掉选中便签，须保留打开瞬间的锚点以完成回收动画。
+  const [activeAnimationAnchor, setActiveAnimationAnchor] = useState<{ x: number; y: number } | null>(null);
+  // 打开首帧直接取调用方的锚点，避免先播放一帧通用对话框渐显动画。
+  const motionAnchor = animationAnchor ?? activeAnimationAnchor;
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // 编辑器是材质的唯一所有者：窗口及其内部的二级浮层均由相同参数生成。
+  // 不再依赖各视图拼出 panelChromeStyle，避免其中一个入口漏传后退回默认白底。
+  const editorChromeStyle = useMemo(
+    () =>
+      mapChromeContentStyle(
+        mapUiChromeOpacity,
+        mapUiChromeBlurPx,
+        chromeAppearance === 'dark' ? 'carto-dark' : undefined
+      ),
+    [chromeAppearance, mapUiChromeBlurPx, mapUiChromeOpacity]
+  );
+  useEffect(() => {
+    if (isOpen && animationAnchor) setActiveAnimationAnchor(animationAnchor);
+  }, [animationAnchor?.x, animationAnchor?.y, isOpen]);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [navSheetOpen, setNavSheetOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -337,13 +368,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       }
       if (!noteData.media) noteData.media = persisted.media;
 
-      if (isEmptyNote(noteData) && initialNote?.id && onDelete) {
+      if (isEmptyNote(noteData) && initialNote?.id && !isNewNote && onDelete) {
         onDelete(initialNote.id);
         onClose();
         return;
       }
 
-      if (isEmptyNote(noteData) && !initialNote?.id) {
+      if (isEmptyNote(noteData) && (isNewNote || !initialNote?.id)) {
         onClose();
         return;
       }
@@ -351,7 +382,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       onSave(noteData);
 
       setTimeout(() => {
-        onClose();
+        (onSaveClose ?? onClose)();
       }, 0);
     })();
   };
@@ -435,8 +466,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     [previewImageIndex, mediaItems, startLassoForIndex, setLassoStickerEnabled]
   );
 
-  if (!isOpen) return null;
-
   const emojiTrailingSlot = !isCompactMode ? (
     <div className="relative group">
       <button
@@ -482,7 +511,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         anchorRef={emojiAnchorRef}
         onClose={() => setShowEmojiPicker(false)}
         onSelectEmoji={(e) => setEmoji(e)}
-        panelChromeStyle={panelChromeStyle}
+        panelChromeStyle={editorChromeStyle}
         chromeAppearance={chromeAppearance}
       />
     </div>
@@ -530,8 +559,10 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   ) : null;
 
   return (
+    <ChromePresence open={isOpen} kind="dialog">
+      {(phase) => (
     <div
-      className="note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto"
+      className={`note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`}
       onPointerDown={(e) => e.stopPropagation()}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
@@ -543,20 +574,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     >
       <div className="absolute inset-0" onClick={handleSave} style={{ zIndex: 1 }}></div>
 
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ ...MODAL_BACKDROP_MASK_STYLE, zIndex: 5 }}
-      />
-
       <div className="note-editor-shell relative z-10 flex flex-col items-end">
-        <MotionDiv
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          className={`note-editor-panel map-chrome-content-${chromeAppearance} w-[500px] max-w-[min(95%,calc(100%-2rem))] flex flex-col relative transition-colors duration-300 max-h-[90vh] max-h-[90dvh] min-h-[300px] rounded-2xl border border-gray-100/80 ${panelChromeStyle ? '' : 'bg-white'} ${isSketching ? 'min-h-[500px]' : ''}`}
+        <div
+          className={`note-editor-panel note-editor-panel--glass-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} w-[500px] max-w-[min(95%,calc(100%-2rem))] flex flex-col relative transition-colors duration-300 max-h-[90vh] max-h-[90dvh] min-h-[300px] ${isSketching ? 'min-h-[500px]' : ''}`}
           style={{
-            ...(panelChromeStyle || {}),
-            boxShadow: '0 25px 50px 12px rgba(0, 0, 0, 0.15)',
+            ...editorChromeStyle,
             overflow: 'hidden'
           }}
           onDragOver={(e) => e.stopPropagation()}
@@ -565,6 +587,21 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           onDrop={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
+          <div
+            className={`note-editor-motion-content chrome-dialog-${phase} ${
+              motionAnchor
+                ? `note-editor-motion-content--anchored note-editor-motion-content--anchored-${phase}`
+                : ''
+            } flex min-h-0 flex-1 flex-col`}
+            style={
+              motionAnchor
+                ? ({
+                    '--note-editor-anchor-x': `${motionAnchor.x}px`,
+                    '--note-editor-anchor-y': `${motionAnchor.y}px`
+                  } as React.CSSProperties)
+                : undefined
+            }
+          >
           {isSketching && (
             <div className="absolute inset-0 z-50" onPointerDown={(e) => e.stopPropagation()}>
               <DrawingCanvas
@@ -662,7 +699,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                   setEndYear(next.endYear);
                 }}
                 themeColor={themeColor}
-                panelChromeStyle={panelChromeStyle}
+                panelChromeStyle={editorChromeStyle}
                 chromeAppearance={chromeAppearance}
                 active={isOpen}
                 onProvideTimeDismiss={registerTimeRangeDismiss}
@@ -722,7 +759,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               onDismissOverlays={dismissOverlays}
             />
           </div>
-        </MotionDiv>
+          </div>
+        </div>
       </div>
 
       <ImagePreviewModal
@@ -782,7 +820,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         onCancel={() => !deleteConfirming && setDeleteConfirmOpen(false)}
         onConfirm={executeDeleteNote}
         themeColor={themeColor}
-        panelChromeStyle={panelChromeStyle}
+        panelChromeStyle={editorChromeStyle}
       />
       {hasNavigableGpsCoords(initialNote?.coords) && initialNote?.coords ? (
         <ExternalNavigationSheet
@@ -792,10 +830,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           label={parseNoteContent(initialNote?.text || '').title || undefined}
           onClose={() => setNavSheetOpen(false)}
           themeColor={themeColor}
-          panelChromeStyle={panelChromeStyle}
+          panelChromeStyle={editorChromeStyle}
           chromeAppearance={chromeAppearance}
         />
       ) : null}
     </div>
+      )}
+    </ChromePresence>
   );
 };
