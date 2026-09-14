@@ -22,9 +22,11 @@ export default defineConfig(({ mode }) => {
             // Workbox 默认最多只会预缓存 2MiB 的资源；你的构建产物有超过该大小的 chunk，
             // 如果不调整会导致构建阶段直接失败。
             maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MiB
-            // 仅预缓存 Vite 输出的内容哈希资源。尤其不能把 index.html / 导航请求
-            // 放进 Workbox，否则发布后可能继续打开旧页面。
-            globPatterns: ['assets/**/*.{js,css,ico,png,svg,woff,woff2}'],
+            // 不预缓存 JavaScript。若把全部哈希脚本都放进 precache，动态 import
+            // 的视图仍会在后台被一次性下载，懒加载便失去网络层面的意义。
+            // 已访问的脚本由下面的运行时缓存保存；CSS、图标与字体仍可预缓存。
+            // index.html / 导航请求也不能放进 Workbox，否则发布后可能继续打开旧页面。
+            globPatterns: ['assets/**/*.{css,ico,png,svg,woff,woff2}'],
             globDirectory: 'dist',
             // HTML 与 SPA 导航始终走网络，由部署层的 must-revalidate 头控制。
             navigateFallback: null,
@@ -32,6 +34,22 @@ export default defineConfig(({ mode }) => {
             clientsClaim: true,
             cleanupOutdatedCaches: true,
             runtimeCaching: [
+              {
+                // Vite 资源名包含内容哈希，Cache First 对发布安全；模块仅在对应
+                // 视图实际打开后才入缓存，后续离线重访则直接使用已缓存版本。
+                urlPattern: /\/assets\/.*\.js$/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'app-modules',
+                  expiration: {
+                    maxEntries: 160,
+                    maxAgeSeconds: 60 * 60 * 24 * 30,
+                  },
+                  cacheableResponse: {
+                    statuses: [0, 200],
+                  },
+                },
+              },
               {
                 // 底图变化频率远低于用户的平移/缩放频率。短期 Cache First 能让已
                 // 访问区域不再与当前视口争抢重验证请求；过期后才向图源取新版本。

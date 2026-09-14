@@ -1,14 +1,8 @@
 
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { Map as MapIcon, Grid, Menu, Loader2, Table2, GitBranch, Cloud, CloudOff, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from './components/ui/MotionDiv';
-import { MapView } from './components/MapView';
-import { BoardView } from './components/BoardView';
-import { TableView } from './components/TableView';
-import { GraphView } from './components/GraphView';
-import { ProjectManager } from './components/ProjectManager';
-import { HomePhysicsPlayground } from './components/HomePhysicsPlayground';
 import { Note, ViewMode, Project, ProjectKind } from './types';
 import { get, set } from 'idb-keyval';
 import {
@@ -78,6 +72,30 @@ import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
 import { dismissWorkspaceTransients } from './utils/ui/workspaceTransientDismiss';
 
 type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
+
+// These workspaces have independent, sizeable dependency trees (Leaflet, Cytoscape,
+// Matter.js, editors, and export helpers). Loading them only when their surface is
+// opened keeps the initial shell responsive, especially on the project home screen.
+const MapView = lazy(() =>
+  import('./components/MapView').then(({ MapView }) => ({ default: MapView }))
+);
+const BoardView = lazy(() =>
+  import('./components/BoardView').then(({ BoardView }) => ({ default: BoardView }))
+);
+const TableView = lazy(() =>
+  import('./components/TableView').then(({ TableView }) => ({ default: TableView }))
+);
+const GraphView = lazy(() =>
+  import('./components/GraphView').then(({ GraphView }) => ({ default: GraphView }))
+);
+const ProjectManager = lazy(() =>
+  import('./components/ProjectManager').then(({ ProjectManager }) => ({ default: ProjectManager }))
+);
+const HomePhysicsPlayground = lazy(() =>
+  import('./components/HomePhysicsPlayground').then(({ HomePhysicsPlayground }) => ({
+    default: HomePhysicsPlayground
+  }))
+);
 
 export default function App() {
   const emptyNotes = useMemo(() => [], []);
@@ -788,6 +806,17 @@ export default function App() {
     </div>
   );
 
+  const projectManagerLazyFallback = (
+    <div
+      className="flex h-full min-h-0 w-full items-center justify-center"
+      style={{ backgroundColor: themeColor }}
+      aria-busy="true"
+      aria-label="加载项目列表"
+    >
+      <Loader2 size={28} className="animate-spin text-theme-chrome-fg" aria-hidden />
+    </div>
+  );
+
   /** 进入/回主页中间态：列表收束与全屏壳动画（加载前后都保持，不把加载插在布局切换之间） */
   const projectManagerTransitionListOnly =
     isProjectEnterTransition || sidebarExpandingToHome;
@@ -1481,14 +1510,18 @@ export default function App() {
         touchAction: 'manipulation'
       }}
     >
-      <HomePhysicsPlayground
-        enabled={atSteadyProjectHome && homeEasterEggMode}
-        easterEggMode={atSteadyProjectHome && homeEasterEggMode}
-        gravityY={homeEasterEggGravityY}
-        mouseConstraintStiffness={homeEasterEggMouseConstraintStiffness}
-        projectNames={projectSummaries.map((p) => p.name)}
-        themeColor={themeColor}
-      />
+      {atSteadyProjectHome && homeEasterEggMode ? (
+        <Suspense fallback={null}>
+          <HomePhysicsPlayground
+            enabled
+            easterEggMode
+            gravityY={homeEasterEggGravityY}
+            mouseConstraintStiffness={homeEasterEggMouseConstraintStiffness}
+            projectNames={projectSummaries.map((p) => p.name)}
+            themeColor={themeColor}
+          />
+        </Suspense>
+      ) : null}
       {/* 删除项目：保留简短阻断提示（加载项目改由 ProjectManager 顶部分条） */}
       {isDeletingProject && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
@@ -1531,7 +1564,8 @@ export default function App() {
                   }
                 }}
               >
-                <ProjectManager
+                <Suspense fallback={projectManagerLazyFallback}>
+                  <ProjectManager
                   isSidebar
                   expandToHomeLayout={
                     !activeProject || isProjectEnterTransition || sidebarExpandingToHome
@@ -1588,7 +1622,8 @@ export default function App() {
                   onExampleDevMaintenanceModeToggle={() =>
                     setExampleDevMaintenanceMode((v) => !v)
                   }
-                />
+                  />
+                </Suspense>
               </MotionDiv>
             )}
           </AnimatePresence>
@@ -1638,7 +1673,8 @@ export default function App() {
                }}
                style={{ willChange: 'transform, width' }}
              >
-              <ProjectManager 
+              <Suspense fallback={projectManagerLazyFallback}>
+                <ProjectManager
                  isSidebar
                  expandToHomeLayout={
                    sidebarExpandingToHome || isProjectEnterTransition
@@ -1695,7 +1731,8 @@ export default function App() {
                  onExampleDevMaintenanceModeToggle={() =>
                    setExampleDevMaintenanceMode((v) => !v)
                  }
-              />
+                />
+              </Suspense>
              </MotionDiv>
         </div>
       )}
@@ -1711,6 +1748,7 @@ export default function App() {
         onDragEnd={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragEnd : undefined}
         onPointerDownCapture={handleWorkspaceTransientDismiss}
       >
+        <Suspense fallback={workspaceProjectPendingPlaceholder}>
         {activeProject ? (
           <>
         {/* 同步状态指示器 - 只在侧边栏打开时显示（在侧边栏内） */}
@@ -2077,6 +2115,7 @@ export default function App() {
         ) : (
           <div className="h-full min-h-0 flex-1 bg-gray-100" aria-hidden />
         )}
+        </Suspense>
       </div>
 
       {!isEditorOpen &&
