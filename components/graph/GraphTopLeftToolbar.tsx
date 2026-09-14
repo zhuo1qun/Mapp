@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Settings, Tag as TagIcon, Frame as FrameIcon } from 'lucide-react';
+import { Settings, Tag as TagIcon, Frame as FrameIcon, Smile } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { ProjectNotesLayerPanel } from '../layer/ProjectNotesLayerPanel';
 import type { Frame, GraphLayerState, Note } from '../../types';
@@ -14,13 +14,17 @@ type Props = {
   settingsButtonRef?: React.RefObject<HTMLButtonElement | null>;
   showTagLayerPanel: boolean;
   setShowTagLayerPanel: React.Dispatch<React.SetStateAction<boolean>>;
+  showEmojiLayerPanel: boolean;
+  setShowEmojiLayerPanel: React.Dispatch<React.SetStateAction<boolean>>;
   showFrameLayerPanel: boolean;
   setShowFrameLayerPanel: React.Dispatch<React.SetStateAction<boolean>>;
   canShowLayer: boolean;
   panelChromeStyle?: React.CSSProperties;
   mergedTagLayers: GraphLayerState;
+  mergedEmojiLayers: GraphLayerState;
   mergedFrameLayers: GraphLayerState;
   onTagLayersChange: (next: GraphLayerState) => void;
+  onEmojiLayersChange: (next: GraphLayerState) => void;
   onFrameLayersChange: (next: GraphLayerState) => void;
   notes: Note[];
   onUpdateNote: (note: Note) => void;
@@ -43,13 +47,17 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
   settingsButtonRef,
   showTagLayerPanel,
   setShowTagLayerPanel,
+  showEmojiLayerPanel,
+  setShowEmojiLayerPanel,
   showFrameLayerPanel,
   setShowFrameLayerPanel,
   canShowLayer,
   panelChromeStyle,
   mergedTagLayers,
+  mergedEmojiLayers,
   mergedFrameLayers,
   onTagLayersChange,
+  onEmojiLayersChange,
   onFrameLayersChange,
   notes,
   onUpdateNote,
@@ -61,12 +69,14 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
   belowToolbar
 }) => {
   const tagBtnWrapRef = useRef<HTMLDivElement>(null);
+  const emojiBtnWrapRef = useRef<HTMLDivElement>(null);
   const frameBtnWrapRef = useRef<HTMLDivElement>(null);
 
   if (!isUIVisible) return null;
 
   const closePanels = () => {
     setShowTagLayerPanel(false);
+    setShowEmojiLayerPanel(false);
     setShowFrameLayerPanel(false);
   };
 
@@ -109,6 +119,7 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowTagLayerPanel((v) => !v);
+                  setShowEmojiLayerPanel(false);
                   setShowFrameLayerPanel(false);
                   setShowSettingsPanel(false);
                 }}
@@ -116,6 +127,27 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
                 tooltip="标签图层"
               >
                 <TagIcon size={18} className="sm:w-5 sm:h-5" />
+              </ChromeIconButton>
+            </div>
+            <div ref={emojiBtnWrapRef}>
+              <ChromeIconButton
+                themeColor={themeColor}
+                chromeSurfaceStyle={chromeSurfaceStyle}
+                chromeHoverBackground={chromeHoverBackground}
+                active={showEmojiLayerPanel}
+                pressThemeFlash
+                nonChromeIdleHover="imperative-gray100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowEmojiLayerPanel((v) => !v);
+                  setShowTagLayerPanel(false);
+                  setShowFrameLayerPanel(false);
+                  setShowSettingsPanel(false);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                tooltip="Emoji 图层"
+              >
+                <Smile size={18} className="sm:w-5 sm:h-5" />
               </ChromeIconButton>
             </div>
             <div ref={frameBtnWrapRef}>
@@ -130,6 +162,7 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
                   e.stopPropagation();
                   setShowFrameLayerPanel((v) => !v);
                   setShowTagLayerPanel(false);
+                  setShowEmojiLayerPanel(false);
                   setShowSettingsPanel(false);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
@@ -184,6 +217,29 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
             onBatchUpdateNotes={onBatchUpdateNotes}
             frames={frames}
             onUpdateFrame={onUpdateFrame}
+            projectId={projectId}
+            onActivateNote={onActivateNoteFromLayer}
+          />
+        </div>
+      ) : null}
+      {showEmojiLayerPanel ? (
+        <div className="pointer-events-auto">
+          <ProjectNotesLayerPanel
+            themeColor={themeColor}
+            panelChromeStyle={panelChromeStyle}
+            variant="graph"
+            embed={false}
+            dockAlign="start"
+            menuAnchorRef={emojiBtnWrapRef}
+            merged={mergedEmojiLayers}
+            layerGroupStandard="emoji"
+            hideStandardToggle
+            onLayerGroupStandardChange={() => {}}
+            onStateChange={onEmojiLayersChange}
+            notes={notes}
+            onUpdateNote={onUpdateNote}
+            onBatchUpdateNotes={onBatchUpdateNotes}
+            frames={frames}
             projectId={projectId}
             onActivateNote={onActivateNoteFromLayer}
           />

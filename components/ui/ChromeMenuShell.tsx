@@ -1,5 +1,6 @@
 import React from 'react';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { AnchoredWorkspaceWindow } from './AnchoredWorkspaceWindow';
 
 export type ChromeMenuShellProps = React.HTMLAttributes<HTMLDivElement> & {
   appearance?: MapChromeAppearance;
@@ -12,10 +13,10 @@ export const ChromeMenuShell: React.FC<ChromeMenuShellProps> = ({
   children,
   ...props
 }) => (
-  <div
+  <AnchoredWorkspaceWindow
     {...props}
     className={`map-chrome-content-${appearance} rounded-xl border border-gray-100/80 py-1 shadow-xl ${className}`.trim()}
   >
     {children}
-  </div>
+  </AnchoredWorkspaceWindow>
 );

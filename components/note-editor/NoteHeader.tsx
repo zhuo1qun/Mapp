@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, ArrowUp, Locate, Check, Navigation, X } from 'lucide-react';
+import { Star, ArrowUp, Locate, Check, Navigation, X, Map as MapIcon, LayoutGrid } from 'lucide-react';
 import { NoteIconButton } from './NoteIconButton';
 import { NoteEditorAddPillLabel } from './addPillStyles';
 
@@ -53,7 +53,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   onDiscardDraft,
 }) => {
   return (
-    <div className="flex items-center gap-2 p-4 pb-2 flex-shrink-0 relative">
+    <div className="flex items-center gap-2 p-4 pb-2 flex-shrink-0 relative before:absolute before:bottom-0 before:left-3 before:right-3 before:border-b before:border-gray-400/50">
       <div className="flex-1 min-w-0 min-h-9 flex items-center" onClick={(e) => e.stopPropagation()}>
         {title ? (
           <div className="min-w-0 truncate text-sm font-medium text-gray-400" title={title}>
@@ -85,14 +85,14 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
         )}
 
         {showLocateBoard && onLocateBoard && (
-          <NoteIconButton onClick={onLocateBoard} variant="neutral" label="看板" title="定位到看板">
-            <Locate size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
+          <NoteIconButton onClick={onLocateBoard} variant="neutral" label="打开看板" title="打开看板">
+            <LayoutGrid size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}
 
         {showLocateMap && onLocateMap && (
-          <NoteIconButton onClick={onLocateMap} variant="neutral" label="地图" title="定位到地图">
-            <Locate size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
+          <NoteIconButton onClick={onLocateMap} variant="neutral" label="打开地图" title="打开地图">
+            <MapIcon size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}
 

@@ -69,6 +69,7 @@ import {
   type GraphPresetsStore
 } from '../utils/graph/graphPresets';
 import { tagHierarchyPrefix } from '../utils/layer/tagHierarchy';
+import { emojiLayerStateFromLegacyTagState } from '../utils/layer/unifiedNoteLayer';
 import { GraphConnectionPanel, connectionToPanelDraft, type ConnectionDraft } from './graph/GraphConnectionPanel';
 import { GraphHighlightChromeLabels } from './graph/GraphHighlightChromeLabels';
 import { GraphRelatedHighlightPanel } from './graph/GraphRelatedHighlightPanel';
@@ -79,6 +80,7 @@ import { GraphTopCenterConnectionButton } from './graph/GraphTopCenterConnection
 import { GraphTopRightToolbar } from './graph/GraphTopRightToolbar';
 import { GraphLayoutModeBar } from './graph/GraphLayoutModeBar';
 import { generateId } from '../utils';
+import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
 
 interface GraphViewProps {
   /** 用于会话内记住图谱二级布局（切换一级视图后再回来仍保留） */
@@ -142,6 +144,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [showTagLayerPanel, setShowTagLayerPanel] = useState(false);
+  const [showEmojiLayerPanel, setShowEmojiLayerPanel] = useState(false);
   const [showFrameLayerPanel, setShowFrameLayerPanel] = useState(false);
   /** 临时图谱预设（IndexedDB，不进项目 JSON） */
   const [graphPresetsStore, setGraphPresetsStore] = useState<GraphPresetsStore>({
@@ -211,6 +214,19 @@ export const GraphView: React.FC<GraphViewProps> = ({
     weight: DEFAULT_CONNECTION_WEIGHT
   }));
   const [pickTarget, setPickTarget] = useState<'from' | 'to' | null>(null);
+
+  useEffect(() => {
+    const dismiss = () => {
+      setShowSettingsPanel(false);
+      setShowTagLayerPanel(false);
+      setShowEmojiLayerPanel(false);
+      setShowFrameLayerPanel(false);
+      setShowConnectionPanel(false);
+      setPickTarget(null);
+    };
+    window.addEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
+    return () => window.removeEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
+  }, []);
   /** 图中点选节点后递增，驱动面板清空检索并不聚焦输入框 */
   const [graphPickNonce, setGraphPickNonce] = useState(0);
   /** 关联保存成功后递增，驱动面板成功动效（不关面板，随后进入下一条新建） */
@@ -292,20 +308,28 @@ export const GraphView: React.FC<GraphViewProps> = ({
     () => mergeGraphLayerState(notes, project.graphFrameLayers ?? null, 'frame'),
     [notes, project.graphFrameLayers]
   );
+  const mergedEmojiGraphLayers = useMemo(
+    () => mergeGraphLayerState(notes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji'),
+    [notes, project.graphEmojiLayers, project.graphLayers]
+  );
 
   const mergedTagGraphLayersRef = useRef(mergedTagGraphLayers);
   mergedTagGraphLayersRef.current = mergedTagGraphLayers;
   const mergedFrameGraphLayersRef = useRef(mergedFrameGraphLayers);
   mergedFrameGraphLayersRef.current = mergedFrameGraphLayers;
+  const mergedEmojiGraphLayersRef = useRef(mergedEmojiGraphLayers);
+  mergedEmojiGraphLayersRef.current = mergedEmojiGraphLayers;
 
   const syncDualLayerVisibility = useCallback((cy: Core) => {
     const tag = mergedTagGraphLayersRef.current;
     const frame = mergedFrameGraphLayersRef.current;
+    const emoji = mergedEmojiGraphLayersRef.current;
     applyGraphDualLayerNodeVisibility(
       cy,
       tag.hidden,
       frame.hidden,
-      tag.tagVisibilityLogic ?? 'or'
+      tag.tagVisibilityLogic ?? 'or',
+      emoji.hidden
     );
   }, []);
 
@@ -379,6 +403,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
     (next: GraphLayerState) => {
       if (!onUpdateProject || !projectId) return;
       void onUpdateProject(projectId, { graphFrameLayers: next });
+    },
+    [onUpdateProject, projectId]
+  );
+
+  const handleEmojiLayersChange = useCallback(
+    (next: GraphLayerState) => {
+      if (!onUpdateProject || !projectId) return;
+      void onUpdateProject(projectId, { graphEmojiLayers: next });
     },
     [onUpdateProject, projectId]
   );
@@ -1542,13 +1574,15 @@ export const GraphView: React.FC<GraphViewProps> = ({
       cy,
       mergedTagGraphLayers.hidden,
       mergedFrameGraphLayers.hidden,
-      mergedTagGraphLayers.tagVisibilityLogic ?? 'or'
+      mergedTagGraphLayers.tagVisibilityLogic ?? 'or',
+      mergedEmojiGraphLayers.hidden
     );
   }, [
     activeGraphLayout,
     mergedTagGraphLayers.hidden,
     mergedTagGraphLayers.tagVisibilityLogic,
     mergedFrameGraphLayers.hidden,
+    mergedEmojiGraphLayers.hidden,
     tagGraphLayersHiddenKey,
     frameGraphLayersHiddenKey,
     nodeStructureKey,
@@ -1945,13 +1979,17 @@ export const GraphView: React.FC<GraphViewProps> = ({
         settingsButtonRef={settingsButtonRef}
         showTagLayerPanel={showTagLayerPanel}
         setShowTagLayerPanel={setShowTagLayerPanel}
+        showEmojiLayerPanel={showEmojiLayerPanel}
+        setShowEmojiLayerPanel={setShowEmojiLayerPanel}
         showFrameLayerPanel={showFrameLayerPanel}
         setShowFrameLayerPanel={setShowFrameLayerPanel}
         canShowLayer={!!onUpdateProject}
         panelChromeStyle={panelChromeStyle}
         mergedTagLayers={mergedTagGraphLayers}
+        mergedEmojiLayers={mergedEmojiGraphLayers}
         mergedFrameLayers={mergedFrameGraphLayers}
         onTagLayersChange={handleTagLayersChange}
+        onEmojiLayersChange={handleEmojiLayersChange}
         onFrameLayersChange={handleFrameLayersChange}
         notes={notes}
         onUpdateNote={onUpdateNote}

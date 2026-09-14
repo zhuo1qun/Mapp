@@ -35,7 +35,7 @@ export const MetadataSection: React.FC<MetadataSectionProps> = ({
   if (!hasMeta && !(showDelete && onDeleteNote)) return null;
 
   return (
-    <section className="shrink-0 border-t border-gray-400/50" aria-label="更多">
+    <section className="relative shrink-0 before:absolute before:top-0 before:left-3 before:right-3 before:border-t before:border-gray-400/50" aria-label="更多">
       <div className="px-4 pt-2 pb-3 flex items-center gap-2">
         <button
           type="button"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { Note, Project, Frame, Connection, type GraphLayerState } from '../types';
 import { Trash2 } from 'lucide-react';
 import {
@@ -8,7 +8,7 @@ import {
 } from '../utils/graph/graphData';
 import { generateId, parseNoteContent } from '../utils';
 import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
-import { groupDisplayLabel, noteBelongsToLayerGroupKey } from '../utils/layer/unifiedNoteLayer';
+import { emojiLayerStateFromLegacyTagState, groupDisplayLabel, noteBelongsToLayerGroupKey } from '../utils/layer/unifiedNoteLayer';
 import { NoteEditor } from './NoteEditor';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
@@ -16,6 +16,7 @@ import { SettingsPanel } from './SettingsPanel';
 import { TableTopLeftSettingsButton } from './table/TableTopLeftSettingsButton';
 import { TableTopRightDownloadButton } from './table/TableTopRightDownloadButton';
 import { TableBottomSubViewBar } from './table/TableBottomSubViewBar';
+import { TableWindowNavigator, type TableWindowTarget } from './table/TableWindowNavigator';
 import { GraphTopCenterConnectionButton } from './graph/GraphTopCenterConnectionButton';
 import { GraphConnectionPanel, connectionToPanelDraft, type ConnectionDraft } from './graph/GraphConnectionPanel';
 import { resolveProjectKind } from '../utils/projectKind';
@@ -50,6 +51,15 @@ type PendingTableDelete =
   | { kind: 'connection'; connectionId: string };
 
 type TableSubView = 'points' | 'edges';
+
+/** 与 NoteEditor 的 @media (max-width: 639px) 恰好共用同一条边界。 */
+const TABLE_CANVAS_MEDIA_QUERY = '(min-width: 640px)';
+const TABLE_CANVAS_WINDOW_GAP = 24;
+const TABLE_EDITOR_MAIN_WIDTH = 608;
+const TABLE_EDITOR_SIDE_GAP = 12;
+const TABLE_EDITOR_SIDE_WIDTH = 320;
+const TABLE_EDITOR_DETAIL_GAP = 12;
+const TABLE_EDITOR_DETAIL_WIDTH = 576;
 
 function noteRowTitle(note: Note | undefined): string {
   if (!note) return '（便签已删除）';
@@ -129,6 +139,28 @@ export const TableView: React.FC<TableViewProps> = ({
   const [pendingDelete, setPendingDelete] = useState<PendingTableDelete | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [editorNoteId, setEditorNoteId] = useState<string | null>(null);
+  const editorSaveDraftRef = useRef<(() => Promise<void>) | null>(null);
+  const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const listWindowRef = useRef<HTMLDivElement>(null);
+  const canvasDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+  const editorWasOpenRef = useRef(false);
+  const mediaDetailWasOpenRef = useRef(false);
+  const canvasAutoPanFrameRef = useRef<number | null>(null);
+  const canvasAutoPanTimerRef = useRef<number | null>(null);
+  const [isWideTableCanvas, setIsWideTableCanvas] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(TABLE_CANVAS_MEDIA_QUERY).matches
+  );
+  const [isCanvasDragging, setIsCanvasDragging] = useState(false);
+  const [isCanvasAutoPanning, setIsCanvasAutoPanning] = useState(false);
+  const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
+  const [listWindowWidth, setListWindowWidth] = useState(576);
+  const [isCanvasMediaDetailOpen, setIsCanvasMediaDetailOpen] = useState(false);
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
   const [panelEditingKey, setPanelEditingKey] = useState<string | 'new'>('new');
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft>({
@@ -153,6 +185,227 @@ export const TableView: React.FC<TableViewProps> = ({
     }
   }, [edgesTableEnabled, subView]);
 
+  useEffect(() => {
+    const query = window.matchMedia(TABLE_CANVAS_MEDIA_QUERY);
+    const updateMode = () => setIsWideTableCanvas(query.matches);
+    updateMode();
+    query.addEventListener('change', updateMode);
+    return () => query.removeEventListener('change', updateMode);
+  }, []);
+
+  useLayoutEffect(() => {
+    const listWindow = listWindowRef.current;
+    if (!listWindow) return;
+    const updateWidth = () => setListWindowWidth(listWindow.getBoundingClientRect().width);
+    updateWidth();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(listWindow);
+    return () => observer.disconnect();
+  }, [isWideTableCanvas, activeSubView]);
+
+  useEffect(() => {
+    setCanvasPan({ x: 0, y: 0 });
+  }, [project.id, activeSubView]);
+
+  useEffect(() => {
+    if (activeSubView !== 'points') setEditorNoteId(null);
+  }, [activeSubView]);
+
+  useEffect(() => {
+    const editorIsOpen = !!editorNoteId;
+    const editorWasOpen = editorWasOpenRef.current;
+    editorWasOpenRef.current = editorIsOpen;
+    if (editorIsOpen === editorWasOpen) return;
+
+    if (editorIsOpen) {
+      setShowSettingsPanel(false);
+      setShowConnectionPanel(false);
+      setPickTarget(null);
+    }
+
+    if (canvasAutoPanFrameRef.current != null) cancelAnimationFrame(canvasAutoPanFrameRef.current);
+    if (canvasAutoPanTimerRef.current != null) window.clearTimeout(canvasAutoPanTimerRef.current);
+
+    if (!isWideTableCanvas) {
+      setIsCanvasAutoPanning(false);
+      if (!editorIsOpen) setCanvasPan({ x: 0, y: 0 });
+      return;
+    }
+
+    const alignCanvas = (attempt = 0) => {
+      const viewport = canvasViewportRef.current;
+      const listWindow = listWindowRef.current;
+      if (!viewport || !listWindow) return;
+      const viewportRect = viewport.getBoundingClientRect();
+
+      if (editorIsOpen) {
+        const editorWindow = viewport.querySelector<HTMLElement>('.note-editor-canvas-window');
+        // ChromePresence 会在打开后的下一次提交才真正挂载窗口；等节点出现再测量，
+        // 否则首次打开会漏掉自动定位。
+        if (!editorWindow) {
+          if (attempt < 5) {
+            canvasAutoPanFrameRef.current = requestAnimationFrame(() => alignCanvas(attempt + 1));
+          }
+          return;
+        }
+        const editorMainWindow = editorWindow.querySelector<HTMLElement>('.note-editor-canvas-main') ?? editorWindow;
+        const listRect = listWindow.getBoundingClientRect();
+        const editorRect = editorWindow.getBoundingClientRect();
+        const editorMainRect = editorMainWindow.getBoundingClientRect();
+        const sidePadding = 24;
+        const bothWindowsFit =
+          listRect.left >= viewportRect.left + sidePadding &&
+          editorRect.right <= viewportRect.right - sidePadding;
+        if (bothWindowsFit) return;
+
+        const deltaX =
+          viewportRect.left + viewportRect.width / 2 -
+          (editorMainRect.left + editorMainRect.width / 2);
+        setIsCanvasAutoPanning(true);
+        setCanvasPan((current) => ({ x: current.x + deltaX, y: 0 }));
+        canvasAutoPanTimerRef.current = window.setTimeout(() => {
+          setIsCanvasAutoPanning(false);
+        }, 400);
+        return;
+      }
+
+      const listRect = listWindow.getBoundingClientRect();
+      const deltaX = viewportRect.left + viewportRect.width / 2 - (listRect.left + listRect.width / 2);
+      setIsCanvasAutoPanning(true);
+      setCanvasPan((current) => ({ x: current.x + deltaX, y: 0 }));
+      // 与 NoteEditor 的退出挂载时间同步；编辑器移除后画布归零，图层窗口位置不会跳变。
+      canvasAutoPanTimerRef.current = window.setTimeout(() => {
+        setIsCanvasAutoPanning(false);
+        setCanvasPan({ x: 0, y: 0 });
+      }, 400);
+    };
+    canvasAutoPanFrameRef.current = requestAnimationFrame(() => alignCanvas());
+  }, [editorNoteId, isWideTableCanvas]);
+
+  useEffect(() => () => {
+    if (canvasAutoPanFrameRef.current != null) cancelAnimationFrame(canvasAutoPanFrameRef.current);
+    if (canvasAutoPanTimerRef.current != null) window.clearTimeout(canvasAutoPanTimerRef.current);
+  }, []);
+
+  const handleCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isWideTableCanvas || event.button !== 0) return;
+    const target = event.target as Element;
+    if (target.closest('[data-table-canvas-window]')) return;
+    canvasDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: canvasPan.x,
+      panY: canvasPan.y
+    };
+    if (canvasAutoPanTimerRef.current != null) window.clearTimeout(canvasAutoPanTimerRef.current);
+    setIsCanvasAutoPanning(false);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsCanvasDragging(true);
+  }, [canvasPan.x, canvasPan.y, isWideTableCanvas]);
+
+  const handleCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = canvasDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    setCanvasPan({
+      x: drag.panX + event.clientX - drag.startX,
+      y: drag.panY + event.clientY - drag.startY
+    });
+  }, []);
+
+  const finishCanvasDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = canvasDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    canvasDragRef.current = null;
+    setIsCanvasDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
+  const editorCanvasSnapX = -(
+    listWindowWidth / 2 + TABLE_CANVAS_WINDOW_GAP + TABLE_EDITOR_MAIN_WIDTH / 2
+  );
+  const moreCanvasSnapX = -(
+    listWindowWidth / 2 +
+    TABLE_CANVAS_WINDOW_GAP +
+    TABLE_EDITOR_MAIN_WIDTH +
+    TABLE_EDITOR_SIDE_GAP +
+    TABLE_EDITOR_SIDE_WIDTH / 2
+  );
+  const detailCanvasSnapX = -(
+    listWindowWidth / 2 +
+    TABLE_CANVAS_WINDOW_GAP +
+    TABLE_EDITOR_MAIN_WIDTH +
+    TABLE_EDITOR_SIDE_GAP +
+    TABLE_EDITOR_SIDE_WIDTH +
+    TABLE_EDITOR_DETAIL_GAP +
+    TABLE_EDITOR_DETAIL_WIDTH / 2
+  );
+  const navigatorSnapXs = isCanvasMediaDetailOpen
+    ? [0, editorCanvasSnapX, moreCanvasSnapX, detailCanvasSnapX]
+    : [0, editorCanvasSnapX, moreCanvasSnapX];
+  const navigatorMaxPosition = navigatorSnapXs.length - 1;
+  let rawWindowNavigatorPosition = navigatorMaxPosition;
+  for (let index = 0; index < navigatorMaxPosition; index += 1) {
+    const fromX = navigatorSnapXs[index];
+    const toX = navigatorSnapXs[index + 1];
+    if (canvasPan.x >= toX) {
+      rawWindowNavigatorPosition = index + (canvasPan.x - fromX) / (toX - fromX);
+      break;
+    }
+  }
+  const windowNavigatorPosition = Math.max(
+    0,
+    Math.min(navigatorMaxPosition, rawWindowNavigatorPosition)
+  );
+
+  const previewWindowNavigator = useCallback((position: number) => {
+    if (canvasAutoPanTimerRef.current != null) window.clearTimeout(canvasAutoPanTimerRef.current);
+    setIsCanvasAutoPanning(false);
+    const snapXs = isCanvasMediaDetailOpen
+      ? [0, editorCanvasSnapX, moreCanvasSnapX, detailCanvasSnapX]
+      : [0, editorCanvasSnapX, moreCanvasSnapX];
+    const safePosition = Math.max(0, Math.min(snapXs.length - 1, position));
+    const lowerIndex = Math.floor(safePosition);
+    const upperIndex = Math.min(snapXs.length - 1, Math.ceil(safePosition));
+    const progress = safePosition - lowerIndex;
+    const nextX = snapXs[lowerIndex] + (snapXs[upperIndex] - snapXs[lowerIndex]) * progress;
+    setCanvasPan((current) => ({ ...current, x: nextX }));
+  }, [detailCanvasSnapX, editorCanvasSnapX, isCanvasMediaDetailOpen, moreCanvasSnapX]);
+
+  const commitWindowNavigator = useCallback((target: TableWindowTarget) => {
+    if (canvasAutoPanTimerRef.current != null) window.clearTimeout(canvasAutoPanTimerRef.current);
+    setIsCanvasAutoPanning(true);
+    setCanvasPan((current) => ({
+      ...current,
+      x:
+        target === 'editor'
+          ? editorCanvasSnapX
+          : target === 'more'
+            ? moreCanvasSnapX
+            : target === 'detail' && isCanvasMediaDetailOpen
+              ? detailCanvasSnapX
+              : 0
+    }));
+    canvasAutoPanTimerRef.current = window.setTimeout(() => {
+      setIsCanvasAutoPanning(false);
+    }, 400);
+  }, [detailCanvasSnapX, editorCanvasSnapX, isCanvasMediaDetailOpen, moreCanvasSnapX]);
+
+  const handleCanvasMediaDetailOpenChange = useCallback((open: boolean) => {
+    setIsCanvasMediaDetailOpen(open);
+  }, []);
+
+  useEffect(() => {
+    const wasOpen = mediaDetailWasOpenRef.current;
+    mediaDetailWasOpenRef.current = isCanvasMediaDetailOpen;
+    if (!isWideTableCanvas || !editorNoteId || wasOpen === isCanvasMediaDetailOpen) return;
+    commitWindowNavigator(isCanvasMediaDetailOpen ? 'detail' : 'more');
+  }, [commitWindowNavigator, editorNoteId, isCanvasMediaDetailOpen, isWideTableCanvas]);
+
   const textNotes = useMemo(
     () => project.notes.filter(note => note.variant !== 'image'),
     [project.notes]
@@ -174,14 +427,24 @@ export const TableView: React.FC<TableViewProps> = ({
     () => mergeGraphLayerState(textNotes, project.graphFrameLayers ?? null, 'frame'),
     [textNotes, project.graphFrameLayers]
   );
+  const mergedEmojiTableLayers = useMemo(
+    () => mergeGraphLayerState(textNotes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji'),
+    [textNotes, project.graphEmojiLayers, project.graphLayers]
+  );
   const mergedTableLayers =
-    tableGraphLayerStandard === 'frame' ? mergedFrameTableLayers : mergedTagTableLayers;
+    tableGraphLayerStandard === 'frame'
+      ? mergedFrameTableLayers
+      : tableGraphLayerStandard === 'emoji'
+        ? mergedEmojiTableLayers
+        : mergedTagTableLayers;
 
   const handleTableGraphLayersChange = useCallback(
     (next: GraphLayerState) => {
       if (!onUpdateProject) return;
       if (tableGraphLayerStandard === 'frame') {
         void onUpdateProject(project, { graphFrameLayers: next });
+      } else if (tableGraphLayerStandard === 'emoji') {
+        void onUpdateProject(project, { graphEmojiLayers: next });
       } else {
         void onUpdateProject(project, { graphLayers: next });
       }
@@ -241,7 +504,9 @@ export const TableView: React.FC<TableViewProps> = ({
       const merged =
         std === 'frame'
           ? mergeGraphLayerState(textNotes, project.graphFrameLayers ?? null, 'frame')
-          : mergeGraphLayerState(textNotes, project.graphLayers ?? null, 'tag');
+          : std === 'emoji'
+            ? mergeGraphLayerState(textNotes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji')
+            : mergeGraphLayerState(textNotes, project.graphLayers ?? null, 'tag');
       const fm = new Map((project.frames ?? []).map((f) => [String(f.id).trim(), f]));
       for (const key of merged.order) {
         const gl = groupDisplayLabel(String(key).trim(), std, fm);
@@ -276,12 +541,13 @@ export const TableView: React.FC<TableViewProps> = ({
       ]);
     }
     triggerDownloadCsv(`${base}_关联表_${ts}.csv`, buildCsv(rows));
-  }, [activeSubView, textNotes, connections, noteById, project.name, project.graphLayerStandard, project.graphLayers, project.graphFrameLayers, project.frames]);
+  }, [activeSubView, textNotes, connections, noteById, project.name, project.graphLayerStandard, project.graphLayers, project.graphEmojiLayers, project.graphFrameLayers, project.frames]);
 
   const rowTrashBtn =
     'opacity-0 pointer-events-none transition-all group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50';
 
   const toggleConnectionPanel = useCallback(() => {
+    setShowSettingsPanel(false);
     setShowConnectionPanel((open) => !open);
   }, []);
 
@@ -407,6 +673,15 @@ export const TableView: React.FC<TableViewProps> = ({
   const tableScrollTopPad =
     'max(5.5rem, calc(env(safe-area-inset-top, 0px) + 3.25rem))';
 
+  const activateTableNote = useCallback(
+    async (note: Note) => {
+      if (note.id === editorNoteId) return;
+      await editorSaveDraftRef.current?.();
+      setEditorNoteId(note.id);
+    },
+    [editorNoteId]
+  );
+
   return (
     <div className="relative h-full bg-gray-50 flex flex-col min-h-0">
       <TableTopLeftSettingsButton
@@ -416,7 +691,11 @@ export const TableView: React.FC<TableViewProps> = ({
         chromeHoverBackground={chHover}
         settingsOpen={showSettingsPanel}
         settingsButtonRef={settingsButtonRef}
-        onOpenSettings={() => setShowSettingsPanel((v) => !v)}
+        onOpenSettings={() => {
+          setShowConnectionPanel(false);
+          setPickTarget(null);
+          setShowSettingsPanel((v) => !v);
+        }}
       />
       <TableTopRightDownloadButton
         isUIVisible={isUIVisible}
@@ -424,6 +703,15 @@ export const TableView: React.FC<TableViewProps> = ({
         chromeHoverBackground={chHover}
         onDownload={downloadCurrentTable}
         subView={activeSubView}
+      />
+      <TableWindowNavigator
+        visible={isUIVisible && isWideTableCanvas && activeSubView === 'points' && !!editorNoteId}
+        detailVisible={isCanvasMediaDetailOpen}
+        position={windowNavigatorPosition}
+        themeColor={themeColor}
+        panelChromeStyle={panelChromeStyle}
+        onPreview={previewWindowNavigator}
+        onCommit={commitWindowNavigator}
       />
       {edgesTableEnabled ? (
         <GraphTopCenterConnectionButton
@@ -435,11 +723,46 @@ export const TableView: React.FC<TableViewProps> = ({
         />
       ) : null}
       <div
-        className={`flex-1 min-h-0 overflow-auto px-4 sm:px-6 box-border ${
-          edgesTableEnabled ? 'pb-28' : 'pb-8'
-        }`}
-        style={{ paddingTop: tableScrollTopPad }}
+        ref={canvasViewportRef}
+        className={isWideTableCanvas
+          ? `table-node-canvas relative flex-1 min-h-0 overflow-hidden box-border ${isCanvasDragging ? 'cursor-grabbing' : 'cursor-grab'}`
+          : `flex-1 min-h-0 overflow-auto px-4 sm:px-6 box-border ${edgesTableEnabled ? 'pb-28' : 'pb-8'}`}
+        style={isWideTableCanvas ? { touchAction: 'none' } : { paddingTop: tableScrollTopPad }}
+        onPointerDown={handleCanvasPointerDown}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerUp={finishCanvasDrag}
+        onPointerCancel={finishCanvasDrag}
+        onDoubleClick={(event) => {
+          if (!isWideTableCanvas) return;
+          const target = event.target as Element;
+          if (!target.closest('[data-table-canvas-window]')) setCanvasPan({ x: 0, y: 0 });
+        }}
       >
+        <div
+          className={isWideTableCanvas
+            ? 'table-node-canvas-stage absolute flex w-max items-start gap-6 pb-24'
+            : undefined}
+          style={isWideTableCanvas
+            ? {
+                top: tableScrollTopPad,
+                left: `calc(50% + ${canvasPan.x - listWindowWidth / 2}px)`,
+                marginTop: canvasPan.y,
+                transition: isCanvasAutoPanning && !isCanvasDragging
+                  ? 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 380ms cubic-bezier(0.22, 1, 0.36, 1)'
+                  : undefined,
+                willChange: isCanvasDragging ? 'left, margin-top' : undefined
+              }
+            : undefined}
+        >
+        <div
+          ref={listWindowRef}
+          data-table-canvas-window={isWideTableCanvas ? 'list' : undefined}
+          className={isWideTableCanvas
+            ? activeSubView === 'points'
+              ? `${editorNoteId ? 'w-[28rem]' : 'w-[36rem]'} max-w-[calc(100vw-6rem)] shrink-0 cursor-auto`
+              : 'w-[min(60rem,calc(100vw-6rem))] shrink-0 cursor-auto'
+            : undefined}
+        >
         {activeSubView === 'points' ? (
           <>
             {onUpdateProject ? (
@@ -459,13 +782,13 @@ export const TableView: React.FC<TableViewProps> = ({
                   onUpdateNote={onUpdateNote}
                   onBatchUpdateNotes={handleTableBatchNotes}
                   frames={project.frames ?? []}
-                  onActivateNote={(n) => setEditorNoteId(n.id)}
+                  onActivateNote={(n) => void activateTableNote(n)}
                   tableMode
                   onUpdateFrameTitle={handleUpdateFrameTitle}
                 />
               </div>
             ) : (
-              <p className="mb-4 text-sm text-gray-500">只读模式：图层面板需要项目写入权限。</p>
+              <p className="mb-4 text-sm text-gray-500">只读模式：筛选面板需要项目写入权限。</p>
             )}
             {textNotes.length === 0 ? (
               <div className="py-12 text-center italic text-gray-400">暂无便签数据</div>
@@ -555,6 +878,32 @@ export const TableView: React.FC<TableViewProps> = ({
           </div>
         )}
 
+        </div>
+
+        <NoteEditor
+          initialNote={project.notes.find(n => n.id === editorNoteId)}
+          isOpen={!!editorNoteId}
+          onClose={() => setEditorNoteId(null)}
+          saveDraftRef={editorSaveDraftRef}
+          onSave={(updatedNote) => {
+            if (editorNoteId) {
+              const existingNote = project.notes.find(n => n.id === editorNoteId);
+              if (existingNote) {
+                onUpdateNote({ ...existingNote, ...updatedNote });
+              }
+            }
+          }}
+          onSwitchToBoardView={onSwitchToBoardView}
+          onSwitchToMapView={onSwitchToMapView}
+          onSwitchToGraphView={onSwitchToGraphView}
+          themeColor={themeColor}
+          mapUiChromeOpacity={mapUiChromeOpacity}
+          mapUiChromeBlurPx={mapUiChromeBlurPx}
+          presentation={isWideTableCanvas ? 'canvas-window' : 'modal'}
+          onCanvasMediaDetailOpenChange={handleCanvasMediaDetailOpenChange}
+        />
+        </div>
+
       {edgesTableEnabled && showConnectionPanel && onUpdateConnections && isUIVisible && (
         <GraphConnectionPanel
           isOpen
@@ -585,31 +934,9 @@ export const TableView: React.FC<TableViewProps> = ({
         />
       )}
 
-      {
-        <NoteEditor
-          initialNote={project.notes.find(n => n.id === editorNoteId)}
-          isOpen={!!editorNoteId}
-          onClose={() => setEditorNoteId(null)}
-          onSave={(updatedNote) => {
-            if (editorNoteId) {
-              const existingNote = project.notes.find(n => n.id === editorNoteId);
-              if (existingNote) {
-                onUpdateNote({ ...existingNote, ...updatedNote });
-              }
-            }
-            setEditorNoteId(null);
-          }}
-          onSwitchToBoardView={onSwitchToBoardView}
-          onSwitchToMapView={onSwitchToMapView}
-          onSwitchToGraphView={onSwitchToGraphView}
-          themeColor={themeColor}
-          mapUiChromeOpacity={mapUiChromeOpacity}
-          mapUiChromeBlurPx={mapUiChromeBlurPx}
-        />
-      }
       </div>
 
-      {edgesTableEnabled ? (
+      {edgesTableEnabled && (isWideTableCanvas || !editorNoteId) ? (
         <TableBottomSubViewBar
           panelChromeStyle={panelChromeStyle}
           themeColor={themeColor}

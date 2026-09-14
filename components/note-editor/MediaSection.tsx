@@ -10,6 +10,7 @@ const THUMB_IMG =
   'max-w-[4.25rem] max-h-[4.25rem] w-auto h-auto object-contain pointer-events-none select-none drop-shadow-[0_6px_14px_rgba(15,23,42,0.32)]';
 
 interface MediaSectionProps {
+  standalone?: boolean;
   mediaItems: NoteMediaItem[];
   displaySrcs: string[];
   onReorder: (next: NoteMediaItem[]) => void;
@@ -22,6 +23,7 @@ interface MediaSectionProps {
 
 /** Media：统一附件列表（图片+涂鸦混排，指针拖拽排序） */
 export const MediaSection: React.FC<MediaSectionProps> = ({
+  standalone = false,
   mediaItems,
   displaySrcs,
   onReorder,
@@ -130,7 +132,12 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
   };
 
   return (
-    <section className="flex flex-col shrink-0 border-t border-gray-400/50" aria-label="媒体">
+    <section
+      className={`relative flex shrink-0 flex-col ${
+        standalone ? '' : 'before:absolute before:top-0 before:left-3 before:right-3 before:border-t before:border-gray-400/50'
+      }`}
+      aria-label="媒体"
+    >
       <div className="px-4 pt-2 pb-1 flex items-center justify-between gap-2">
         <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">媒体</span>
         {moreActionsSlot}

@@ -23,6 +23,20 @@ export const PLACEMENT_NOTE_H = 256;
 export const PLACEMENT_SLOT_W = PLACEMENT_NOTE_W + PLACEMENT_GAP;
 export const PLACEMENT_SLOT_H = PLACEMENT_NOTE_H + PLACEMENT_GAP;
 
+/** 媒体贴纸保持完整比例，并以便签的最长边作为默认显示尺度。 */
+export function fitBoardMediaDimensions(
+  width: number,
+  height: number
+): { width: number; height: number } {
+  const sourceWidth = Number.isFinite(width) && width > 0 ? width : PLACEMENT_NOTE_W;
+  const sourceHeight = Number.isFinite(height) && height > 0 ? height : PLACEMENT_NOTE_H;
+  const scale = PLACEMENT_NOTE_W / Math.max(sourceWidth, sourceHeight);
+  return {
+    width: Math.max(1, Math.round(sourceWidth * scale)),
+    height: Math.max(1, Math.round(sourceHeight * scale))
+  };
+}
+
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 
 export interface BoardBounds {

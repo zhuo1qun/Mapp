@@ -287,10 +287,10 @@ export interface Project {
   /** 图谱视图：标签组排序与隐藏 / 权重（标签图层面板） */
   graphLayers?: GraphLayerState;
   /**
-   * 历史字段：地图/看板图层面板仍可切换 tag|frame。
+   * 地图 / 看板 / 表格图层面板的当前分组方式。
    * 图谱时间线聚类依据见 graphClusterBasis。
    */
-  graphLayerStandard?: 'tag' | 'frame';
+  graphLayerStandard?: 'tag' | 'emoji' | 'frame';
   /**
    * 图谱时间线「按聚类分层」的依据：
    * - `'frame'`（默认）：簇图层
@@ -299,6 +299,8 @@ export interface Project {
   graphClusterBasis?: 'frame' | string;
   /** 图谱视图：簇组排序与显隐 / 半径权重 */
   graphFrameLayers?: GraphLayerState;
+  /** 图谱视图：Emoji 分组的排序与显隐 / 权重 */
+  graphEmojiLayers?: GraphLayerState;
   /** 图谱节点圆直径下限（px，1～36）；实际大小按关联节点数放大，上限 36 */
   graphNodeSize?: number;
   /** 图谱节点下方标题字号（px，4～16） */

@@ -1,7 +1,9 @@
 import type { Frame, GraphLayerState, Note, TagVisibilityLogic } from '../../types';
 import { GRAPH_UNTAGGED_TAG_GROUP } from '../graph/graphRuntimeCore';
 import type { GraphLayerGroupStandard } from '../graph/graphRuntimeCore';
-import { emojiToLayerTagKey } from './tagHierarchy';
+
+/** 没有 emoji 的便签在 Emoji 图层中的稳定分组键。 */
+export const GRAPH_UNEMOJI_GROUP = '无 Emoji';
 
 export function normalizeTagVisibilityLogic(raw?: string | null): TagVisibilityLogic {
   return raw === 'and' ? 'and' : 'or';
@@ -36,20 +38,39 @@ export function noteTagLabels(note: Note): string[] {
     seen.add(l);
     out.push(l);
   }
-  // emoji 归入父集【emoji】（`【emoji】 · 🔥`），交互同 · 层级
-  const emojiKey = emojiToLayerTagKey(note.emoji ?? '');
-  if (emojiKey && !seen.has(emojiKey)) {
-    out.push(emojiKey);
-  }
   return out;
 }
 
 export function noteTagLayerGroupKey(note: Note): string {
   const raw = note.tags?.[0]?.label?.trim() ?? '';
   if (raw !== '') return raw;
-  const emojiKey = emojiToLayerTagKey(note.emoji ?? '');
-  if (emojiKey) return emojiKey;
   return GRAPH_UNTAGGED_TAG_GROUP;
+}
+
+/** Emoji 是与标签、簇并列的图层分组依据，不再拼入标签层键。 */
+export function noteEmojiLayerGroupKey(note: Note): string {
+  return String(note.emoji ?? '').trim() || GRAPH_UNEMOJI_GROUP;
+}
+
+/**
+ * 将旧版混在标签层里的 `【emoji】 · 🙂` 顺序和显隐偏好带入新版 Emoji 层。
+ * 只在项目尚未写入 `graphEmojiLayers` 时使用；不会再把 emoji 视为标签。
+ */
+export function emojiLayerStateFromLegacyTagState(saved?: GraphLayerState | null): GraphLayerState | null {
+  if (!saved) return null;
+  const toEmoji = (value: string): string | null => {
+    const match = /^【emoji】\s*·\s*(.+)$/.exec(String(value ?? '').trim());
+    return match?.[1]?.trim() || null;
+  };
+  const order = (saved.order ?? []).map(toEmoji).filter((x): x is string => x != null);
+  if (order.length === 0) return null;
+  const hidden = (saved.hidden ?? []).map(toEmoji).filter((x): x is string => x != null);
+  const weights: Record<string, number> = {};
+  for (const [key, value] of Object.entries(saved.weights ?? {})) {
+    const emoji = toEmoji(key);
+    if (emoji) weights[emoji] = value;
+  }
+  return { order, hidden, weights };
 }
 
 export function noteFrameIdCandidates(note: Note): string[] {
@@ -86,6 +107,7 @@ export function noteBelongsToLayerGroupKey(
     if (k === '' || k === GRAPH_UNTAGGED_TAG_GROUP) return labels.length === 0;
     return labels.includes(k);
   }
+  if (standard === 'emoji') return noteEmojiLayerGroupKey(note) === k;
   if (k === '') {
     return noteFrameIdCandidates(note).length === 0;
   }
@@ -111,6 +133,7 @@ export function isNoteVisibleInUnifiedLayer(
       normalizeTagVisibilityLogic(merged.tagVisibilityLogic)
     );
   }
+  if (standard === 'emoji') return !hiddenSet.has(noteEmojiLayerGroupKey(note));
   const g = effectiveFrameGroupKeyForNote(note, hiddenSet);
   return !hiddenSet.has(g);
 }
@@ -141,6 +164,7 @@ export function groupDisplayLabel(
     if (k === '' || k === GRAPH_UNTAGGED_TAG_GROUP) return '无标签';
     return k;
   }
+  if (standard === 'emoji') return k === GRAPH_UNEMOJI_GROUP ? '无 Emoji' : k;
   if (k === '') return '无簇';
   return framesById.get(k)?.title ?? k;
 }

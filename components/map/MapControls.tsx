@@ -7,7 +7,8 @@ import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon } from 'luc
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { ChromeMenuItem } from '../ui/ChromeMenuItem';
 import { ChromeMenuShell } from '../ui/ChromeMenuShell';
-import { ChromePresence, ChromeSheetPresence } from '../ui/ChromeSheetPresence';
+import { ChromePresence } from '../ui/ChromeSheetPresence';
+import { ResponsiveWindowPresence } from '../ui/ResponsiveWindowPresence';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface MapControlsProps {
@@ -316,15 +317,13 @@ export const MapControls: React.FC<MapControlsProps> = ({
     </div>
     {isCompactViewport && typeof document !== 'undefined'
       ? createPortal(
-          <ChromeSheetPresence open={showLocateMenu || showCreateMenu}>
+          <ResponsiveWindowPresence
+            open={showLocateMenu || showCreateMenu}
+            onClose={onCloseMenus}
+            backdropLabel="关闭操作菜单"
+          >
             {(phase) => (
               <div ref={compactSheetRef}>
-                <button
-                  type="button"
-                  aria-label="关闭操作菜单"
-                  className={`chrome-sheet-backdrop-${phase} fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px]`}
-                  onClick={onCloseMenus}
-                />
                 {renderedCompactMenuKind === 'locate' ? (
                   <ChromeMenuShell
                     appearance={menuChromeAppearance}
@@ -351,7 +350,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
                 ) : null}
               </div>
             )}
-          </ChromeSheetPresence>,
+          </ResponsiveWindowPresence>,
           document.body
         )
       : null}

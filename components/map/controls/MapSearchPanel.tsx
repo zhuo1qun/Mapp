@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { Search, Copy, Loader2 } from 'lucide-react';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { ChromeSegmentedControl } from '../../ui/ChromeSegmentedControl';
-import { ChromePresence } from '../../ui/ChromeSheetPresence';
+import { ResponsiveWindowPresence } from '../../ui/ResponsiveWindowPresence';
+import { AnchoredWorkspaceWindow } from '../../ui/AnchoredWorkspaceWindow';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
@@ -83,21 +84,13 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
   }, [isOpen, onClose]);
 
   const panel = panelTop != null ? (
-      <ChromePresence open={isOpen} kind="sheet">
+      <ResponsiveWindowPresence open={isOpen} onClose={onClose} backdropLabel="关闭检索">
         {(phase) => (
           <>
-        <button
-          type="button"
-          className={`fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden chrome-dialog-backdrop-${phase}`}
-          aria-label="关闭检索"
-          onClick={onClose}
-        />
-        <div
+        <AnchoredWorkspaceWindow
           data-map-search-chrome-panel
           className={`map-chrome-content-${menuChromeAppearance} ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-3 chrome-responsive-anchored-${phase} ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
           style={{ top: panelTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
         >
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-xs font-medium text-gray-500">检索</h3>
@@ -205,10 +198,10 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
             </div>
           </div>
         )}
-        </div>
+        </AnchoredWorkspaceWindow>
           </>
         )}
-      </ChromePresence>
+      </ResponsiveWindowPresence>
     ) : null;
 
   return (

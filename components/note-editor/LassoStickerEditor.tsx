@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, RotateCcw, X } from 'lucide-react';
+import { Check, RotateCcw } from 'lucide-react';
 import type { NormPoint } from '../../types';
 import { prepareLassoPath } from '../../utils/media/pathSimplify';
 import { normPointsToSvgPathD } from '../../utils/media/imageMaskRender';
@@ -7,21 +7,13 @@ import { normPointsToSvgPathD } from '../../utils/media/imageMaskRender';
 type Props = {
   imageSrc: string;
   themeColor: string;
-  onCancel: () => void;
   onConfirm: (points: NormPoint[]) => void | Promise<void>;
 };
 
 type ContentBox = { left: number; top: number; w: number; h: number };
 
-/**
- * 套索贴纸：在图片上拖出闭合路径（屏幕坐标 → 归一化 0～1）。
- */
-export const LassoStickerEditor: React.FC<Props> = ({
-  imageSrc,
-  themeColor,
-  onCancel,
-  onConfirm
-}) => {
+/** 媒体详情窗口内部的套索工作区；窗口外壳与关闭逻辑由父组件统一负责。 */
+export const LassoStickerEditor: React.FC<Props> = ({ imageSrc, themeColor, onConfirm }) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const [rawPoints, setRawPoints] = useState<NormPoint[]>([]);
   const [drawing, setDrawing] = useState(false);
@@ -31,22 +23,25 @@ export const LassoStickerEditor: React.FC<Props> = ({
   const measure = useCallback(() => {
     const img = imgRef.current;
     if (!img) return;
-    const r = img.getBoundingClientRect();
-    const natW = img.naturalWidth || r.width;
-    const natH = img.naturalHeight || r.height;
-    if (natW <= 0 || natH <= 0 || r.width <= 0 || r.height <= 0) return;
-    const scale = Math.min(r.width / natW, r.height / natH);
-    const w = natW * scale;
-    const h = natH * scale;
+    const rect = img.getBoundingClientRect();
+    const naturalWidth = img.naturalWidth || rect.width;
+    const naturalHeight = img.naturalHeight || rect.height;
+    if (naturalWidth <= 0 || naturalHeight <= 0 || rect.width <= 0 || rect.height <= 0) return;
+    const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+    const width = naturalWidth * scale;
+    const height = naturalHeight * scale;
     setContentBox({
-      left: (r.width - w) / 2,
-      top: (r.height - h) / 2,
-      w,
-      h
+      left: (rect.width - width) / 2,
+      top: (rect.height - height) / 2,
+      w: width,
+      h: height
     });
   }, []);
 
   useEffect(() => {
+    setRawPoints([]);
+    setDrawing(false);
+    setContentBox(null);
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
@@ -55,55 +50,57 @@ export const LassoStickerEditor: React.FC<Props> = ({
   const clientToNorm = useCallback((clientX: number, clientY: number): NormPoint | null => {
     const img = imgRef.current;
     if (!img) return null;
-    const r = img.getBoundingClientRect();
-    const natW = img.naturalWidth || r.width;
-    const natH = img.naturalHeight || r.height;
-    if (natW <= 0 || natH <= 0) return null;
-    const scale = Math.min(r.width / natW, r.height / natH);
-    const contentW = natW * scale;
-    const contentH = natH * scale;
-    const offsetX = (r.width - contentW) / 2;
-    const offsetY = (r.height - contentH) / 2;
-    const x = (clientX - r.left - offsetX) / contentW;
-    const y = (clientY - r.top - offsetY) / contentH;
+    const rect = img.getBoundingClientRect();
+    const naturalWidth = img.naturalWidth || rect.width;
+    const naturalHeight = img.naturalHeight || rect.height;
+    if (naturalWidth <= 0 || naturalHeight <= 0) return null;
+    const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+    const contentWidth = naturalWidth * scale;
+    const contentHeight = naturalHeight * scale;
+    const offsetX = (rect.width - contentWidth) / 2;
+    const offsetY = (rect.height - contentHeight) / 2;
+    const x = (clientX - rect.left - offsetX) / contentWidth;
+    const y = (clientY - rect.top - offsetY) / contentHeight;
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
     return [Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y))];
   }, []);
 
   const appendPoint = useCallback(
     (clientX: number, clientY: number) => {
-      const p = clientToNorm(clientX, clientY);
-      if (!p) return;
-      setRawPoints((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && Math.hypot(last[0] - p[0], last[1] - p[1]) < 0.002) return prev;
-        return [...prev, p];
+      const point = clientToNorm(clientX, clientY);
+      if (!point) return;
+      setRawPoints((previous) => {
+        const last = previous[previous.length - 1];
+        if (last && Math.hypot(last[0] - point[0], last[1] - point[1]) < 0.002) {
+          return previous;
+        }
+        return [...previous, point];
       });
     },
     [clientToNorm]
   );
 
-  const onPointerDown = (e: React.PointerEvent) => {
+  const handlePointerDown = (event: React.PointerEvent) => {
     if (busy) return;
-    e.preventDefault();
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     setDrawing(true);
     setRawPoints([]);
-    appendPoint(e.clientX, e.clientY);
+    appendPoint(event.clientX, event.clientY);
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
+  const handlePointerMove = (event: React.PointerEvent) => {
     if (!drawing || busy) return;
-    e.preventDefault();
-    appendPoint(e.clientX, e.clientY);
+    event.preventDefault();
+    appendPoint(event.clientX, event.clientY);
   };
 
-  const onPointerUp = (e: React.PointerEvent) => {
+  const handlePointerUp = (event: React.PointerEvent) => {
     if (!drawing) return;
-    e.preventDefault();
+    event.preventDefault();
     setDrawing(false);
-    appendPoint(e.clientX, e.clientY);
+    appendPoint(event.clientX, event.clientY);
   };
 
   const previewPath = rawPoints.length >= 2 ? prepareLassoPath(rawPoints) : rawPoints;
@@ -123,46 +120,27 @@ export const LassoStickerEditor: React.FC<Props> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[1100] flex flex-col bg-black/85 touch-none"
-      onPointerDown={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-center justify-between gap-2 px-4 py-3 text-white shrink-0">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold">套索贴纸</div>
-          <p className="text-[11px] text-white/60 mt-0.5">沿主体拖出一圈，松手后点完成</p>
-        </div>
-        <button
-          type="button"
-          className="rounded-lg p-2 text-white/80 hover:bg-white/10 border-0 cursor-pointer"
-          onClick={onCancel}
-          disabled={busy}
-          aria-label="取消"
-        >
-          <X size={22} />
-        </button>
-      </div>
-
-      <div className="relative flex-1 min-h-0 flex items-center justify-center px-4 pb-4">
-        <div className="relative max-w-full max-h-full inline-block">
+    <>
+      <div className="chrome-inset relative m-4 mt-3 flex min-h-0 flex-1 touch-none items-center justify-center overflow-hidden rounded-xl p-4">
+        <div className="relative inline-block max-h-full max-w-full">
           <img
             ref={imgRef}
             src={imageSrc}
             alt="套索原图"
-            className="max-w-full max-h-[min(70vh,720px)] object-contain select-none pointer-events-none"
+            className="pointer-events-none max-h-[calc(100dvh-18rem)] max-w-full select-none object-contain"
             draggable={false}
             onLoad={measure}
           />
           <div
             className="absolute inset-0 cursor-crosshair"
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
           >
             {contentBox && svgD ? (
               <svg
-                className="absolute pointer-events-none"
+                className="pointer-events-none absolute"
                 style={{
                   left: contentBox.left,
                   top: contentBox.top,
@@ -185,10 +163,10 @@ export const LassoStickerEditor: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shrink-0">
+      <footer className="flex shrink-0 items-center justify-center gap-2 border-t border-gray-100/80 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3">
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-white/90 bg-white/10 hover:bg-white/15 border-0 cursor-pointer disabled:opacity-40"
+          className="chrome-menu-item inline-flex cursor-pointer items-center gap-1.5 rounded-xl border-0 bg-transparent px-3 py-2 text-sm text-gray-600 disabled:opacity-40"
           disabled={busy || rawPoints.length === 0}
           onClick={() => setRawPoints([])}
         >
@@ -197,7 +175,7 @@ export const LassoStickerEditor: React.FC<Props> = ({
         </button>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-theme-chrome-fg border-0 cursor-pointer disabled:opacity-40"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border-0 px-4 py-2 text-sm font-semibold text-theme-chrome-fg disabled:opacity-40"
           style={{ backgroundColor: themeColor }}
           disabled={busy || rawPoints.length < 8}
           onClick={() => void handleConfirm()}
@@ -205,7 +183,7 @@ export const LassoStickerEditor: React.FC<Props> = ({
           <Check size={16} />
           {busy ? '处理中…' : '完成'}
         </button>
-      </div>
-    </div>
+      </footer>
+    </>
   );
 };

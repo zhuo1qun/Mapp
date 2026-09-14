@@ -6,6 +6,7 @@ import { set } from 'idb-keyval';
 import { Note, Coordinates, Project, Frame, Connection, type GraphLayerState } from '../types';
 import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
 import {
+  emojiLayerStateFromLegacyTagState,
   isNoteVisibleInUnifiedLayer,
   noteHasRenderableMapPosition,
   sortNotesByLayerStack
@@ -72,6 +73,7 @@ import { ImportPreviewDialog } from './ImportPreviewDialog';
 import { buildMapTabExportPayload } from '../utils/map/mapTabExportPayload';
 import { buildStandaloneMapTabHtml } from '../utils/map/mapTabExportHtml';
 import { downloadTextFile } from '../utils/graph/graphExportHtml';
+import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
 import {
   mapChromeSurfaceStyle,
   mapChromeControlStyle,
@@ -973,6 +975,17 @@ export const MapView: React.FC<MapViewProps> = ({
     if (keep !== 'create') setShowCreateMenu(false);
   }, [setShowBorderPanel, setShowFrameLayerPanel]);
 
+  useEffect(() => {
+    const dismiss = () => {
+      closeMapChromeExcept();
+      setShowImportMenu?.(false);
+      setShowMapConnectionPanel(false);
+      setMapConnPickTarget(null);
+    };
+    window.addEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
+    return () => window.removeEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
+  }, [closeMapChromeExcept, setMapConnPickTarget, setShowImportMenu, setShowMapConnectionPanel]);
+
   const handleToggleSettings = useCallback(() => {
     closeMapChromeExcept('settings');
     setShowSettingsPanel((v) => !v);
@@ -1020,8 +1033,16 @@ export const MapView: React.FC<MapViewProps> = ({
     () => mergeGraphLayerState(notes, project.graphFrameLayers ?? null, 'frame'),
     [notes, project.graphFrameLayers]
   );
+  const mergedEmojiMapLayers = useMemo(
+    () => mergeGraphLayerState(notes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji'),
+    [notes, project.graphEmojiLayers, project.graphLayers]
+  );
   const mergedMapProjectLayers =
-    graphLayerStandard === 'frame' ? mergedFrameMapLayers : mergedTagMapLayers;
+    graphLayerStandard === 'frame'
+      ? mergedFrameMapLayers
+      : graphLayerStandard === 'emoji'
+        ? mergedEmojiMapLayers
+        : mergedTagMapLayers;
 
   const mapCanvasNotes = useMemo(
     () =>
@@ -1069,6 +1090,8 @@ export const MapView: React.FC<MapViewProps> = ({
       if (!onUpdateProject) return;
       if (graphLayerStandard === 'frame') {
         void onUpdateProject({ ...project, graphFrameLayers: next });
+      } else if (graphLayerStandard === 'emoji') {
+        void onUpdateProject({ ...project, graphEmojiLayers: next });
       } else {
         void onUpdateProject({ ...project, graphLayers: next });
       }

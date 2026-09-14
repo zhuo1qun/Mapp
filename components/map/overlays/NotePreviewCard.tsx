@@ -157,23 +157,23 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {/* 与 NoteEditor 标题栏共用 16px 外边距、36px 操作命中区和同一条顶部对齐线。 */}
-      <div className="flex items-start gap-2 p-4 pb-2 border-b border-gray-100 shrink-0">
+      {/* 预览卡保持比完整编辑器更轻一档的标题与操作密度。 */}
+      <div className="relative flex items-start gap-2 px-3.5 py-3 pb-1.5 shrink-0 before:absolute before:bottom-0 before:left-3 before:right-3 before:border-b before:border-gray-400/50">
         <div className="flex min-w-0 flex-1 items-start gap-2">
           {note.emoji && (
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-2xl">{note.emoji}</span>
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-xl">{note.emoji}</span>
           )}
-          <div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
-            <h3 className="text-lg font-bold text-gray-900 leading-tight whitespace-pre-line break-words">
+          <div className="flex min-h-8 min-w-0 flex-1 flex-col justify-center">
+            <h3 className="text-base font-semibold text-gray-700 leading-snug whitespace-pre-line break-words">
               {formatPreviewTitle(note.text || '')}
             </h3>
             {timeRangeText && (
-              <div className="mt-1 text-xs text-gray-500 font-medium truncate">
+              <div className="mt-0.5 text-[11px] text-gray-500 font-medium truncate">
                 {timeRangeText}
               </div>
             )}
             {(note.tags?.length ?? 0) > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 {note.tags!.map((t) => (
                   <TagChip
                     key={t.id || `${t.label}:${t.color}`}
@@ -198,8 +198,9 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                   setNavSheetOpen(true);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
+                className="min-h-8 min-w-8 p-1.5 text-gray-500 hover:text-gray-700"
               >
-                <Navigation size={22} strokeWidth={2} aria-hidden />
+                <Navigation size={18} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
             {showEdit ? (
@@ -212,8 +213,9 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                   onOpenEditor?.(note.id);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
+                className="min-h-8 min-w-8 p-1.5 text-gray-500 hover:text-gray-700"
               >
-                <Pencil size={22} strokeWidth={2} aria-hidden />
+                <Pencil size={18} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
           </div>
@@ -225,9 +227,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
           const { detail } = parseNoteContent(note.text);
           if (!detail.trim()) return null;
           return (
-            <div className={`px-4 py-3 text-gray-800 text-sm leading-snug break-words border-b border-gray-50 mapping-preview-markdown ${
-              chromeAppearance === 'dark' ? 'bg-transparent' : 'bg-gray-50/30'
-            }`}>
+            <div className="px-4 py-3 text-gray-800 text-sm leading-snug break-words border-b border-gray-50 mapping-preview-markdown">
               <ReactMarkdown
                 components={{
                   a: ({ href, children, ...props }) => (

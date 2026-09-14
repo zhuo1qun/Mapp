@@ -162,6 +162,9 @@
     return style;
   }
 
+  // utils/layer/unifiedNoteLayer.ts
+  var GRAPH_UNEMOJI_GROUP = "\u65E0 Emoji";
+
   // utils/graph/graphRuntimeCore.ts
   var GRAPH_SORT_LOCALE = "zh-Hans-CN";
   var GRAPH_UNTAGGED_TAG_GROUP = "\u65E0\u6807\u7B7E";
@@ -173,6 +176,9 @@
       const k = n.data("tagGroup");
       return [String(k ?? "").trim()];
     }
+    if (standard === "emoji") {
+      return [String(n.data("emojiGroup") ?? GRAPH_UNEMOJI_GROUP).trim() || GRAPH_UNEMOJI_GROUP];
+    }
     const raw = n.data("frameGroups");
     const arr = Array.isArray(raw) ? raw : (
       // 兼容旧导出/历史数据：仅有首簇归属字段
@@ -181,8 +187,8 @@
     return arr.map((x) => String(x ?? "").trim()).filter((x) => x !== "");
   }
   function getGraphLayerEffectiveGroupKey(n, standard, hiddenSet) {
-    if (standard === "tag") {
-      const k = n.data("tagGroup");
+    if (standard === "tag" || standard === "emoji") {
+      const k = n.data(standard === "tag" ? "tagGroup" : "emojiGroup");
       return String(k ?? "").trim();
     }
     const candidates = getGraphLayerCandidateKeys(n, standard);
@@ -207,9 +213,10 @@
     });
     applyGraphNodeStackZIndex(cy);
   }
-  function applyGraphDualLayerNodeVisibility(cy, tagHidden, frameHidden, tagVisibilityLogic = "or") {
+  function applyGraphDualLayerNodeVisibility(cy, tagHidden, frameHidden, tagVisibilityLogic = "or", emojiHidden = []) {
     const tagSet = new Set(tagHidden.map((h) => String(h).trim()));
     const frameSet = new Set(frameHidden.map((h) => String(h).trim()));
+    const emojiSet = new Set(emojiHidden.map((h) => String(h).trim()));
     const logic = tagVisibilityLogic === "and" ? "and" : "or";
     cy.batch(() => {
       cy.nodes().forEach((node) => {
@@ -225,7 +232,8 @@
           tagBlocked = tagLabels.every((l) => tagSet.has(l));
         }
         const frameKey = getGraphLayerEffectiveGroupKey(node, "frame", frameSet);
-        let disp = tagBlocked || frameSet.has(frameKey) ? "none" : "element";
+        const emojiKey = getGraphLayerEffectiveGroupKey(node, "emoji", emojiSet);
+        let disp = tagBlocked || frameSet.has(frameKey) || emojiSet.has(emojiKey) ? "none" : "element";
         if (disp === "element") {
           const lh = node.data("layerItemHidden");
           if (lh === true || lh === "yes" || lh === 1) disp = "none";
@@ -1895,7 +1903,8 @@
           cy,
           payload.graphLayers?.hidden ?? [],
           payload.graphFrameLayers?.hidden ?? [],
-          payload.graphLayers?.tagVisibilityLogic ?? "or"
+          payload.graphLayers?.tagVisibilityLogic ?? "or",
+          payload.graphEmojiLayers?.hidden ?? []
         );
       }
       if (edgeCurve) syncGraphEdgeCurveDistances(cy);
@@ -2067,7 +2076,8 @@
         cy,
         payload.graphLayers?.hidden ?? [],
         payload.graphFrameLayers.hidden ?? [],
-        payload.graphLayers?.tagVisibilityLogic ?? "or"
+        payload.graphLayers?.tagVisibilityLogic ?? "or",
+        payload.graphEmojiLayers?.hidden ?? []
       );
     } else if (payload.graphLayers?.hidden?.length) {
       applyGraphLayerNodeVisibility(

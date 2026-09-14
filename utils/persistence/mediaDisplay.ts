@@ -34,16 +34,34 @@ export function noteHasActiveFirstMediaCrop(
   return isImageRefCropActive(note.imageRefs?.[0]);
 }
 
+/** 标题、正文任一有实际内容时，Board 保持便签卡呈现。 */
+export function noteHasBoardTextContent(note: Pick<Note, 'text'>): boolean {
+  const text = note.text || '';
+  const firstNewline = text.indexOf('\n');
+  const rawTitle = firstNewline === -1 ? text : text.slice(0, firstNewline);
+  const detail = firstNewline === -1 ? '' : text.slice(firstNewline + 1);
+  const title = rawTitle.replace(/^#+\s+/, '').trim();
+  return title.length > 0 || detail.trim().length > 0;
+}
+
+/** 是否具备可在 Board 上单独呈现的媒体。 */
+export function noteHasBoardMedia(
+  note: Pick<Note, 'images' | 'imageRefs' | 'media' | 'sketch'>
+): boolean {
+  return Boolean(
+    note.media?.length || note.imageRefs?.length || note.images?.length || note.sketch
+  );
+}
+
 /**
- * Board 上是否应按贴纸呈现（非文本卡片）。
- * 显式 image variant，或首个媒体启用了裁剪贴纸。
- * 注意：裁剪贴纸应保持 variant=standard，以保留 mapping 点位；贴纸仅为 Board 视觉。
+ * Board 上是否应按媒体贴纸呈现（非文本卡片）。
+ * 媒体贴纸由内容决定：只有标题和正文都为空、且存在媒体时才呈现为媒体。
+ * 套索裁剪仅决定媒体的像素来源，不改变此判断。
  */
 export function noteRendersAsBoardSticker(
-  note: Pick<Note, 'variant' | 'media' | 'imageRefs'>
+  note: Pick<Note, 'text' | 'images' | 'imageRefs' | 'media' | 'sketch'>
 ): boolean {
-  if (note.variant === 'image') return true;
-  return noteHasActiveFirstMediaCrop(note);
+  return !noteHasBoardTextContent(note) && noteHasBoardMedia(note);
 }
 
 /**

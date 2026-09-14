@@ -75,6 +75,7 @@ import { useFileDrop } from './components/hooks/useFileDrop';
 import { EditInspectorProvider } from './components/editInspector/EditInspectorProvider';
 import { installBuiltinExamples } from './utils/builtinExamples/install';
 import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
+import { dismissWorkspaceTransients } from './utils/ui/workspaceTransientDismiss';
 
 type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
 
@@ -543,6 +544,28 @@ export default function App() {
     setSidebarDockedInline(false);
     setIsSidebarOpen(false);
   }, [activeProject]);
+
+  /**
+   * 非 Table 工作区的空白操作统一释放瞬时窗口；工具栏与窗口内部自行处理 toggle，
+   * 避免点击同一个按钮时先关闭又立即重新打开。
+   */
+  const handleWorkspaceTransientDismiss = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (viewMode === 'table') return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest(
+          '[data-allow-context-menu], [data-workspace-transient], [data-graph-top-left-panel], [data-workspace-modal], [data-map-search-chrome-panel], [data-tag-add-panel], [data-note-time-range-panel]'
+        )
+      ) {
+        return;
+      }
+      dismissWorkspaceTransients();
+      if (isSidebarOpen) closeProjectSidebar();
+    },
+    [closeProjectSidebar, isSidebarOpen, viewMode]
+  );
 
   /**
    * 进入项目节奏：动画（切全屏）→ 加载 → 动画（收束进项目）
@@ -1686,6 +1709,7 @@ export default function App() {
         onDragLeave={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragLeave : undefined}
         onDrop={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDrop : undefined}
         onDragEnd={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragEnd : undefined}
+        onPointerDownCapture={handleWorkspaceTransientDismiss}
       >
         {activeProject ? (
           <>

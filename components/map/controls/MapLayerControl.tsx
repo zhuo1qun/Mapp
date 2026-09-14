@@ -5,7 +5,7 @@ import type { Frame } from '../../../types';
 import type { GraphLayerGroupStandard } from '../../../utils/graph/graphRuntimeCore';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { LayerToolbarIcon } from '../../ui/LayerToolbarIcon';
-import { ChromePresence } from '../../ui/ChromeSheetPresence';
+import { ResponsiveWindowPresence } from '../../ui/ResponsiveWindowPresence';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
@@ -28,11 +28,11 @@ interface MapLayerControlProps {
   setEditingFrameDescription?: (v: string | null) => void;
   onSaveFrameDescription?: () => void;
   frameLayerRef: React.RefObject<HTMLDivElement | null>;
-  /** 统一节点图层（tag/frame），排在簇描述/簇列表左侧 */
+  /** 统一节点图层（标签 / Emoji / 簇），排在簇描述/簇列表左侧 */
   unifiedNotesLayerSlot?: React.ReactNode;
   /** 展开面板对齐页面左/右缘（与顶栏按钮 margin 一致），不再与图层按钮左右齐平 */
   dropdownAlign?: 'start' | 'end';
-  /** 工具栏按钮图标：与图层面板当前 tag/frame 一致 */
+  /** 工具栏按钮图标：与图层面板当前分组方式一致 */
   layerGroupStandard?: GraphLayerGroupStandard;
 }
 
@@ -70,15 +70,13 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
     dropdownAlign === 'start' ? 'ui-chrome-menu-page-left' : 'ui-chrome-menu-page-right';
 
   const panel = panelTop != null ? (
-      <ChromePresence open={showPanel} kind="sheet">
+      <ResponsiveWindowPresence
+        open={showPanel}
+        onClose={onTogglePanel}
+        backdropLabel="关闭筛选"
+      >
         {(phase) => (
           <>
-        <button
-          type="button"
-          className={`fixed inset-0 z-[var(--z-map-sheet-backdrop)] bg-black/15 backdrop-blur-[2px] sm:hidden chrome-dialog-backdrop-${phase}`}
-          aria-label="关闭图层"
-          onClick={onTogglePanel}
-        />
         <div
           data-map-layer-chrome-panel
           className={`map-layer-chrome-panel ui-compact-bottom-sheet map-chrome-content-${menuChromeAppearance} fixed z-[var(--z-map-anchored-panel)] ${edgeCls} flex gap-2 items-start pointer-events-none chrome-responsive-anchored-${phase}`}
@@ -149,7 +147,7 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
         </div>
           </>
         )}
-      </ChromePresence>
+      </ResponsiveWindowPresence>
     ) : null;
 
   return (
@@ -162,7 +160,7 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
       pressThemeFlash
       nonChromeIdleHover="imperative-gray100"
       onClick={() => onTogglePanel()}
-      tooltip="图层"
+      tooltip="筛选"
     >
       <LayerToolbarIcon layerGroupStandard={layerGroupStandard} />
     </ChromeIconButton>

@@ -202,7 +202,8 @@ export function wireStandaloneGraphChrome(
         cy,
         payload.graphLayers?.hidden ?? [],
         payload.graphFrameLayers?.hidden ?? [],
-        payload.graphLayers?.tagVisibilityLogic ?? 'or'
+        payload.graphLayers?.tagVisibilityLogic ?? 'or',
+        payload.graphEmojiLayers?.hidden ?? []
       );
     }
     if (edgeCurve) syncGraphEdgeCurveDistances(cy);

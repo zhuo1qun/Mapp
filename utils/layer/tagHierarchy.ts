@@ -2,9 +2,6 @@
 
 export const TAG_HIERARCHY_SEP = ' · ';
 
-/** emoji 图层父集前缀（结构同 `领域 · 后缀`） */
-export const EMOJI_TAG_LAYER_PREFIX = '【emoji】';
-
 /** 兼容 ` · ` / `·` / 两侧空白不一的间隔号 */
 const HIERARCHY_SEP_RE = /\s*·\s*/;
 
@@ -32,26 +29,6 @@ export function tagHierarchySuffix(label: string): string {
 
 export function tagHasHierarchySep(label: string): boolean {
   return splitTagHierarchy(label).suffix != null;
-}
-
-/** 将 note.emoji 转为图层键：`【emoji】 · 🔥` */
-export function emojiToLayerTagKey(emoji: string): string | null {
-  const e = String(emoji ?? '').trim();
-  if (!e) return null;
-  return `${EMOJI_TAG_LAYER_PREFIX}${TAG_HIERARCHY_SEP}${e}`;
-}
-
-export function isEmojiLayerTagKey(label: string): boolean {
-  const raw = String(label ?? '').trim();
-  if (!raw) return false;
-  const { prefix, suffix } = splitTagHierarchy(raw);
-  return suffix != null && prefix === EMOJI_TAG_LAYER_PREFIX;
-}
-
-/** 从 `【emoji】 · 🔥` 取出 emoji 字符；非 emoji 图层键则返回 null */
-export function emojiFromLayerTagKey(label: string): string | null {
-  if (!isEmojiLayerTagKey(label)) return null;
-  return tagHierarchySuffix(label);
 }
 
 /** 重命名时输入框展示/编辑的部分：有「 · 」则只编辑后缀，否则全文 */

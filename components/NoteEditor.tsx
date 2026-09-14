@@ -8,11 +8,10 @@ import { useTiptapEditor } from './hooks/useTiptapEditor';
 import { useNoteState } from './hooks/useNoteState';
 import { useMediaHandler } from './hooks/useMediaHandler';
 import { NoteHeader } from './note-editor/NoteHeader';
-import { ImagePreviewModal } from './note-editor/ImagePreviewModal';
+import { MediaDetailWindow } from './note-editor/MediaDetailWindow';
 import { ContentSection } from './note-editor/ContentSection';
 import { PropertySection } from './note-editor/PropertySection';
 import { MediaSection } from './note-editor/MediaSection';
-import { LassoStickerEditor } from './note-editor/LassoStickerEditor';
 import { MetadataSection } from './note-editor/MetadataSection';
 import { Camera, PenTool, Minus, Smile } from 'lucide-react';
 import { EmojiPicker } from './note-editor/EmojiPicker';
@@ -35,6 +34,7 @@ import {
 import { ExternalNavigationSheet } from './map/overlays/ExternalNavigationSheet';
 import { ChromePresence } from './ui/ChromeSheetPresence';
 import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from './ui/ChromeDialogSurface';
+import { fitBoardMediaDimensions } from '../utils/board/boardPlacement';
 
 interface NoteEditorProps {
   initialNote?: Partial<Note>;
@@ -42,6 +42,8 @@ interface NoteEditorProps {
   onClose: () => void;
   /** 保存成功后的关闭路径；可与取消草稿的关闭过渡不同。 */
   onSaveClose?: () => void;
+  /** 供记录切换等场景先提交当前草稿、但不关闭编辑器。 */
+  saveDraftRef?: React.MutableRefObject<(() => Promise<void>) | null>;
   onSave: (note: Partial<Note>) => void;
   /** 调用方尚未把这条便签写入项目数据。 */
   isNewNote?: boolean;
@@ -58,6 +60,10 @@ interface NoteEditorProps {
   chromeAppearance?: MapChromeAppearance;
   /** 视口坐标中的点位锚点；存在时编辑器像从该点位展开、收回。 */
   animationAnchor?: { x: number; y: number };
+  /** 宽屏 Table 可把编辑器作为画布节点并列摆放，而不是覆盖整个工作区。 */
+  presentation?: 'modal' | 'canvas-window';
+  /** 宽屏 Table 用它同步媒体详情窗口与横向导航的位置。 */
+  onCanvasMediaDetailOpenChange?: (open: boolean) => void;
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -65,6 +71,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   isOpen,
   onClose,
   onSaveClose,
+  saveDraftRef,
   onSave,
   isNewNote = false,
   onDelete,
@@ -75,8 +82,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
   mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
   chromeAppearance = 'light',
-  animationAnchor
+  animationAnchor,
+  presentation = 'modal',
+  onCanvasMediaDetailOpenChange
 }) => {
+  const isCanvasWindow = presentation === 'canvas-window';
   // 关闭时父级可能已清掉选中便签，须保留打开瞬间的锚点以完成回收动画。
   const [activeAnimationAnchor, setActiveAnimationAnchor] = useState<{ x: number; y: number } | null>(null);
   // 打开首帧直接取调用方的锚点，避免先播放一帧通用对话框渐显动画。
@@ -197,6 +207,19 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const [lassoSourceSrc, setLassoSourceSrc] = useState<string | null>(null);
   const [cropBusy, setCropBusy] = useState(false);
   const [stickerSize, setStickerSize] = useState<{ width: number; height: number } | null>(null);
+  const mediaDetailOpen =
+    isOpen &&
+    ((!!previewImage && displaySrcs.length > 0) || (lassoIndex != null && !!lassoSourceSrc));
+  const canvasMediaDetailOpen = isCanvasWindow && mediaDetailOpen;
+
+  useEffect(() => {
+    onCanvasMediaDetailOpenChange?.(canvasMediaDetailOpen);
+  }, [canvasMediaDetailOpen, onCanvasMediaDetailOpenChange]);
+
+  useEffect(
+    () => () => onCanvasMediaDetailOpenChange?.(false),
+    [onCanvasMediaDetailOpenChange]
+  );
 
   const updateCursorPosition = useCallback(() => {
     if (!textareaRef.current) return;
@@ -358,34 +381,43 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     media: mediaItems,
   });
 
-  const handleSave = () => {
-    void (async () => {
-      const persisted = await persistMediaForSave();
-      const noteData = getCurrentNoteData(persisted);
+  const handleSave = async (closeAfterSave = true) => {
+    const persisted = await persistMediaForSave();
+    const noteData = getCurrentNoteData(persisted);
 
-      if (!noteData.images) {
-        noteData.images = persisted.images || images || [];
-      }
-      if (!noteData.media) noteData.media = persisted.media;
+    if (!noteData.images) {
+      noteData.images = persisted.images || images || [];
+    }
+    if (!noteData.media) noteData.media = persisted.media;
 
-      if (isEmptyNote(noteData) && initialNote?.id && !isNewNote && onDelete) {
-        onDelete(initialNote.id);
-        onClose();
-        return;
-      }
+    if (isEmptyNote(noteData) && initialNote?.id && !isNewNote && onDelete) {
+      await Promise.resolve(onDelete(initialNote.id));
+      if (closeAfterSave) onClose();
+      return;
+    }
 
-      if (isEmptyNote(noteData) && (isNewNote || !initialNote?.id)) {
-        onClose();
-        return;
-      }
+    if (isEmptyNote(noteData) && (isNewNote || !initialNote?.id)) {
+      if (closeAfterSave) onClose();
+      return;
+    }
 
-      onSave(noteData);
+    onSave(noteData);
 
+    if (closeAfterSave) {
       setTimeout(() => {
         (onSaveClose ?? onClose)();
       }, 0);
-    })();
+    }
   };
+
+  if (saveDraftRef) saveDraftRef.current = () => handleSave(false);
+
+  useEffect(
+    () => () => {
+      if (saveDraftRef) saveDraftRef.current = null;
+    },
+    [saveDraftRef]
+  );
 
   const deleteTitleHint = useMemo(
     () => parseNoteContent(initialNote?.text || '').title || '无标题',
@@ -558,11 +590,68 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     </div>
   ) : null;
 
+  const propertySection = !isCompactMode ? (
+    <PropertySection
+      standalone={isCanvasWindow}
+      startYear={startYear}
+      endYear={endYear}
+      onTimeChange={(next) => {
+        setStartYear(next.startYear);
+        setEndYear(next.endYear);
+      }}
+      themeColor={themeColor}
+      panelChromeStyle={editorChromeStyle}
+      chromeAppearance={chromeAppearance}
+      active={isOpen}
+      onProvideTimeDismiss={registerTimeRangeDismiss}
+      tags={tags}
+      editingTagId={editingTagId}
+      isAddingTag={isAddingTag}
+      newTagLabel={newTagLabel}
+      newTagColor={newTagColor}
+      setNewTagLabel={setNewTagLabel}
+      setNewTagColor={setNewTagColor}
+      onEditTag={handleEditTag}
+      onRemoveTag={removeTag}
+      onReorderTags={setTags}
+      onSaveTag={handleSaveTag}
+      onCancelTagEdit={handleCancelTagEdit}
+      onStartAddTag={() => setIsAddingTag(true)}
+      onDismissOverlays={dismissOverlays}
+      onBeforeOpenTime={dismissOverlaysExceptTime}
+      trailingSlot={emojiTrailingSlot}
+    />
+  ) : null;
+
+  const mediaSection = !isCompactMode ? (
+    <MediaSection
+      standalone={isCanvasWindow}
+      mediaItems={mediaItems}
+      displaySrcs={displaySrcs}
+      mediaLoading={isResolvingMedia}
+      onReorder={reorderMedia}
+      onPreview={(index) => {
+        dismissOverlays();
+        setPreviewImageIndex(index);
+        setPreviewImage(displaySrcs[index] || null);
+      }}
+      onRemove={(index) => {
+        dismissOverlays();
+        removeMediaAt(index);
+      }}
+      onDismissOverlays={dismissOverlays}
+      moreActionsSlot={mediaActionsSlot}
+    />
+  ) : null;
+
   return (
-    <ChromePresence open={isOpen} kind="dialog">
+    <ChromePresence open={isOpen} kind="dialog" exitDurationMs={280}>
       {(phase) => (
     <div
-      className={`note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`}
+      data-workspace-modal
+      className={isCanvasWindow
+        ? `note-editor-canvas-window relative z-10 flex w-max shrink-0 items-start gap-3 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`
+        : `note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`}
       onPointerDown={(e) => e.stopPropagation()}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
@@ -572,14 +661,28 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       onDragLeave={(e) => e.stopPropagation()}
       onDrop={(e) => e.stopPropagation()}
     >
-      <div className="absolute inset-0" onClick={handleSave} style={{ zIndex: 1 }}></div>
+      {!isCanvasWindow ? (
+        <div className="absolute inset-0" onClick={() => void handleSave()} style={{ zIndex: 1 }} />
+      ) : null}
 
-      <div className="note-editor-shell relative z-10 flex flex-col items-end">
+      <div className={`note-editor-shell note-editor-canvas-main relative z-10 flex flex-col items-end ${isCanvasWindow ? 'w-[min(38rem,calc(100vw-2rem))] shrink-0' : ''}`}>
         <div
-          className={`note-editor-panel note-editor-panel--glass-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} w-[500px] max-w-[min(95%,calc(100%-2rem))] flex flex-col relative transition-colors duration-300 max-h-[90vh] max-h-[90dvh] min-h-[300px] ${isSketching ? 'min-h-[500px]' : ''}`}
+          className={`note-editor-panel chrome-dialog-${phase} ${
+            motionAnchor ? `note-editor-panel--anchored note-editor-panel--anchored-${phase}` : ''
+          } map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} ${
+            isCanvasWindow
+              ? 'w-full max-w-full max-h-[calc(100dvh-8rem)]'
+              : 'w-[500px] max-w-[min(95%,calc(100%-2rem))] max-h-[90vh] max-h-[90dvh]'
+          } flex flex-col relative transition-colors duration-300 min-h-[300px] ${isSketching ? 'min-h-[500px]' : ''}`}
           style={{
             ...editorChromeStyle,
-            overflow: 'hidden'
+            overflow: 'hidden',
+            ...(motionAnchor
+              ? ({
+                  '--note-editor-anchor-x': `${motionAnchor.x}px`,
+                  '--note-editor-anchor-y': `${motionAnchor.y}px`
+                } as React.CSSProperties)
+              : {})
           }}
           onDragOver={(e) => e.stopPropagation()}
           onDragEnter={(e) => e.stopPropagation()}
@@ -587,21 +690,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           onDrop={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-          <div
-            className={`note-editor-motion-content chrome-dialog-${phase} ${
-              motionAnchor
-                ? `note-editor-motion-content--anchored note-editor-motion-content--anchored-${phase}`
-                : ''
-            } flex min-h-0 flex-1 flex-col`}
-            style={
-              motionAnchor
-                ? ({
-                    '--note-editor-anchor-x': `${motionAnchor.x}px`,
-                    '--note-editor-anchor-y': `${motionAnchor.y}px`
-                  } as React.CSSProperties)
-                : undefined
-            }
-          >
           {isSketching && (
             <div className="absolute inset-0 z-50" onPointerDown={(e) => e.stopPropagation()}>
               <DrawingCanvas
@@ -661,7 +749,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               }}
               onSave={() => {
                 dismissOverlays();
-                handleSave();
+                void handleSave();
               }}
               discardDraft={isDiscardableNewDraft}
               onDiscardDraft={() => {
@@ -690,57 +778,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               themeColor={themeColor}
             />
 
-            {!isCompactMode && (
-              <PropertySection
-                startYear={startYear}
-                endYear={endYear}
-                onTimeChange={(next) => {
-                  setStartYear(next.startYear);
-                  setEndYear(next.endYear);
-                }}
-                themeColor={themeColor}
-                panelChromeStyle={editorChromeStyle}
-                chromeAppearance={chromeAppearance}
-                active={isOpen}
-                onProvideTimeDismiss={registerTimeRangeDismiss}
-                tags={tags}
-                editingTagId={editingTagId}
-                isAddingTag={isAddingTag}
-                newTagLabel={newTagLabel}
-                newTagColor={newTagColor}
-                setNewTagLabel={setNewTagLabel}
-                setNewTagColor={setNewTagColor}
-                onEditTag={handleEditTag}
-                onRemoveTag={removeTag}
-                onReorderTags={setTags}
-                onSaveTag={handleSaveTag}
-                onCancelTagEdit={handleCancelTagEdit}
-                onStartAddTag={() => setIsAddingTag(true)}
-                onDismissOverlays={dismissOverlays}
-                onBeforeOpenTime={dismissOverlaysExceptTime}
-                trailingSlot={emojiTrailingSlot}
-              />
-            )}
+            {!isCanvasWindow ? propertySection : null}
 
-            {!isCompactMode && (
-              <MediaSection
-                mediaItems={mediaItems}
-                displaySrcs={displaySrcs}
-                mediaLoading={isResolvingMedia}
-                onReorder={reorderMedia}
-                onPreview={(index) => {
-                  dismissOverlays();
-                  setPreviewImageIndex(index);
-                  setPreviewImage(displaySrcs[index] || null);
-                }}
-                onRemove={(index) => {
-                  dismissOverlays();
-                  removeMediaAt(index);
-                }}
-                onDismissOverlays={dismissOverlays}
-                moreActionsSlot={mediaActionsSlot}
-              />
-            )}
+            {!isCanvasWindow ? mediaSection : null}
 
             <MetadataSection
               id={initialNote?.id}
@@ -759,15 +799,35 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               onDismissOverlays={dismissOverlays}
             />
           </div>
-          </div>
         </div>
       </div>
 
-      <ImagePreviewModal
+      {isCanvasWindow && !isCompactMode ? (
+        <div className="note-editor-canvas-side flex w-80 shrink-0 flex-col gap-3">
+          <div
+            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
+            style={editorChromeStyle}
+          >
+            {propertySection}
+          </div>
+          <div
+            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
+            style={editorChromeStyle}
+          >
+            {mediaSection}
+          </div>
+        </div>
+      ) : null}
+
+      <MediaDetailWindow
         images={displaySrcs}
         previewIndex={previewImageIndex}
-        isOpen={!!previewImage && displaySrcs.length > 0 && lassoIndex == null}
-        onClose={() => setPreviewImage(null)}
+        open={mediaDetailOpen}
+        onClose={() => {
+          setPreviewImage(null);
+          setLassoIndex(null);
+          setLassoSourceSrc(null);
+        }}
         onChangeIndex={(idx) => {
           setPreviewImageIndex(idx);
           setPreviewImage(displaySrcs[idx] || null);
@@ -777,40 +837,28 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         onCropEnabledChange={(enabled) => {
           void handleCropEnabledChange(enabled);
         }}
-        onRedrawCrop={() => {
+        onStartLasso={() => {
           void startLassoForIndex(previewImageIndex);
         }}
         cropBusy={cropBusy}
+        lassoImageSrc={lassoIndex != null ? lassoSourceSrc : null}
+        onBackFromLasso={() => {
+          setLassoIndex(null);
+          setLassoSourceSrc(null);
+        }}
+        onConfirmLasso={async (points) => {
+          if (lassoIndex == null) return;
+          const dims = await applyLassoSticker(lassoIndex, points);
+          if (dims) {
+            setStickerSize(fitBoardMediaDimensions(dims.width, dims.height));
+          }
+          setLassoIndex(null);
+          setLassoSourceSrc(null);
+        }}
+        presentation={isCanvasWindow ? 'canvas-window' : 'modal'}
+        panelChromeStyle={editorChromeStyle}
+        chromeAppearance={chromeAppearance}
       />
-
-      {lassoIndex != null && lassoSourceSrc ? (
-        <LassoStickerEditor
-          imageSrc={lassoSourceSrc}
-          themeColor={themeColor}
-          onCancel={() => {
-            setLassoIndex(null);
-            setLassoSourceSrc(null);
-          }}
-          onConfirm={async (points) => {
-            const idx = lassoIndex;
-            const dims = await applyLassoSticker(idx, points);
-            if (dims) {
-              const maxSide = Math.max(
-                initialNote?.imageWidth || 256,
-                initialNote?.imageHeight || 256,
-                256
-              );
-              const scale = maxSide / Math.max(dims.width, dims.height, 1);
-              setStickerSize({
-                width: Math.max(48, Math.round(dims.width * scale)),
-                height: Math.max(48, Math.round(dims.height * scale))
-              });
-            }
-            setLassoIndex(null);
-            setLassoSourceSrc(null);
-          }}
-        />
-      ) : null}
 
       <DeleteConfirmDialog
         open={deleteConfirmOpen}

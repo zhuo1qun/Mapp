@@ -246,6 +246,7 @@ export const useProjectState = (): UseProjectStateReturn => {
       graphLayerStandard: project.graphLayerStandard,
       graphClusterBasis: project.graphClusterBasis,
       graphFrameLayers: project.graphFrameLayers,
+      graphEmojiLayers: project.graphEmojiLayers,
       graphNodeSize: project.graphNodeSize,
       graphLabelFontPx: project.graphLabelFontPx,
       graphEdgeWeight: project.graphEdgeWeight,
@@ -342,5 +343,4 @@ export const useProjectState = (): UseProjectStateReturn => {
     setLoadingProgress
   };
 };
-
 

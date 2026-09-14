@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import type { Editor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/react/menus';
-import { Bold, Code2, Heading1, Heading2, Italic, Link, List, ListOrdered } from 'lucide-react';
+import { Bold, Heading1, Heading2, Italic, Link, List, ListOrdered } from 'lucide-react';
 
 interface EditorBubbleMenuProps {
   editor: Editor;
@@ -75,13 +75,6 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
       </Control>
       <Control label="链接" active={editor.isActive('link')} onClick={setLink}>
         <Link size={15} strokeWidth={2.2} />
-      </Control>
-      <Control
-        label="行内代码"
-        active={editor.isActive('code')}
-        onClick={() => editor.chain().focus().toggleCode().run()}
-      >
-        <Code2 size={15} strokeWidth={2.2} />
       </Control>
       <span className="mx-0.5 h-4 w-px bg-gray-200" aria-hidden />
       <Control

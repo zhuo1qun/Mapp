@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Note, Frame, Connection, type GraphLayerState, type Project } from '../types';
 import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
 import {
+  emojiLayerStateFromLegacyTagState,
   isNoteVisibleInUnifiedLayer,
   noteHasRenderableMapPosition,
   noteTagLabels
@@ -28,6 +29,7 @@ import {
   boardNoteDimensions,
   computeBoardBounds,
   createGridAllocator,
+  fitBoardMediaDimensions,
   nextSequentialSlot,
   type BoardBounds,
   type GridAllocator
@@ -55,6 +57,9 @@ import { useSimpleConnectionPanel } from './hooks/useSimpleConnectionPanel';
 import { BoardTopCenterEditToolbar } from './board/BoardTopCenterEditToolbar';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { LayerToolbarIcon } from './ui/LayerToolbarIcon';
+import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
+import { ResponsiveWindowPresence } from './ui/ResponsiveWindowPresence';
+import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
 import ReactMarkdown from 'react-markdown';
 import {
   CONNECTION_OFFSET,
@@ -552,6 +557,19 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const boardLayerBtnRef = useRef<HTMLDivElement>(null);
+  const boardLayerMenuTop = useChromeMenuTop(showLayerPanel, boardLayerBtnRef, 8);
+  const [lastBoardLayerMenuTop, setLastBoardLayerMenuTop] = useState<number | null>(null);
+  useEffect(() => {
+    if (boardLayerMenuTop != null) setLastBoardLayerMenuTop(boardLayerMenuTop);
+  }, [boardLayerMenuTop]);
+  const boardLayerPanelTop = boardLayerMenuTop ?? lastBoardLayerMenuTop;
+
+  /** NoteEditor 打开即统一释放左上角工作窗口，避免不同打开入口遗漏收起逻辑。 */
+  useEffect(() => {
+    if (!editingNote || isIntroPending) return;
+    setShowLayerPanel(false);
+    setShowSettingsPanel(false);
+  }, [editingNote, isIntroPending]);
 
   const projectFull = project as Project | undefined;
   const effectiveConnections = useMemo(
@@ -570,14 +588,24 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     () => mergeGraphLayerState(notes, projectFull?.graphFrameLayers ?? null, 'frame'),
     [notes, projectFull?.graphFrameLayers]
   );
+  const mergedEmojiBoardLayers = useMemo(
+    () => mergeGraphLayerState(notes, projectFull?.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(projectFull?.graphLayers), 'emoji'),
+    [notes, projectFull?.graphEmojiLayers, projectFull?.graphLayers]
+  );
   const mergedProjectBoardLayers =
-    graphLayerGroupStandard === 'frame' ? mergedFrameBoardLayers : mergedTagBoardLayers;
+    graphLayerGroupStandard === 'frame'
+      ? mergedFrameBoardLayers
+      : graphLayerGroupStandard === 'emoji'
+        ? mergedEmojiBoardLayers
+        : mergedTagBoardLayers;
 
   const handleBoardGraphLayersChange = useCallback(
     (next: GraphLayerState) => {
       if (!onUpdateProject || !projectFull) return;
       if (graphLayerGroupStandard === 'frame') {
         onUpdateProject({ ...projectFull, graphFrameLayers: next });
+      } else if (graphLayerGroupStandard === 'emoji') {
+        onUpdateProject({ ...projectFull, graphEmojiLayers: next });
       } else {
         onUpdateProject({ ...projectFull, graphLayers: next });
       }
@@ -860,6 +888,20 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   
   const [showImportDialog, setShowImportDialog] = useState(false);
   const imageFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const dismiss = () => {
+      setShowLayerPanel(false);
+      setShowSettingsPanel(false);
+      setShowImportMenu(false);
+      setBrowseTagFilterPanelOpen(false);
+      setBrowseTimeFilterPanelOpen(false);
+      setShowBoardInsConnPanel(false);
+      setBoardInsConnPick(null);
+    };
+    window.addEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
+    return () => window.removeEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
+  }, [setShowBoardInsConnPanel, setBoardInsConnPick]);
   
   // Text measurement refs removed (text variant removed)
 
@@ -2001,8 +2043,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     for (let i = 0; i < validPreviews.length; i++) {
       const preview = validPreviews[i];
       const detected = await detectImageDimensionsFromRefs([preview.imageUrl]);
-      const imageWidth = detected?.width || 256;
-      const imageHeight = detected?.height || 256;
+      const { width: imageWidth, height: imageHeight } = fitBoardMediaDimensions(
+        detected?.width || 256,
+        detected?.height || 256
+      );
       const placement = allocator.findAndOccupy(imageWidth, imageHeight, anchorX, anchorY);
       const newNote: Note = {
         id: generateId(),
@@ -2147,8 +2191,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             processedNote.imageHeight > 0;
           if (!hasValidDims) {
             const detected = await detectImageDimensionsFromRefs(processedNote.images || []);
-            processedNote.imageWidth = detected?.width || 256;
-            processedNote.imageHeight = detected?.height || 256;
+            const fitted = fitBoardMediaDimensions(detected?.width || 256, detected?.height || 256);
+            processedNote.imageWidth = fitted.width;
+            processedNote.imageHeight = fitted.height;
           }
           processedNote.color = 'transparent';
         }
@@ -2312,8 +2357,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     const centerX = position ? position.x : (width / 2 - transform.x) / transform.scale;
     const centerY = position ? position.y : (height / 2 - transform.y) / transform.scale;
 
-    const boardWidth = imgWidth;
-    const boardHeight = imgHeight;
+    const { width: boardWidth, height: boardHeight } = fitBoardMediaDimensions(imgWidth, imgHeight);
     const spawnX = centerX - boardWidth / 2;
     const spawnY = centerY - boardHeight / 2;
 
@@ -4948,17 +4992,31 @@ const createNoteAtCenter = () => {
                             setShowLayerPanel(!showLayerPanel);
                             setShowSettingsPanel(false);
                         }}
-                        tooltip="图层"
+                        tooltip="筛选"
                     >
                         <LayerToolbarIcon layerGroupStandard={graphLayerGroupStandard} />
                     </ChromeIconButton>
-                    {showLayerPanel && projectFull ? (
-                        <ProjectNotesLayerPanel
+                </div>
+                )}
+                {boardLayerPanelTop != null && projectFull ? (
+                  <ResponsiveWindowPresence
+                    open={showLayerPanel}
+                    onClose={() => setShowLayerPanel(false)}
+                    backdropLabel="关闭筛选"
+                  >
+                    {(phase) => (
+                      <div
+                        data-map-layer-chrome-panel
+                        className={`map-layer-chrome-panel ui-compact-bottom-sheet map-chrome-content-light fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-left flex items-start pointer-events-none chrome-responsive-anchored-${phase}`}
+                        style={{ top: boardLayerPanelTop }}
+                      >
+                        <div className="pointer-events-auto shrink-0">
+                          <ProjectNotesLayerPanel
                             themeColor={themeColor ?? DEFAULT_THEME_COLOR}
                             panelChromeStyle={panelChromeStyle}
                             variant="dock"
+                            flow
                             dockAlign="start"
-                            menuAnchorRef={boardLayerBtnRef}
                             projectId={projectId ?? ''}
                             merged={mergedProjectBoardLayers}
                             layerGroupStandard={graphLayerGroupStandard}
@@ -4972,10 +5030,12 @@ const createNoteAtCenter = () => {
                               onUpdateFrames || onUpdateProject ? handleBoardUpdateFrame : undefined
                             }
                             onActivateNote={panBoardToNoteCenter}
-                        />
-                    ) : null}
-                </div>
-                )}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </ResponsiveWindowPresence>
+                ) : null}
             </div>
         )}
 

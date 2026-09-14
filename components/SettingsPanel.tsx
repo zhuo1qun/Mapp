@@ -9,15 +9,15 @@ import { ThemeColorPicker } from './ThemeColorPicker';
 import { HelpHint } from './ui/HelpHint';
 import { SettingsCompactSlider } from './ui/SettingsCompactSlider';
 import { SettingsToggleSwitch } from './ui/SettingsToggleSwitch';
-import { ChromePresence } from './ui/ChromeSheetPresence';
 import { chromePanelFieldClass } from './ui/chromePanelField';
 import {
   mapChromeAppearance,
   mapChromeContentStyle,
-  mapChromeModalBackdropStyle,
   mapChromeSurfaceStyle
 } from '../utils/map/mapChromeStyle';
 import { PORTAL_TOOLTIP_Z } from './ui/PortalTooltip';
+import { ResponsiveWindowPresence } from './ui/ResponsiveWindowPresence';
+import { AnchoredWorkspaceWindow } from './ui/AnchoredWorkspaceWindow';
 
 /** 由打开设置时所在的视图决定只展示哪一块 */
 export type SettingsContextView = 'map' | 'board' | 'graph' | 'table';
@@ -222,19 +222,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       : mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
 
   return createPortal(
-    <ChromePresence open={isOpen} kind={isCompactViewport ? 'sheet' : 'menu'}>
+    <ResponsiveWindowPresence
+      open={isOpen}
+      onClose={onClose}
+      backdropLabel="关闭设置"
+      kind={isCompactViewport ? 'sheet' : 'menu'}
+    >
       {(phase) => (
     <>
-      <button
-        type="button"
-        className={`fixed inset-0 z-[var(--z-map-sheet-backdrop)] sm:hidden chrome-dialog-backdrop-${phase}`}
-        style={mapChromeModalBackdropStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
-        aria-label="关闭设置"
-        onClick={onClose}
-      />
-      <div
-        ref={panelRef}
-        data-allow-context-menu
+      <AnchoredWorkspaceWindow
+        panelRef={panelRef}
         data-graph-top-left-panel
         role="dialog"
         aria-label="设置"
@@ -247,8 +244,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           maxHeight: panelRect.maxHeight,
           ...settingsCardChrome
         }}
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
       >
         <h2 className="shrink-0 px-3 pt-2.5 text-xs font-medium text-gray-500">设置</h2>
 
@@ -434,7 +429,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <p className="py-2 text-xs leading-relaxed text-gray-500">表格视图相关样式将放在此处，敬请期待。</p>
           ) : null}
         </div>
-      </div>
+      </AnchoredWorkspaceWindow>
 
       <ThemeColorPicker
         isOpen={showThemeColorPicker}
@@ -493,7 +488,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         )}
     </>
       )}
-    </ChromePresence>,
+    </ResponsiveWindowPresence>,
     document.body
   );
 };

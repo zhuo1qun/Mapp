@@ -17,6 +17,8 @@ type ChromePresenceProps = {
    * 仅保留各自合理的位移方向与时长。
    */
   kind?: ChromePresenceKind;
+  /** 个别组件需要更长退出动画时覆盖默认保留时间。 */
+  exitDurationMs?: number;
   children: (phase: ChromePresencePhase) => React.ReactNode;
 };
 
@@ -29,6 +31,7 @@ const PRESENCE_DURATION_MS: Record<ChromePresenceKind, number> = {
 export const ChromePresence: React.FC<ChromePresenceProps> = ({
   open,
   kind = 'dialog',
+  exitDurationMs,
   children
 }) => {
   const [present, setPresent] = useState(open);
@@ -38,9 +41,12 @@ export const ChromePresence: React.FC<ChromePresenceProps> = ({
       setPresent(true);
       return;
     }
-    const timer = window.setTimeout(() => setPresent(false), PRESENCE_DURATION_MS[kind]);
+    const timer = window.setTimeout(
+      () => setPresent(false),
+      exitDurationMs ?? PRESENCE_DURATION_MS[kind]
+    );
     return () => window.clearTimeout(timer);
-  }, [kind, open]);
+  }, [exitDurationMs, kind, open]);
 
   if (!present) return null;
   return <>{children(open ? 'entering' : 'exiting')}</>;

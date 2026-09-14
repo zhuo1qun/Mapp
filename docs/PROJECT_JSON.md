@@ -66,8 +66,8 @@
 
 | 字段 | 说明 |
 |------|------|
-| `graphLayers` / `graphFrameLayers` | 标签 / 簇图层面板状态。标签层可用 `tagVisibilityLogic`: `'and'\|'or'`（多标签显隐）。时间线纵轴与簇布局主分区 **按 frame** |
-| `graphLayerStandard` | 地图/看板面板切换用；图谱布局不再依赖 |
+| `graphLayers` / `graphEmojiLayers` / `graphFrameLayers` | 标签 / Emoji / 簇图层面板状态；三者独立保存排序与显隐。标签层可用 `tagVisibilityLogic`: `'and'\|'or'`（多标签显隐）。时间线纵轴与簇布局主分区 **按 frame** |
+| `graphLayerStandard` | 地图/看板/表格面板切换用：`'tag'\|'emoji'\|'frame'`；图谱布局不依赖它 |
 | `graphDefaultLayoutMode` | `'time' \| 'cose' \| 'frameCluster'`（力传导模式使用 **fcose**） |
 | `graphNodeSize` | 节点直径 px，约 1–36 |
 | `graphLabelFontPx` | 空闲标签字号 4–16 |
@@ -93,7 +93,7 @@
 | `variant` | `'standard' \| 'image'` | |
 | `images` | `string[]` | 全量导出多为 Base64；结构编辑可清空 |
 | `tags` | `{ id, label, color }[]` | **图谱分层键**：用**首个**标签的 `label`（见 §3.5） |
-| `emoji` | string | 可 `""` |
+| `emoji` | string | 可 `""`；图层面板中作为独立的 Emoji 分组依据，不属于标签 |
 | `fontSize` | 1–5 | 缺省常按 3 |
 | `createdAt` | number | Unix ms |
 | `weight` | number | 图谱节点视觉权重，建议 `0.1`–`10`，缺省为 `1`；与连线权重独立 |

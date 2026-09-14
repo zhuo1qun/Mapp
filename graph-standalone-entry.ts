@@ -60,7 +60,8 @@ function main(): void {
       cy,
       payload.graphLayers?.hidden ?? [],
       payload.graphFrameLayers.hidden ?? [],
-      payload.graphLayers?.tagVisibilityLogic ?? 'or'
+      payload.graphLayers?.tagVisibilityLogic ?? 'or',
+      payload.graphEmojiLayers?.hidden ?? []
     );
   } else if (payload.graphLayers?.hidden?.length) {
     applyGraphLayerNodeVisibility(

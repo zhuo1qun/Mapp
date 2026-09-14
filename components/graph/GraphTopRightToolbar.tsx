@@ -6,6 +6,7 @@ import { graphNoteSearchLabel } from '../../utils/graph/graphData';
 import { ChromeDownloadMenu } from '../ui/ChromeDownloadMenu';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { PortalTooltip } from '../ui/PortalTooltip';
+import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../../utils/ui/workspaceTransientDismiss';
 
 type DownloadItem = { id: string; label: string; onSelect: () => void };
 
@@ -121,6 +122,11 @@ export const GraphTopRightToolbar: React.FC<Props> = ({
     setQ('');
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    window.addEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, closeSearch);
+    return () => window.removeEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, closeSearch);
+  }, [closeSearch]);
 
   useEffect(() => {
     if (!searchOpen) return;

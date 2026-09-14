@@ -8,6 +8,10 @@ import {
   EyeOff,
   Frame as FrameIcon,
   GripVertical,
+  Image as ImageIcon,
+  MapPin,
+  PenTool,
+  Smile,
   Tag as TagIcon
 } from 'lucide-react';
 import { TAG_COLORS } from '../../constants';
@@ -27,11 +31,8 @@ import { NoteTimeRangeControl } from '../note-editor/NoteTimeRangeControl';
 import { TagLayerHierarchyList } from './TagLayerHierarchyList';
 import { ChromeSegmentedControl } from '../ui/ChromeSegmentedControl';
 import { PortalTooltip } from '../ui/PortalTooltip';
-import {
-  emojiFromLayerTagKey,
-  emojiToLayerTagKey,
-  insertLayerOrderRelative
-} from '../../utils/layer/tagHierarchy';
+import { AnchoredWorkspaceWindow } from '../ui/AnchoredWorkspaceWindow';
+import { insertLayerOrderRelative } from '../../utils/layer/tagHierarchy';
 import { useChromeMenuTop } from '../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
@@ -439,15 +440,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
           }
           return t;
         });
-        // emoji 图层键：`【emoji】 · 🔥` ↔ note.emoji
-        let nextEmoji = note.emoji;
-        const currentEmojiKey = emojiToLayerTagKey(note.emoji ?? '');
-        if (currentEmojiKey === oldK) {
-          const nextFromKey = emojiFromLayerTagKey(newK);
-          nextEmoji = nextFromKey ?? '';
-          changed = true;
-        }
-        if (changed) updatedNotes.push({ ...note, tags: nextTags, emoji: nextEmoji });
+        if (changed) updatedNotes.push({ ...note, tags: nextTags });
       }
 
       if (updatedNotes.length > 0) {
@@ -510,7 +503,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
       const next = String(draft).trim();
       if (layerGroupStandard === 'tag') {
         await applyRenameTagGroup(oldKey, next);
-      } else {
+      } else if (layerGroupStandard === 'frame') {
         await applyRenameFrameGroup(oldKey, next);
       }
       setEditingGroupKey(null);
@@ -566,33 +559,62 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
       : `fixed z-[2000] ${pageEdgeCls}`;
 
   const panelBody = (
-    <div
+    <AnchoredWorkspaceWindow
       data-graph-top-left-panel
-      className={`map-layer-panel-body map-chrome-content-${chromeAppearance} ${posCls} ${embed ? 'mt-2' : ''} flex max-h-[min(24rem,70vh)] overflow-hidden rounded-xl border border-gray-100/80 shadow-xl ${
+      className={`map-layer-panel-body map-chrome-content-${chromeAppearance} ${posCls} ${embed ? 'mt-2' : ''} flex ${tableMode ? 'max-h-none overflow-visible' : 'max-h-[min(24rem,70vh)] overflow-hidden'} rounded-xl border border-gray-100/80 shadow-xl ${
         embed ? 'w-full max-w-xl' : 'w-[min(20rem,calc(100vw-2rem))]'
       }`}
       style={{
         ...(panelChromeStyle ?? { backgroundColor: 'rgba(255,255,255,0.96)' }),
         ...(pageMenuOpen && menuTop != null ? { top: menuTop } : undefined)
       }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-1.5 px-3 pt-2.5">
-          <h2 className="text-xs font-medium text-gray-500">图层</h2>
-          <PortalTooltip content="根据标签或簇类型分层，可以通过节点编辑添加标签，通过画布编辑分簇。">
-            <button
-              type="button"
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-              aria-label="图层说明"
-            >
-              <HelpCircle size={14} strokeWidth={2} aria-hidden />
-            </button>
-          </PortalTooltip>
-        </div>
-        <div className="max-h-[min(22rem,68vh)] min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-0.5 theme-surface-scrollbar">
+        {!tableMode ? (
+          <div className="flex shrink-0 items-center gap-1.5 px-3 pt-2.5">
+            <h2 className="text-xs font-medium text-gray-500">筛选</h2>
+            <PortalTooltip content="按标签、Emoji 或簇分层。标签和 Emoji 可在节点编辑中设置，簇可在画布中编辑。">
+              <button
+                type="button"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                aria-label="筛选说明"
+              >
+                <HelpCircle size={14} strokeWidth={2} aria-hidden />
+              </button>
+            </PortalTooltip>
+          </div>
+        ) : null}
+        {!hideStandardToggle ? (
+          <div className="shrink-0">
+            <ChromeSegmentedControl
+              className="mx-1.5 my-1.5"
+              aria-label="筛选分组方式"
+              value={layerGroupStandard}
+              onChange={onLayerGroupStandardChange}
+              options={[
+                {
+                  id: 'tag',
+                  label: <TagIcon size={18} strokeWidth={2} aria-hidden />,
+                  title: '按标签分组',
+                  ariaLabel: '切换为按标签分组'
+                },
+                {
+                  id: 'emoji',
+                  label: <Smile size={18} strokeWidth={2} aria-hidden />,
+                  title: '按 Emoji 分组',
+                  ariaLabel: '切换为按 Emoji 分组'
+                },
+                {
+                  id: 'frame',
+                  label: <FrameIcon size={18} strokeWidth={2} aria-hidden />,
+                  title: '按簇分组',
+                  ariaLabel: '切换为按簇分组'
+                }
+              ]}
+            />
+          </div>
+        ) : null}
+        <div className={`${tableMode ? 'overflow-visible' : 'max-h-[min(22rem,68vh)] overflow-y-auto overscroll-contain theme-surface-scrollbar'} min-h-0 flex-1 px-1.5 py-0.5`}>
           {boardVariantToggles ? (
             <>
               <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">显示类型</div>
@@ -630,30 +652,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
               </div>
             </>
           ) : null}
-
-          {!hideStandardToggle ? (
-          <ChromeSegmentedControl
-            className="mx-1.5 my-1.5"
-            aria-label="图层分组方式"
-            value={layerGroupStandard}
-            onChange={onLayerGroupStandardChange}
-            options={[
-              {
-                id: 'tag',
-                label: <TagIcon size={18} strokeWidth={2} aria-hidden />,
-                title: '按标签分组',
-                ariaLabel: '切换为按标签分组'
-              },
-              {
-                id: 'frame',
-                label: <FrameIcon size={18} strokeWidth={2} aria-hidden />,
-                title: '按簇分组',
-                ariaLabel: '切换为按簇分组'
-              }
-            ]}
-          />
-          ) : null}
-
           {layerGroupStandard === 'tag' ? (
             <TagLayerHierarchyList
               themeColor={themeColor}
@@ -665,6 +663,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
               tagColorsByKey={tagColorsByKey}
               onOpenTagColor={openTagColorBatchEditor}
               onRenameTag={(oldKey, nextKey) => void applyRenameTagGroup(oldKey, nextKey)}
+              showVisibilityControls={!tableMode}
             />
           ) : (
           merged.order.map((key) => {
@@ -816,12 +815,18 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                     ) : (
                       <span
                         className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 cursor-default"
-                        title={`${groupDisplayLabel(k, layerGroupStandard, framesById)}（双击重命名）`}
+                        title={
+                          layerGroupStandard === 'frame'
+                            ? `${groupDisplayLabel(k, layerGroupStandard, framesById)}（双击重命名）`
+                            : groupDisplayLabel(k, layerGroupStandard, framesById)
+                        }
                         onDoubleClick={(e) => {
                           e.stopPropagation();
-                          const canRenameFrame =
-                            k !== '' && (!!onUpdateFrameTitle || !!onUpdateFrame);
-                          if (!canRenameFrame) return;
+                          const canRenameGroup =
+                            layerGroupStandard === 'frame' &&
+                            k !== '' &&
+                            (!!onUpdateFrameTitle || !!onUpdateFrame);
+                          if (!canRenameGroup) return;
 
                           cancelRenameRef.current = false;
                           setEditingGroupKey(k);
@@ -832,32 +837,46 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                       </span>
                     )}
                     <span className="shrink-0 text-[10px] text-gray-400">{groupNotes.length}</span>
-                    <button
-                      type="button"
-                      draggable={false}
-                      className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
-                      aria-label={visible ? '隐藏分组' : '显示分组'}
-                      onClick={() =>
-                        patch((p) => {
-                          const h = new Set((p.hidden ?? []).map((x) => String(x).trim()));
-                          if (h.has(k)) h.delete(k);
-                          else h.add(k);
-                          return { ...p, hidden: [...h] };
-                        })
-                      }
-                    >
-                      {visible ? <Eye size={18} strokeWidth={2} /> : <EyeOff size={18} strokeWidth={2} />}
-                    </button>
+                    {!tableMode ? (
+                      <button
+                        type="button"
+                        draggable={false}
+                        className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                        aria-label={visible ? '隐藏分组' : '显示分组'}
+                        onClick={() =>
+                          patch((p) => {
+                            const h = new Set((p.hidden ?? []).map((x) => String(x).trim()));
+                            if (h.has(k)) h.delete(k);
+                            else h.add(k);
+                            return { ...p, hidden: [...h] };
+                          })
+                        }
+                      >
+                        {visible ? <Eye size={18} strokeWidth={2} /> : <EyeOff size={18} strokeWidth={2} />}
+                      </button>
+                    ) : null}
                   </div>
 
                   {expanded ? (
-                    <div className="chrome-content-shift-in border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
+                    <div className="chrome-content-shift-in space-y-px border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
                       {panelNotes.map((note) => {
                         const nVisible = !note.layerItemHidden;
                         const isNDrag = dragNoteId === note.id;
                         const isNOver = overNoteId === note.id && dragNoteId != null && dragNoteId !== note.id;
                         const lineB = isNOver && noteDropPlace === 'before';
                         const lineA = isNOver && noteDropPlace === 'after';
+                        const hasImage =
+                          (note.media ?? []).some((item) => item.kind === 'image') ||
+                          (note.imageRefs?.length ?? 0) > 0 ||
+                          (note.images?.length ?? 0) > 0;
+                        const hasSketch =
+                          (note.media ?? []).some((item) => item.kind === 'sketch') ||
+                          Boolean(note.sketch);
+                        const hasEmoji = Boolean(note.emoji?.trim());
+                        const hasLocation =
+                          Number.isFinite(note.coords?.lat) &&
+                          Number.isFinite(note.coords?.lng) &&
+                          (note.coords.lat !== 0 || note.coords.lng !== 0);
                         return (
                           <div key={note.id}>
                             {lineB ? (
@@ -937,9 +956,9 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                                     {truncateRawTextLabel(note.text || '')}
                                   </div>
 
-                                  <div className="flex-1 min-w-0 flex flex-wrap items-center gap-1">
-                                    {(note.tags ?? []).length > 0 ? (
-                                      (note.tags ?? []).map((t, tagIndex) => {
+                                  {(note.tags ?? []).length > 0 ? (
+                                    <div className="min-w-0 flex flex-wrap items-center gap-1">
+                                      {(note.tags ?? []).map((t, tagIndex) => {
                                         const tagKey = normalizeTagLabel(t.label);
                                         return (
                                           <button
@@ -960,22 +979,30 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                                             {tagKey || '无标签'}
                                           </button>
                                         );
-                                      })
-                                    ) : (
-                                      <span className="text-[10px] text-gray-400">-</span>
-                                    )}
-                                  </div>
+                                      })}
+                                    </div>
+                                  ) : null}
 
-                                  <div className="shrink-0">
-                                    <NoteTimeRangeControl
-                                      startYear={note.startYear}
-                                      endYear={note.endYear}
-                                      themeColor={themeColor}
-                                      panelChromeStyle={panelChromeStyle}
-                                      onChange={(next) => {
-                                        onUpdateNote({ ...note, startYear: next.startYear, endYear: next.endYear });
-                                      }}
-                                    />
+                                  <div className="ml-auto flex shrink-0 items-center gap-2">
+                                    {(hasImage || hasSketch || hasEmoji || hasLocation) ? (
+                                      <div className="flex items-center gap-1 text-gray-400" aria-label="便签内容标记">
+                                        {hasImage ? <ImageIcon size={14} strokeWidth={2} aria-label="含图片" /> : null}
+                                        {hasSketch ? <PenTool size={14} strokeWidth={2} aria-label="含涂鸦" /> : null}
+                                        {hasEmoji ? <Smile size={14} strokeWidth={2} aria-label="含 Emoji" /> : null}
+                                        {hasLocation ? <MapPin size={14} strokeWidth={2} aria-label="含地点" /> : null}
+                                      </div>
+                                    ) : null}
+                                    {layerGroupStandard === 'tag' ? (
+                                      <NoteTimeRangeControl
+                                        startYear={note.startYear}
+                                        endYear={note.endYear}
+                                        themeColor={themeColor}
+                                        panelChromeStyle={panelChromeStyle}
+                                        onChange={(next) => {
+                                          onUpdateNote({ ...note, startYear: next.startYear, endYear: next.endYear });
+                                        }}
+                                      />
+                                    ) : null}
                                   </div>
                                 </div>
                               ) : (
@@ -1126,7 +1153,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
           autoFocus={false}
         />
       )}
-    </div>
+    </AnchoredWorkspaceWindow>
   );
 
   if (embed || flow) return panelBody;

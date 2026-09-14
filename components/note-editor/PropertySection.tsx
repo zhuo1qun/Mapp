@@ -12,6 +12,7 @@ import {
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 
 interface PropertySectionProps {
+  standalone?: boolean;
   startYear?: number;
   endYear?: number;
   onTimeChange: (next: { startYear?: number; endYear?: number }) => void;
@@ -44,6 +45,7 @@ interface PropertySectionProps {
 
 /** Properties：emoji / tags / time（经 Registry 语义；组件复用现有控件） */
 export const PropertySection: React.FC<PropertySectionProps> = ({
+  standalone = false,
   startYear,
   endYear,
   onTimeChange,
@@ -73,7 +75,12 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
   const dismiss = onDismissOverlays ?? (() => {});
 
   return (
-    <section className="flex flex-col shrink-0 border-t border-gray-400/50" aria-label="属性">
+    <section
+      className={`relative flex shrink-0 flex-col ${
+        standalone ? '' : 'before:absolute before:top-0 before:left-3 before:right-3 before:border-t before:border-gray-400/50'
+      }`}
+      aria-label="属性"
+    >
       <div className="px-4 pt-2 pb-1 flex items-center justify-between gap-2">
         <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide shrink-0">
           属性

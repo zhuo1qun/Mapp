@@ -3,7 +3,7 @@ import type { Connection, Frame, Note, Project } from '../../types';
 import { parseNoteContent } from '../../utils';
 import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY } from '../map/mapChromeStyle';
 import { mergeGraphLayerState } from './graphRuntimeCore';
-import { noteTagLabels, noteTagLayerGroupKey } from '../layer/unifiedNoteLayer';
+import { emojiLayerStateFromLegacyTagState, noteEmojiLayerGroupKey, noteTagLabels, noteTagLayerGroupKey } from '../layer/unifiedNoteLayer';
 import {
   buildGraphNodeColorLegendItems,
   GRAPH_CLUSTER_BASIS_FRAME,
@@ -367,6 +367,7 @@ export function buildGraphElements(
       const nsCore = Math.round(ns * coreScale * 100) / 100;
       const nsFavCore = Math.round(ns * favScale * coreScale * 100) / 100;
       const layerTagLabels = noteTagLabels(note);
+      const emojiGroup = noteEmojiLayerGroupKey(note);
       return {
         data: {
           id: note.id,
@@ -392,8 +393,10 @@ export function buildGraphElements(
           nodeEmojiSizeFavCore: graphNodeEmojiSize(nsFavCore),
           /** 图谱「按标签分组」用：无首个标签时归入 GRAPH_UNTAGGED_TAG_GROUP */
           tagGroup,
-          /** 全部标签（含 emoji；显隐：任一未隐藏则显示） */
+          /** 全部标签（显隐：任一未隐藏则显示） */
           tagLabels: layerTagLabels,
+          /** Emoji 图层专用分组；不再混入 tagLabels。 */
+          emojiGroup,
           /**
            * 单簇归属（旧多簇取第一个）
            */
@@ -1280,10 +1283,12 @@ export interface GraphExportPayload {
   graphLayers?: import('../../types').GraphLayerState;
   /** 簇图层（显隐 / 权重） */
   graphFrameLayers?: import('../../types').GraphLayerState;
+  /** Emoji 图层（显隐 / 权重） */
+  graphEmojiLayers?: import('../../types').GraphLayerState;
   /**
    * @deprecated 独立页已改为双层显隐；保留字段兼容旧导出 JSON
    */
-  graphLayerGroupStandard?: 'tag' | 'frame';
+  graphLayerGroupStandard?: 'tag' | 'emoji' | 'frame';
   /** 独立页时间线纵轴聚类强度（0～1；默认 0.8） */
   graphTimeAxisWeightBias?: number;
   /** 独立页时间线聚类依据：frame 或一级标签前缀 */
@@ -1349,6 +1354,11 @@ export function buildGraphExportPayload(
     project.graphFrameLayers ?? null,
     'frame'
   );
+  const emojiLayers = mergeGraphLayerState(
+    project.notes || [],
+    project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers),
+    'emoji'
+  );
   /** 旧字段：仅兼容；独立页启动优先双层 */
   const standard = project.graphLayerStandard ?? 'tag';
 
@@ -1407,6 +1417,7 @@ export function buildGraphExportPayload(
     ),
     graphLayers: tagLayers,
     graphFrameLayers: frameLayers,
+    graphEmojiLayers: emojiLayers,
     graphLayerGroupStandard: standard,
     graphTimeAxisWeightBias:
       project.graphTimeAxisWeightBias ?? DEFAULT_GRAPH_TIME_AXIS_WEIGHT_BIAS,

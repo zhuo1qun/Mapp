@@ -28,6 +28,8 @@ type Props = {
   onActivateNote?: (note: Note) => void;
   tagColorsByKey: Map<string, string[]>;
   onOpenTagColor: (tagKey: string, fromColor: string, anchor: HTMLElement) => void;
+  /** 表格视图只用于浏览/编辑分组，不提供显隐筛选。 */
+  showVisibilityControls?: boolean;
   /** 双击标签名批量重命名（传入完整旧键 → 完整新键） */
   onRenameTag?: (oldFullKey: string, nextFullKey: string) => void | Promise<void>;
 };
@@ -46,7 +48,8 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   onActivateNote,
   tagColorsByKey,
   onOpenTagColor,
-  onRenameTag
+  onRenameTag,
+  showVisibilityControls = true
 }) => {
   const hiddenSet = useMemo(
     () => new Set((merged.hidden ?? []).map((h) => String(h).trim())),
@@ -157,7 +160,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   const renderNotes = (tagKey: string) => {
     const panelNotes = notesForTag(tagKey);
     return (
-      <div className="chrome-content-shift-in border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
+      <div className="chrome-content-shift-in space-y-px border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
         {panelNotes.length === 0 ? (
           <div className="px-2 py-1 text-[10px] text-gray-400">无便签</div>
         ) : (
@@ -177,14 +180,16 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
                 >
                   {truncateRawTextLabel(note.text || '')}
                 </button>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-md p-1 text-gray-500 hover:bg-gray-100"
-                  aria-label={nVisible ? '隐藏节点' : '显示节点'}
-                  onClick={() => onUpdateNote({ ...note, layerItemHidden: !note.layerItemHidden })}
-                >
-                  {nVisible ? <Eye size={16} strokeWidth={2} /> : <EyeOff size={16} strokeWidth={2} />}
-                </button>
+                {showVisibilityControls ? (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-md p-1 text-gray-500 hover:bg-gray-100"
+                    aria-label={nVisible ? '隐藏节点' : '显示节点'}
+                    onClick={() => onUpdateNote({ ...note, layerItemHidden: !note.layerItemHidden })}
+                  >
+                    {nVisible ? <Eye size={16} strokeWidth={2} /> : <EyeOff size={16} strokeWidth={2} />}
+                  </button>
+                ) : null}
               </div>
             );
           })
@@ -347,14 +352,16 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
             </span>
           )}
           <span className="shrink-0 text-[10px] text-gray-400">{groupNotes.length}</span>
-          <button
-            type="button"
-            className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
-            aria-label={visible ? '隐藏标签' : '显示标签'}
-            onClick={() => toggleHidden([k])}
-          >
-            {visible ? <Eye size={16} strokeWidth={2} /> : <EyeOff size={16} strokeWidth={2} />}
-          </button>
+          {showVisibilityControls ? (
+            <button
+              type="button"
+              className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+              aria-label={visible ? '隐藏标签' : '显示标签'}
+              onClick={() => toggleHidden([k])}
+            >
+              {visible ? <Eye size={16} strokeWidth={2} /> : <EyeOff size={16} strokeWidth={2} />}
+            </button>
+          ) : null}
         </div>
         {showLineAfter ? (
           <div className="mx-2 h-0.5 rounded-full" style={{ backgroundColor: themeColor }} />
@@ -366,20 +373,22 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-0.5">
-        <span className="text-[10px] font-medium text-gray-400">多标签显隐</span>
-        <ChromeSegmentedControl
-          aria-label="标签显隐逻辑"
-          size="sm"
-          className="shrink-0"
-          value={visibilityLogic}
-          onChange={setVisibilityLogic}
-          options={[
-            { id: 'and', label: 'AND', title: '且：任一标签隐藏则隐藏节点' },
-            { id: 'or', label: 'OR', title: '或：任一标签显示则显示节点' }
-          ]}
-        />
-      </div>
+      {showVisibilityControls ? (
+        <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-0.5">
+          <span className="text-[10px] font-medium text-gray-400">多标签显隐</span>
+          <ChromeSegmentedControl
+            aria-label="标签显隐逻辑"
+            size="sm"
+            className="shrink-0"
+            value={visibilityLogic}
+            onChange={setVisibilityLogic}
+            options={[
+              { id: 'and', label: 'AND', title: '且：任一标签隐藏则隐藏节点' },
+              { id: 'or', label: 'OR', title: '或：任一标签显示则显示节点' }
+            ]}
+          />
+        </div>
+      ) : null}
 
       {hierarchy.map(({ prefix, tags }) => {
         const leafOnly = tags.length === 1 && !tagHasHierarchySep(tags[0]);
@@ -519,14 +528,16 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
                 </span>
               )}
               <span className="shrink-0 text-[10px] text-gray-400">{pNotes.length}</span>
-              <button
-                type="button"
-                className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
-                aria-label={allHidden ? '显示该组标签' : '隐藏该组标签'}
-                onClick={() => toggleHidden(tags)}
-              >
-                {allHidden ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
-              </button>
+              {showVisibilityControls ? (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                  aria-label={allHidden ? '显示该组标签' : '隐藏该组标签'}
+                  onClick={() => toggleHidden(tags)}
+                >
+                  {allHidden ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
+                </button>
+              ) : null}
             </div>
             {showPrefixLineAfter ? (
               <div className="mx-2 h-0.5 rounded-full" style={{ backgroundColor: themeColor }} />

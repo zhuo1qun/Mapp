@@ -9,7 +9,7 @@ import {
   compareTagLayerKeysForAutoOrder,
   defaultWeightForTagLayer
 } from '../layer/layerRegistry';
-import { emojiToLayerTagKey } from '../layer/tagHierarchy';
+import { noteEmojiLayerGroupKey, noteTagLabels, GRAPH_UNEMOJI_GROUP } from '../layer/unifiedNoteLayer';
 import {
   GRAPH_CLUSTER_BASIS_FRAME,
   isFrameClusterBasis,
@@ -68,12 +68,15 @@ function stableAngleSeed(input: string): number {
   return (h >>> 0) / 4294967296;
 }
 
-export type GraphLayerGroupStandard = 'tag' | 'frame';
+export type GraphLayerGroupStandard = 'tag' | 'emoji' | 'frame';
 
 function getGraphLayerCandidateKeys(n: NodeSingular, standard: GraphLayerGroupStandard): string[] {
   if (standard === 'tag') {
     const k = n.data('tagGroup');
     return [String(k ?? '').trim()];
+  }
+  if (standard === 'emoji') {
+    return [String(n.data('emojiGroup') ?? GRAPH_UNEMOJI_GROUP).trim() || GRAPH_UNEMOJI_GROUP];
   }
 
   const raw = n.data('frameGroups') as unknown;
@@ -90,9 +93,9 @@ function getGraphLayerEffectiveGroupKey(
   standard: GraphLayerGroupStandard,
   hiddenSet: Set<string>
 ): string {
-  if (standard === 'tag') {
-    // tagGroup 本身就是单一归属；不需要跳过 hidden（hidden 决定显示/隐藏）
-    const k = n.data('tagGroup');
+  if (standard === 'tag' || standard === 'emoji') {
+    // 标签和 Emoji 都是单一归属；不需要跳过 hidden（hidden 决定显示/隐藏）
+    const k = n.data(standard === 'tag' ? 'tagGroup' : 'emojiGroup');
     return String(k ?? '').trim();
   }
 
@@ -130,15 +133,17 @@ export function applyGraphLayerNodeVisibility(
   applyGraphNodeStackZIndex(cy);
 }
 
-/** 标签层与簇层同时生效：任一层隐藏则节点隐藏；选中高亮的邻居临时强制显示 */
+/** 标签、Emoji 与簇层同时生效：任一层隐藏则节点隐藏；选中高亮的邻居临时强制显示 */
 export function applyGraphDualLayerNodeVisibility(
   cy: Core,
   tagHidden: string[],
   frameHidden: string[],
-  tagVisibilityLogic: 'and' | 'or' = 'or'
+  tagVisibilityLogic: 'and' | 'or' = 'or',
+  emojiHidden: string[] = []
 ): void {
   const tagSet = new Set(tagHidden.map((h) => String(h).trim()));
   const frameSet = new Set(frameHidden.map((h) => String(h).trim()));
+  const emojiSet = new Set(emojiHidden.map((h) => String(h).trim()));
   const logic = tagVisibilityLogic === 'and' ? 'and' : 'or';
   cy.batch(() => {
     cy.nodes().forEach((node) => {
@@ -158,8 +163,9 @@ export function applyGraphDualLayerNodeVisibility(
         tagBlocked = tagLabels.every((l) => tagSet.has(l));
       }
       const frameKey = getGraphLayerEffectiveGroupKey(node, 'frame', frameSet);
+      const emojiKey = getGraphLayerEffectiveGroupKey(node, 'emoji', emojiSet);
       let disp: 'none' | 'element' =
-        tagBlocked || frameSet.has(frameKey) ? 'none' : 'element';
+        tagBlocked || frameSet.has(frameKey) || emojiSet.has(emojiKey) ? 'none' : 'element';
       if (disp === 'element') {
         const lh = node.data('layerItemHidden');
         if (lh === true || lh === 'yes' || lh === 1) disp = 'none';
@@ -1348,23 +1354,16 @@ export function mergeGraphLayerState(
   const allKeys = new Set<string>();
   for (const n of notes) {
     if (standard === 'tag') {
-      const labels: string[] = [];
-      const seen = new Set<string>();
-      for (const t of n.tags ?? []) {
-        const l = String(t.label ?? '').trim();
-        if (!l || seen.has(l)) continue;
-        seen.add(l);
-        labels.push(l);
-      }
-      const emojiKey = emojiToLayerTagKey(n.emoji ?? '');
-      if (emojiKey && !seen.has(emojiKey)) {
-        labels.push(emojiKey);
-      }
+      const labels = noteTagLabels(n);
       if (labels.length === 0) {
         allKeys.add(GRAPH_UNTAGGED_TAG_GROUP);
       } else {
         labels.forEach((l) => allKeys.add(l));
       }
+      continue;
+    }
+    if (standard === 'emoji') {
+      allKeys.add(noteEmojiLayerGroupKey(n));
       continue;
     }
 
@@ -1390,7 +1389,7 @@ export function mergeGraphLayerState(
   const prevOrder = saved?.order ?? [];
   const ordered: string[] = [];
   const seen = new Set<string>();
-  // 标签 / 簇：均保留已存拖拽顺序；新键按默认规则追加（标签用首字母，「无标签」靠后）
+  // 标签 / Emoji / 簇：均保留已存拖拽顺序；新键按默认规则追加（标签用首字母，「无标签」靠后）
   for (const k of prevOrder) {
     const key = String(k).trim();
     if (allKeys.has(key) && !seen.has(key)) {
