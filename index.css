@@ -27,12 +27,16 @@
   --workspace-ui-inset-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   /* 全局浮层层级：组件只能引用这些语义层，不再各自猜测四位数 z-index。 */
   --z-workspace-tabs: 50;
+  /* NoteEditor 主面保持在工具栏下方，使其 portal 出来的临时工具栏/详情窗能自然浮到前面。 */
+  --z-note-slot: 900;
   --z-map-toolbar: 1000;
   --z-map-anchored-panel: 2000;
   --z-map-sheet-backdrop: 4000;
   --z-map-sheet: 4001;
   --z-map-modal: 6000;
   --z-map-tooltip: 7000;
+  /* 选区工具栏、斜杠菜单等从编辑器内容树移出后使用这一层，不能被 NoteEditor 壳遮住。 */
+  --z-note-editor-transient: 8000;
   --z-blocking-dialog: 10050;
 }
 
@@ -123,6 +127,73 @@
 .table-node-canvas.workspace-canvas--dark {
   background-color: rgb(39 39 42);
   background-image: radial-gradient(circle, rgb(255 255 255 / 0.12) 1px, transparent 1.25px);
+}
+
+/* 拖入文件时的全局提示层。它不接管指针事件，底层工作区仍可持续接收 dragover/drop。 */
+.chrome-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px)) max(1rem, env(safe-area-inset-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+
+.chrome-drop-overlay-card {
+  display: flex;
+  width: min(100%, 28rem);
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.chrome-drop-overlay-icon {
+  display: flex;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.16);
+}
+
+.chrome-drop-overlay-entering {
+  animation: chrome-drop-overlay-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chrome-drop-overlay-exiting {
+  animation: chrome-drop-overlay-out 180ms ease-in both;
+}
+
+@keyframes chrome-drop-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes chrome-drop-overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (max-width: 639px) {
+  .chrome-drop-overlay {
+    align-items: flex-end;
+    padding-bottom: max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+  }
+
+  .chrome-drop-overlay-card {
+    align-items: flex-start;
+    padding: 1rem 1.125rem;
+  }
+
+  .chrome-drop-overlay-card > div:last-child {
+    text-align: left;
+  }
 }
 
 /**
@@ -700,11 +771,18 @@ body {
 }
 
 .chrome-note-slot {
+  z-index: var(--z-note-slot) !important;
   will-change: transform, opacity;
   /* 原点是图钉相对窗口左上角的位置，预览卡与居中编辑器共用。 */
   transform-origin:
     calc(var(--note-editor-anchor-x) - var(--note-slot-left, 0px))
     calc(var(--note-editor-anchor-y) - var(--note-slot-top, 0px));
+}
+
+/* Tiptap 会在显示时把这些菜单直接挂到 body；层级须落在该挂载节点本身，
+ * 不能只依赖内部按钮的 z-index。 */
+.note-editor-transient-layer {
+  z-index: var(--z-note-editor-transient) !important;
 }
 .chrome-note-slot.chrome-note-slot-entering {
   animation: chrome-note-slot-enter 360ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
@@ -737,6 +815,37 @@ body {
 }
 .chrome-note-slot.chrome-note-slot-exiting.chrome-window-morph {
   transition: none;
+}
+
+/* Board 与 Map 的编辑器共用工作区居中定位；锚点缩放需把平移保留在每一帧动画中。 */
+@media (min-width: 640px) {
+  .chrome-note-slot--editor-centered {
+    transform: translateY(-50%);
+    transform-origin:
+      calc(var(--note-editor-anchor-x) - var(--note-slot-left, 0px))
+      calc(var(--note-editor-anchor-y) - 50dvh + 50%);
+  }
+
+  .chrome-note-slot--editor-centered.chrome-note-slot-entering {
+    animation: chrome-note-slot-centered-enter 360ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  }
+
+  .chrome-note-slot--editor-centered.chrome-note-slot-exiting {
+    animation: chrome-note-slot-centered-exit 280ms cubic-bezier(0.55, 0, 0.9, 0.35) both;
+  }
+
+  @keyframes chrome-note-slot-centered-enter {
+    from { opacity: 0.92; transform: translateY(-50%) scale(0.07); }
+    16% { opacity: 1; }
+    72% { opacity: 1; transform: translateY(-50%) scale(1.018); }
+    to { opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+
+  @keyframes chrome-note-slot-centered-exit {
+    from { opacity: 1; transform: translateY(-50%) scale(1); }
+    78% { opacity: 1; transform: translateY(-50%) scale(0.16); }
+    to { opacity: 0.82; transform: translateY(-50%) scale(0.07); }
+  }
 }
 
 .chrome-responsive-sheet-entering { animation: chrome-sheet-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }

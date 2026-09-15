@@ -126,7 +126,7 @@ export function EditorSlashMenu({ editor }: EditorSlashMenuProps) {
 
   return (
     <div
-      className="fixed z-[1100] w-52 overflow-hidden rounded-lg border border-gray-200 bg-white p-1 shadow-xl"
+      className="note-editor-transient-layer fixed w-52 overflow-hidden rounded-lg border border-gray-200 bg-white p-1 shadow-xl"
       style={{ left: Math.min(menu.x, window.innerWidth - 224), top: menu.y }}
       role="listbox"
       aria-label="插入内容"

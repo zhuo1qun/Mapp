@@ -57,7 +57,7 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
       appendTo={() => document.body}
       options={{ strategy: 'fixed', placement: 'top', offset: 8 }}
       shouldShow={({ state, from, to }) => state.selection.empty === false && from !== to}
-      className="z-[1100] flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
+      className="note-editor-transient-layer flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
     >
       <Control
         label="加粗"

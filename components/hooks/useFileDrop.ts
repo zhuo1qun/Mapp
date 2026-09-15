@@ -2,8 +2,7 @@ import { useState, useCallback } from 'react';
 
 interface UseFileDropProps {
   isEditorOpen: boolean;
-  themeColor: string;
-  handleImageImport: (files: FileList | null, showLimitMessage?: boolean) => void;
+  handleImageImport: (files: FileList | null) => void;
   handleDataImport: (file: File) => void;
   handleCsvImport: (file: File) => void;
   /** 为 true 时仅处理 JSON/CSV（不触发图片导入） */
@@ -12,7 +11,6 @@ interface UseFileDropProps {
 
 export function useFileDrop({
   isEditorOpen,
-  themeColor,
   handleImageImport,
   handleDataImport,
   handleCsvImport,
@@ -97,7 +95,7 @@ export function useFileDrop({
       if (imageFiles.length > 0) {
         const dataTransfer = new DataTransfer();
         imageFiles.forEach((file) => dataTransfer.items.add(file as File));
-        handleImageImport(dataTransfer.files, true);
+        handleImageImport(dataTransfer.files);
       } else if (jsonFiles.length > 0 && jsonFiles[0]) {
         handleDataImport(jsonFiles[0] as File);
       } else if (csvFiles.length > 0 && csvFiles[0]) {
@@ -113,11 +111,9 @@ export function useFileDrop({
     onDragLeave: handleDragLeave,
     onDrop: handleDrop,
     onDragEnd: handleDragEnd,
-    className: isDragging ? 'ring-4 ring-offset-2' : '',
-    style: isDragging ? { boxShadow: `0 0 0 4px ${themeColor}` } as const : undefined
+    className: '',
+    style: undefined
   };
 
-  const dismissDropZone = useCallback(() => setIsDragging(false), []);
-
-  return { isDragging, rootProps, dismissDropZone };
+  return { isDragging, rootProps };
 }

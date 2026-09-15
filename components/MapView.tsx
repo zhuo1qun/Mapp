@@ -61,10 +61,9 @@ import { MapShiftBoxSelect } from './map/MapShiftBoxSelect';
 import { MapConnectionLinesOverlay } from './map/MapConnectionLinesOverlay';
 import { SettingsPanel } from './SettingsPanel';
 import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolbarSlot';
-import { ChromeNoteSlot } from './ui/ChromeNoteSlot';
+import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { parseNoteContent } from '../utils';
-import exifr from 'exifr';
 import { NoteEditor } from './NoteEditor';
 import { generateId } from '../utils';
 import { hexToRgb, isPhotoTakenRecently } from '../utils/map/mapUtils';
@@ -89,6 +88,7 @@ import {
   type MapChromeAppearance
 } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
+import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -970,9 +970,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const { handleDataImport } = useDataImport({ project, onUpdateProject });
   const { handleCsvImport } = useCsvImport({ project, onUpdateProject });
   const { computeBoardPosition } = useNotePositioning(notes);
-  const { isDragging, rootProps, dismissDropZone } = useFileDrop({
+  const { isDragging, rootProps } = useFileDrop({
     isEditorOpen,
-    themeColor,
     handleImageImport,
     handleDataImport,
     handleCsvImport
@@ -1762,40 +1761,14 @@ export const MapView: React.FC<MapViewProps> = ({
       onDrop={rootProps.onDrop}
       onDragEnd={rootProps.onDragEnd}
     >
-      {isDragging && (
-        <div 
-          className="absolute inset-0 z-[4000] flex items-center justify-center pointer-events-auto"
-          style={{ backgroundColor: isEditorOpen ? '#3B82F633' : `${themeColor}33` }}
-          onClick={dismissDropZone}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl p-8 border-4 pointer-events-none" style={{ borderColor: themeColor }}>
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                {isEditorOpen ? (
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-blue-600">
-                    <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M16 13H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M16 17H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                ) : (
-                <svg width="64" height="64" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-700">
-                  <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                  <path d="M8 11V5M5 8l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                )}
-              </div>
-              <div className="text-xl font-bold text-gray-800">
-                {isEditorOpen
-                  ? "Drag images to the note editor to add them"
-                  : "Drop images, JSON or CSV files here to import"
-                }
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ChromeDropOverlay
+        open={isDragging}
+        themeColor={themeColor}
+        chromeOpacity={mapUiChromeOpacity}
+        chromeBlurPx={mapUiChromeBlurPx}
+        title={isEditorOpen ? '拖入图片添加到便签' : '拖入图片、JSON 或 CSV 以导入'}
+        description={isEditorOpen ? '图片会加入当前便签' : '文件会导入当前项目'}
+      />
       <MapContainer 
         key={project.id}
         center={initialMapPosition?.center || defaultCenter}
@@ -2452,29 +2425,14 @@ export const MapView: React.FC<MapViewProps> = ({
             const pagePad = compactViewport ? '0.5rem' : '1rem';
             const previewLeft = `calc(var(--workspace-ui-left-inset, 0px) + ${pagePad})`;
             if (kind === 'editor') {
+              const editorSlot = chromeNoteEditorSlotLayout(
+                compactViewport,
+                mapChromeContentSurface
+              );
               return {
                 backdropLabel: '关闭编辑器',
                 'aria-label': '便签编辑器',
-                className: compactViewport
-                  ? 'chrome-note-slot--editor flex min-h-0 flex-col'
-                  : 'flex min-h-[300px] min-w-0 flex-col',
-                style: compactViewport
-                  ? {
-                      top: 0,
-                      left: 0,
-                      width: '100vw',
-                      height: '100dvh',
-                      maxHeight: '100dvh',
-                      borderRadius: 0,
-                      ...mapChromeContentSurface
-                    }
-                  : {
-                      top: '5dvh',
-                      left: `calc(var(--workspace-ui-left-inset, 0px) + (100vw - var(--workspace-ui-left-inset, 0px) - min(500px, calc(100vw - 2rem))) / 2)`,
-                      width: 'min(500px, calc(100vw - 2rem))',
-                      maxHeight: '90dvh',
-                      ...mapChromeContentSurface
-                    },
+                ...editorSlot,
                 children: (
                   <NoteEditor
                     shell={false}

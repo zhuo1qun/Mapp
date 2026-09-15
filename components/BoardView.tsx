@@ -10,12 +10,15 @@ import {
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { NoteEditor } from './NoteEditor';
 import { X, Check, Minus, Locate, Settings } from 'lucide-react';
-import exifr from 'exifr';
 import { generateId, fileToBase64, parseNoteContent } from '../utils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
+import { readImageGpsMetadata } from '../utils/media/imageFileProcessing';
 import { DEFAULT_THEME_COLOR, TAG_COLORS } from '../constants';
-import { mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
+import { mapChromeContentStyle, mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
+import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
+import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
+import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
 import { saveImage, saveSketch, loadImage, loadNoteImages, getViewPositionCache } from '../utils/persistence/storage';
 import { useNotesWithResolvedMedia } from '../utils/persistence/useNotesWithResolvedMedia';
@@ -297,6 +300,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const ch = panelChromeStyle;
   const chHover = chromeHoverBackground;
   const chromeAppearance = useChromeAppearance();
+  const compactViewport = useCompactViewport();
+  const boardNoteEditorSurface = useMemo(
+    () => mapChromeContentStyle(mapUiChromeOpacity, mapUiChromeBlurPx, chromeAppearance),
+    [chromeAppearance, mapUiChromeBlurPx, mapUiChromeOpacity]
+  );
   const frameChromeStyle = useMemo(
     () => ch ?? mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx, chromeAppearance),
     [ch, chromeAppearance, mapUiChromeOpacity, mapUiChromeBlurPx]
@@ -1495,40 +1503,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     
     for (const file of fileArray) {
       try {
-        // Read EXIF data with comprehensive options for better compatibility
-        // Support multiple phone manufacturers (Xiaomi, OPPO, etc.) and online albums
-        const output = await exifr.parse(file, {
-          tiff: true,
-          exif: true,
-          gps: true,        // Parse standard GPS
-          xmp: true,        // Critical: Support Android devices that store GPS in XMP
-          translateValues: true, // Critical: Auto convert DMS arrays and handle N/S/E/W refs
-          mergeOutput: true,    // Flatten all results to single object
-          reviveValues: true
-        });
-        
-        // Extract GPS coordinates - prioritize library-calculated standard values
-        let lat = null;
-        let lng = null;
-        
-        if (output) {
-          // Primary: Use library-calculated standard latitude/longitude (most compatible)
-          if (typeof output.latitude === 'number' && typeof output.longitude === 'number') {
-            lat = output.latitude;
-            lng = output.longitude;
-          }
-          // Fallback: Raw GPS values (rarely needed if translateValues: true works)
-          else if (output.GPSLatitude && output.GPSLongitude) {
-            // translateValues should have handled the conversion, but defensive check
-            if (typeof output.GPSLatitude === 'number' && typeof output.GPSLongitude === 'number') {
-              lat = output.GPSLatitude;
-              lng = output.GPSLongitude;
-            }
-          }
-        }
+        // EXIF 模块只在用户实际导入照片时加载；读取规则与 Mapping 共用。
+        const { lat, lng, output } = await readImageGpsMetadata(file);
         
         // Validate coordinates
-        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+        if (lat === null || lng === null) {
           console.warn('Could not extract GPS coordinates from:', file.name);
           console.warn('Available EXIF keys:', output ? Object.keys(output) : 'No EXIF data');
           console.warn('EXIF data sample:', output ? JSON.stringify(output, null, 2).substring(0, 500) : 'No data');
@@ -3080,44 +3059,14 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         onDoubleClick={handleBoardDoubleClick}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {isDragging && (
-          <div 
-            className="absolute inset-0 z-[4000] flex items-center justify-center pointer-events-auto"
-            style={{ backgroundColor: `${themeColor}33` }}
-            onClick={(e) => {
-              // 点击外部区域关闭
-              if (e.target === e.currentTarget) {
-                setIsDragging(false);
-              }
-            }}
-          >
-            <div 
-              className="bg-white rounded-2xl shadow-2xl p-8 border-4 relative"
-              style={{ borderColor: themeColor }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setIsDragging(false)}
-                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-700"
-                title="取消"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-              <div className="text-center">
-                <div className="mb-4 flex justify-center">
-                  <svg width="64" height="64" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-700">
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                    <path d="M8 11V5M5 8l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <p className="text-2xl font-bold text-gray-800">拖入图片、JSON 或 CSV 以导入</p>
-              </div>
-            </div>
-          </div>
-        )}
+        <ChromeDropOverlay
+          open={isDragging}
+          themeColor={themeColor}
+          chromeOpacity={mapUiChromeOpacity}
+          chromeBlurPx={mapUiChromeBlurPx}
+          title="拖入图片、JSON 或 CSV 以导入"
+          description="文件会添加到当前看板项目"
+        />
         <input
           type="file"
           accept="image/*"
@@ -4352,8 +4301,20 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             }}
         />
 
-        {
-          <NoteEditor 
+        <ChromeNoteSlot
+          kind={editingNote && !isIntroPending ? 'editor' : null}
+          onClose={closeEditor}
+          appearance={chromeAppearance}
+          motionAnchor={noteEditorAnimationAnchor}
+          resolve={() => {
+            const editorSlot = chromeNoteEditorSlotLayout(compactViewport, boardNoteEditorSurface);
+            return {
+              backdropLabel: '关闭编辑器',
+              'aria-label': '便签编辑器',
+              ...editorSlot,
+              children: (
+          <NoteEditor
+              shell={false}
               isOpen={!!editingNote && !isIntroPending}
               onClose={closeEditor}
               onSaveClose={() => closeEditor('saved')}
@@ -4383,6 +4344,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               themeColor={themeColor}
               mapUiChromeOpacity={mapUiChromeOpacity}
               mapUiChromeBlurPx={mapUiChromeBlurPx}
+              chromeAppearance={chromeAppearance}
               onSave={(updated) => {
                   if (updated.id && notes.some(n => n.id === updated.id)) {
                       // 确保保留原始note的variant
@@ -4424,7 +4386,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   }
               }}
           />
-        }
+              )
+            };
+          }}
+        />
 
         <BoardImportPreviewDialog
           open={showImportDialog}

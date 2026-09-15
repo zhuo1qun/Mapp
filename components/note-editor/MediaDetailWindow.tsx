@@ -206,7 +206,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
         if (isCanvasWindow) return surface;
         return (
           <div
-            className="fixed top-0 ui-workspace-overlay z-[1000] flex h-[100dvh] items-center justify-center bg-transparent p-0 sm:p-4"
+            className="note-editor-transient-layer fixed top-0 ui-workspace-overlay flex h-[100dvh] items-center justify-center bg-transparent p-0 sm:p-4"
           >
             <button
               type="button"

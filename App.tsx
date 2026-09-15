@@ -68,6 +68,7 @@ import { cancelPendingMapLocate, isMapLocatePending } from './utils/map/pendingM
 import { useDataImport } from './components/hooks/useDataImport';
 import { useCsvImport } from './components/hooks/useCsvImport';
 import { useFileDrop } from './components/hooks/useFileDrop';
+import { ChromeDropOverlay } from './components/ui/ChromeDropOverlay';
 import { EditInspectorProvider } from './components/editInspector/EditInspectorProvider';
 import { installBuiltinExamples } from './utils/builtinExamples/install';
 import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
@@ -432,7 +433,6 @@ export default function App() {
   });
   const tableGraphDataFileDrop = useFileDrop({
     isEditorOpen,
-    themeColor,
     handleImageImport: () => {},
     handleDataImport: handleProjectDataImport,
     handleCsvImport: handleProjectCsvImport,
@@ -1821,6 +1821,16 @@ export default function App() {
         onDragEnd={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragEnd : undefined}
         onPointerDownCapture={handleWorkspaceTransientDismiss}
       >
+        <ChromeDropOverlay
+          open={
+            (viewMode === 'table' || viewMode === 'graph') && tableGraphDataFileDrop.isDragging
+          }
+          themeColor={themeColor}
+          chromeOpacity={mapUiChromeOpacity}
+          chromeBlurPx={mapUiChromeBlurPx}
+          title="拖入 JSON 或 CSV 以导入"
+          description={viewMode === 'graph' ? '数据会导入当前图谱项目' : '数据会导入当前表格项目'}
+        />
         <Suspense fallback={workspaceProjectPendingPlaceholder}>
         {activeProject ? (
           <>

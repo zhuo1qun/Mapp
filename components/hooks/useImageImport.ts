@@ -1,6 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { Note } from '../../types';
 import { loadImage } from '../../utils/persistence/storage';
+import {
+  convertHeicImageIfNeeded,
+  readImageGpsMetadata
+} from '../../utils/media/imageFileProcessing';
 
 export interface ImportPreview {
   file: File;
@@ -151,7 +155,7 @@ export const useImageImport = ({
   const dataImportInputRef = useRef<HTMLInputElement>(null);
 
   // Handle image import
-  const handleImageImport = useCallback(async (files: FileList | null, showLimitMessage = false) => {
+  const handleImageImport = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     // Filter to include HEIC files
@@ -161,115 +165,30 @@ export const useImageImport = ({
       file.name.toLowerCase().endsWith('.heif')
     );
 
-    const fileArray = imageFiles; // No limit on number of images
     const previews: ImportPreview[] = [];
 
     // 缓存已加载的图片数据，避免重复从 IndexedDB 读取
     const fingerprintCache = new Map<string, string>();
 
-    for (const file of fileArray) {
+    for (const file of imageFiles) {
       try {
-        // IMPORTANT: Read EXIF data from original file FIRST (before any processing)
-        let exifDataFromOriginal = null;
-        let lat = null;
-        let lng = null;
-
-        // Try to read EXIF from original file first (before HEIC conversion)
+        // Read metadata from the original file before HEIC conversion.
+        let lat: number | null = null;
+        let lng: number | null = null;
         try {
-          const exifr = (await import('exifr')).default;
-
-          // Core EXIF reading with full compatibility
-          const output = await exifr.parse(file, {
-            tiff: true,
-            exif: true,
-            gps: true,        // Parse standard GPS
-            xmp: true,        // Critical: Support Android devices that store GPS in XMP
-            translateValues: true, // Critical: Auto convert DMS arrays and handle N/S/E/W refs
-            mergeOutput: true,    // Flatten all results to single object
-            reviveValues: true
-          });
-
-          // Extract GPS coordinates - prioritize library-calculated standard values
-          if (output) {
-            // Primary: Use library-calculated standard latitude/longitude (most compatible)
-            if (typeof output.latitude === 'number' && typeof output.longitude === 'number') {
-              lat = output.latitude;
-              lng = output.longitude;
-            }
-            // Fallback: Raw GPS values (rarely needed if translateValues: true works)
-            else if (output.GPSLatitude && output.GPSLongitude) {
-              // translateValues should have handled the conversion, but defensive check
-              if (typeof output.GPSLatitude === 'number' && typeof output.GPSLongitude === 'number') {
-                lat = output.GPSLatitude;
-                lng = output.GPSLongitude;
-              }
-            }
-
-            // Validate coordinates (keep 0,0 check for error data filtering)
-            if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
-              console.log('GPS found in original file:', file.name, { lat, lng, source: 'exif' });
-            }
+          ({ lat, lng } = await readImageGpsMetadata(file));
+          if (lat !== null && lng !== null) {
+            console.log('GPS found in original file:', file.name, { lat, lng, source: 'exif' });
           }
         } catch (originalExifError) {
-          console.warn('Failed to read EXIF from original file (possibly HEIC structure issue):', originalExifError);
+          console.warn(
+            'Failed to read EXIF from original file (possibly HEIC structure issue):',
+            originalExifError
+          );
         }
 
-        // Convert HEIC to JPEG if needed before processing
-        let processedFile = file;
-        const isHeic = file.type === 'image/heic' ||
-                       file.type === 'image/heif' ||
-                       file.name.toLowerCase().endsWith('.heic') ||
-                       file.name.toLowerCase().endsWith('.heif');
-
-        if (isHeic) {
-          try {
-            // Try multiple conversion methods for better compatibility
-            const conversionMethods = [
-              { toType: 'image/jpeg', quality: 0.9, extension: '.jpg', mimeType: 'image/jpeg' },
-              { toType: 'image/jpeg', quality: 0.8, extension: '.jpg', mimeType: 'image/jpeg' },
-              { toType: 'image/png', quality: 1.0, extension: '.png', mimeType: 'image/png' }
-            ];
-
-            let convertedBlob: Blob | null = null;
-            let lastError: any = null;
-
-            for (const method of conversionMethods) {
-              try {
-                const heic2anyModule = await import('heic2any');
-                const heic2anyFn = (heic2anyModule as any).default || heic2anyModule;
-
-                convertedBlob = await heic2anyFn({
-                  blob: file,
-                  toType: method.toType,
-                  quality: method.quality
-                }) as Blob;
-
-                // Verify the conversion worked
-                if (convertedBlob && convertedBlob.size > 0) {
-                  processedFile = new File([convertedBlob], file.name.replace(/\.(heic|heif)$/i, method.extension), {
-                    type: method.mimeType,
-                    lastModified: file.lastModified
-                  });
-                  console.log(`HEIC conversion successful with ${method.toType} quality ${method.quality}`);
-                  break;
-                }
-              } catch (error: any) {
-                console.log(`HEIC conversion failed with ${method.toType} (quality: ${method.quality}):`, error);
-                lastError = error;
-              }
-            }
-
-            // All conversion methods failed
-            if (!convertedBlob) {
-              console.error('All HEIC conversion methods failed. Last error:', lastError);
-              const errorMessage = lastError?.message || 'Unknown error';
-              throw new Error(`HEIC/HEIF 图片转换失败: ${errorMessage}\n\n请尝试将图片转换为 JPEG/PNG 格式后重试。`);
-            }
-          } catch (error) {
-            console.error('HEIC conversion failed:', error);
-            throw error;
-          }
-        }
+        // HEIC conversion remains a separate, on-demand chunk.
+        const processedFile = await convertHeicImageIfNeeded(file);
 
         const imageUrl = URL.createObjectURL(processedFile);
         const imageFingerprint = await calculateImageFingerprint(processedFile, imageUrl, lat, lng);
@@ -451,7 +370,3 @@ export const useImageImport = ({
     handleCancelImport
   };
 };
-
-
-
-

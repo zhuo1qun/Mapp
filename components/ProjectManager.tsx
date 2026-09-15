@@ -33,6 +33,7 @@ import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
 import { ChromeMenuShell } from './ui/ChromeMenuShell';
 import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
+import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
 
 /** 项目「更多」菜单 portal：高于侧栏与覆盖层，低于删除项目阻断层 10000 */
 const PM_PROJECT_MORE_MENU_Z = 9901;
@@ -1835,23 +1836,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           )}
         </div>
       ) : null}
-      {isDragging && (
-        <div className="fixed inset-0 z-[4000] flex items-center justify-center pointer-events-none" style={{ backgroundColor: `${themeColor}33` }}>
-          <div
-            className="rounded-2xl shadow-2xl p-8 border-4 border-solid"
-            style={{
-              borderColor: themeColor,
-              ...mapChromeSurface
-            }}
-          >
-            <div className="text-center">
-              <div className="text-4xl mb-4">📁</div>
-              <div className="text-xl font-bold text-gray-800">Drop JSON file to merge project</div>
-              <div className="text-sm text-gray-600 mt-2">Duplicate data will be automatically skipped</div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ChromeDropOverlay
+        open={isDragging}
+        themeColor={themeColor}
+        chromeOpacity={mapUiChromeOpacity}
+        chromeBlurPx={mapUiChromeBlurPx}
+        title="拖入项目 JSON 文件以合并"
+        description="重复数据会自动跳过"
+      />
       {mainHomeChrome}
 
       {isCreating && (

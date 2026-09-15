@@ -1,6 +1,7 @@
 import { TAG_COLORS } from './constants';
 import { Tag } from './types';
 import { toJpeg, toPng } from 'html-to-image';
+import { convertHeicImageIfNeeded } from './utils/media/imageFileProcessing';
 
 export const generateId = (): string => {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -62,105 +63,11 @@ export const compressImageFromBase64 = (base64: string, maxWidth: number = 1920,
   });
 };
 
-// Convert HEIC to JPEG/PNG if needed
-const convertHeicIfNeeded = async (file: File): Promise<File> => {
-  // Check if file is HEIC format
-  const isHeic = file.type === 'image/heic' || 
-                 file.type === 'image/heif' || 
-                 file.name.toLowerCase().endsWith('.heic') ||
-                 file.name.toLowerCase().endsWith('.heif');
-  
-  if (!isHeic) {
-    return file;
-  }
-  
-  // Dynamically import heic2any to avoid issues with ESM/CommonJS
-  const heic2anyModule = await import('heic2any');
-  // heic2any can be exported as default or named export
-  const heic2anyFn = (heic2anyModule as any).default || heic2anyModule;
-  
-  // Try multiple conversion methods for better compatibility with iPhone 15 Pro HEIF
-  const conversionMethods = [
-    { toType: 'image/jpeg', quality: 0.9, extension: '.jpg', mimeType: 'image/jpeg' },
-    { toType: 'image/jpeg', quality: 0.8, extension: '.jpg', mimeType: 'image/jpeg' },
-    { toType: 'image/png', quality: undefined, extension: '.png', mimeType: 'image/png' }
-  ];
-  
-  let lastError: any = null;
-  
-  for (const method of conversionMethods) {
-    try {
-      const options: any = {
-        blob: file,
-        toType: method.toType
-      };
-      if (method.quality !== undefined) {
-        options.quality = method.quality;
-      }
-      
-      const convertedBlob = await heic2anyFn(options);
-      
-      // heic2any returns an array, get the first item
-      const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-      
-      if (!blob) {
-        throw new Error('Conversion returned empty result');
-      }
-      
-      // Create a new File object from the converted blob
-      const newFileName = file.name.replace(/\.(heic|heif)$/i, method.extension);
-      return new File([blob], newFileName, {
-        type: method.mimeType,
-        lastModified: file.lastModified
-      });
-    } catch (error: any) {
-      console.log(`HEIC conversion failed with ${method.toType} (quality: ${method.quality}):`, error);
-      lastError = error;
-      // Continue to next method
-      continue;
-    }
-  }
-  
-  // All conversion methods failed
-  console.error('All HEIC conversion methods failed. Last error:', lastError);
-  const errorMessage = lastError?.message || 'Unknown error';
-  
-  // Check for specific error types
-  if (errorMessage.includes('ERR_LIBHEIF') || errorMessage.includes('format not supported')) {
-    const detailedError = `无法转换此 HEIC/HEIF 文件
-
-可能原因：
-• iPhone 15 Pro 等新设备使用了更新的 HEIF 格式
-• 浏览器端转换库暂不支持此格式
-
-解决方案（推荐按顺序尝试）：
-1. 【最简单】在 iPhone 上更改设置：
-   设置 > 相机 > 格式 > 选择"兼容性最佳"
-   这样新照片会直接保存为 JPEG 格式
-
-2. 使用 Mac 预览应用转换：
-   打开图片 > 文件 > 导出 > 选择 JPEG 格式
-
-3. 使用在线转换工具：
-   • https://cloudconvert.com/heic-to-jpg
-   • https://convertio.co/zh/heic-jpg/
-   • https://heictojpeg.com/
-
-4. 使用 App Store 中的转换应用
-
-注意：这是浏览器端转换库的技术限制，不是应用的问题。`;
-    throw new Error(detailedError);
-  }
-  
-  throw new Error(`HEIC/HEIF 图片转换失败: ${errorMessage}\n\n请尝试将图片转换为 JPEG/PNG 格式后重试。`);
-};
-
-// Compress image before converting to base64
 export const compressImage = (file: File, maxWidth: number = 1920, maxHeight: number = 1920, quality: number = 0.8): Promise<string> => {
   return new Promise(async (resolve, reject) => {
     try {
       // Convert HEIC if needed
-      const processedFile = await convertHeicIfNeeded(file);
+      const processedFile = await convertHeicImageIfNeeded(file);
       
       const reader = new FileReader();
       reader.readAsDataURL(processedFile);
@@ -215,7 +122,7 @@ export const fileToBase64 = (file: File, compress: boolean = true): Promise<stri
   // For non-image files or when compression is disabled, still check for HEIC
   return new Promise(async (resolve, reject) => {
     try {
-      const processedFile = await convertHeicIfNeeded(file);
+      const processedFile = await convertHeicImageIfNeeded(file);
       const reader = new FileReader();
       reader.readAsDataURL(processedFile);
       reader.onload = () => resolve(reader.result as string);
