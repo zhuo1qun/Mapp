@@ -230,15 +230,21 @@ export function wireStandaloneGraphChrome(
       max: number,
       step: number,
       fmt: (v: number) => string
-    ) => `
+    ) => {
+      const span = max - min;
+      const pct = span <= 0 ? 0 : Math.max(0, Math.min(100, ((value - min) / span) * 100));
+      return `
       <label class="block min-w-0">
-        <div class="mb-1 flex items-center justify-between gap-2">
-          <span class="text-xs font-medium text-gray-600">${label}</span>
-          <span class="tabular-nums text-[10px] text-gray-400" data-val-for="${id}">${fmt(value)}</span>
+        <div class="mb-1 text-xs font-medium text-gray-600">${label}</div>
+        <div class="chrome-capsule-track relative h-9 overflow-hidden rounded-full">
+          <div data-fill-for="${id}" class="chrome-capsule-fill pointer-events-none absolute inset-y-0 left-0" style="width:${pct}%"></div>
+          <span class="pointer-events-none absolute inset-0 z-[1] flex items-center justify-end px-2.5 text-xs font-medium tabular-nums text-gray-700" data-val-for="${id}">${fmt(value)}</span>
+          <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"
+            aria-label="${label}"
+            class="absolute inset-0 z-[2] m-0 h-full w-full cursor-pointer opacity-0" />
         </div>
-        <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"
-          class="w-full" style="accent-color:${escapeHtml(themeColor)}" />
       </label>`;
+    };
 
     panelSettings.innerHTML = `
       <h2 class="shrink-0 px-3 pt-2.5 text-xs font-medium text-gray-500">设置</h2>
@@ -292,6 +298,13 @@ export function wireStandaloneGraphChrome(
           } else {
             label.textContent = String(Math.round(v));
           }
+        }
+        const fill = panelSettings.querySelector<HTMLElement>(`[data-fill-for="${id}"]`);
+        if (fill) {
+          const lo = Number(el.min);
+          const hi = Number(el.max);
+          const span = hi - lo;
+          fill.style.width = `${span <= 0 ? 0 : Math.max(0, Math.min(100, ((v - lo) / span) * 100))}%`;
         }
         applyStyles();
       });

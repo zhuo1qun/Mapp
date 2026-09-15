@@ -5,6 +5,7 @@ import type { Note } from '../../types';
 import { graphNoteSearchLabel } from '../../utils/graph/graphData';
 import { ChromeDownloadMenu } from '../ui/ChromeDownloadMenu';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
+import { ChromeSearchField } from '../ui/ChromeSearchField';
 import { PortalTooltip } from '../ui/PortalTooltip';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../../utils/ui/workspaceTransientDismiss';
 
@@ -151,15 +152,10 @@ export const GraphTopRightToolbar: React.FC<Props> = ({
       className="relative flex flex-col items-stretch"
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div
-        className="relative flex h-10 sm:h-12 items-stretch overflow-hidden rounded-xl border border-gray-100/80 shadow-lg"
-        style={ch}
-      >
-        <Search size={16} className="pointer-events-none absolute left-2.5 top-1/2 z-[1] -translate-y-1/2 text-gray-400 sm:left-3" />
-        <input
+      <ChromeSearchField
           ref={inputRef}
-          type="text"
-          autoComplete="off"
+          themeColor={themeColor}
+          containerStyle={ch}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -173,33 +169,35 @@ export const GraphTopRightToolbar: React.FC<Props> = ({
             }
           }}
           placeholder="定位节点…"
-          className="min-w-[8rem] w-36 max-w-[14rem] flex-1 border-0 bg-transparent py-0 pl-9 pr-1 text-xs outline-none focus:ring-0 sm:w-48 sm:max-w-[18rem] sm:pl-10 sm:text-sm"
-          style={{ ['--tw-ring-color' as string]: themeColor }}
+          className="w-28 text-xs sm:w-40 sm:text-sm"
           aria-autocomplete="list"
           aria-expanded={pickResults.shown.length > 0 && q.trim() !== ''}
+          trailing={
+            <div className="flex h-full shrink-0 items-stretch pr-0.5">
+              <PortalTooltip content="清空" compact>
+                <button
+                  type="button"
+                  onClick={clearQuery}
+                  disabled={q.length === 0}
+                  className="flex w-7 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent text-gray-400 hover:bg-black/[0.05] hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30"
+                  aria-label="清空"
+                >
+                  <Minus size={16} strokeWidth={2.25} />
+                </button>
+              </PortalTooltip>
+              <PortalTooltip content="关闭" compact>
+                <button
+                  type="button"
+                  onClick={closeSearch}
+                  className="flex w-7 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent text-gray-400 hover:bg-black/[0.05] hover:text-gray-700"
+                  aria-label="关闭"
+                >
+                  <X size={16} strokeWidth={2.25} />
+                </button>
+              </PortalTooltip>
+            </div>
+          }
         />
-        <PortalTooltip content="清空" compact>
-          <button
-            type="button"
-            onClick={clearQuery}
-            disabled={q.length === 0}
-            className="shrink-0 border-0 bg-transparent px-1.5 text-gray-400 hover:bg-black/[0.04] hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30"
-            aria-label="清空"
-          >
-            <Minus size={18} strokeWidth={2.25} />
-          </button>
-        </PortalTooltip>
-        <PortalTooltip content="关闭" compact>
-          <button
-            type="button"
-            onClick={closeSearch}
-            className="shrink-0 border-0 bg-transparent px-2 text-gray-400 hover:bg-black/[0.04] hover:text-gray-700"
-            aria-label="关闭"
-          >
-            <X size={18} strokeWidth={2.25} />
-          </button>
-        </PortalTooltip>
-      </div>
       {pickResults.shown.length > 0 && q.trim() !== '' ? (
         <ul
           className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-[600] max-h-52 min-w-0 overflow-y-auto rounded-xl border border-gray-100/80 bg-white/95 py-1 text-left shadow-xl backdrop-blur-sm"

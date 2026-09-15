@@ -1,10 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useRef } from 'react';
 import { Search, Copy, Loader2 } from 'lucide-react';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { ChromeSegmentedControl } from '../../ui/ChromeSegmentedControl';
-import { ResponsiveWindowPresence } from '../../ui/ResponsiveWindowPresence';
-import { AnchoredWorkspaceWindow } from '../../ui/AnchoredWorkspaceWindow';
+import { ChromeWindow } from '../../ui/ChromeWindow';
+import { ChromeSearchField } from '../../ui/ChromeSearchField';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
@@ -34,6 +33,7 @@ interface MapSearchPanelProps {
   borderGeoJSON: any;
   onClearBorder: () => void;
   onClose: () => void;
+  hostedWindow?: boolean;
 }
 
 export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
@@ -47,8 +47,66 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
   borderSearch,
   borderGeoJSON,
   onClearBorder,
-  onClose
+  onClose,
+  hostedWindow = false
 }) => {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const menuTop = useChromeMenuTop(isOpen && !hostedWindow, wrapRef, 8);
+  const searchBody = (
+    <MapSearchPanelBody
+      themeColor={themeColor}
+      borderSearch={borderSearch}
+      borderGeoJSON={borderGeoJSON}
+      onClearBorder={onClearBorder}
+    />
+  );
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <ChromeIconButton
+        themeColor={themeColor}
+        chromeSurfaceStyle={chromeSurfaceStyle}
+        chromeHoverBackground={chromeHoverBackground}
+        active={isOpen}
+        nonChromeIdleHover="none"
+        className="transition-all hover:scale-105 active:scale-95"
+        onClick={onToggle}
+        tooltip="检索"
+      >
+        <Search size={18} className="sm:w-5 sm:h-5" />
+      </ChromeIconButton>
+      {!hostedWindow ? (
+      <ChromeWindow
+        surface="window"
+        open={isOpen}
+        onClose={onClose}
+        backdropLabel="关闭检索"
+        top={menuTop}
+        align="end"
+        appearance={menuChromeAppearance}
+        dismissIgnoreRefs={[wrapRef]}
+        data-map-search-chrome-panel=""
+        className={`w-72 sm:w-80 max-h-[min(72dvh,calc(100dvh-1rem))] overflow-y-auto rounded-2xl shadow-2xl border border-gray-100/80 p-3 ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
+        style={menuChromeSurfaceStyle ?? chromeSurfaceStyle}
+      >
+        {searchBody}
+      </ChromeWindow>
+      ) : null}
+    </div>
+  );
+};
+
+export function MapSearchPanelBody({
+  themeColor,
+  borderSearch,
+  borderGeoJSON,
+  onClearBorder
+}: {
+  themeColor: string;
+  borderSearch: BorderSearchState;
+  borderGeoJSON: any;
+  onClearBorder: () => void;
+}) {
   const {
     borderSearchQuery,
     setBorderSearchQuery,
@@ -62,38 +120,10 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
     handleCopyBorder
   } = borderSearch;
 
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const menuTop = useChromeMenuTop(isOpen, wrapRef, 8);
-  const [lastMenuTop, setLastMenuTop] = useState<number | null>(null);
-  useEffect(() => {
-    if (menuTop != null) setLastMenuTop(menuTop);
-  }, [menuTop]);
-  const panelTop = menuTop ?? lastMenuTop;
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onPointerDownCapture = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (wrapRef.current?.contains(target)) return;
-      if (target instanceof Element && target.closest('[data-map-search-chrome-panel]')) return;
-      onClose();
-    };
-    document.addEventListener('pointerdown', onPointerDownCapture, true);
-    return () => document.removeEventListener('pointerdown', onPointerDownCapture, true);
-  }, [isOpen, onClose]);
-
-  const panel = panelTop != null ? (
-      <ResponsiveWindowPresence open={isOpen} onClose={onClose} backdropLabel="关闭检索">
-        {(phase) => (
-          <>
-        <AnchoredWorkspaceWindow
-          data-map-search-chrome-panel
-          className={`map-chrome-content-${menuChromeAppearance} ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-right w-72 sm:w-80 rounded-2xl shadow-2xl border border-gray-100/80 p-3 chrome-responsive-anchored-${phase} ${(menuChromeSurfaceStyle ?? chromeSurfaceStyle) ? '' : 'bg-white'}`}
-          style={{ top: panelTop, ...(menuChromeSurfaceStyle ?? chromeSurfaceStyle) }}
-        >
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-xs font-medium text-gray-500">检索</h3>
+  return (
+    <>
+        <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
+          <h3 className="shrink-0 text-xs font-medium text-gray-500">检索</h3>
           {borderGeoJSON ? (
             <div className="flex items-center gap-2">
               <button
@@ -125,28 +155,29 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
         />
 
         <div className="flex gap-2 mb-3">
-          <div className="relative flex-1">
-            <input
+          <ChromeSearchField
               autoFocus
-              type="text"
+              themeColor={themeColor}
+              containerClassName="flex-1"
               value={borderSearchQuery}
               onChange={(e) => setBorderSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleBorderSearch()}
-              className="w-full pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder={borderSearchMode === 'region' ? '输入地区名称' : '输入地点名称'}
+              trailing={
+                isSearchingBorder ? (
+                  <div className="flex h-full w-8 shrink-0 items-center justify-center">
+                    <Loader2 size={14} className="animate-spin text-gray-400" />
+                  </div>
+                ) : null
+              }
             />
-            {isSearchingBorder && (
-              <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                <Loader2 size={14} className="animate-spin text-gray-400" />
-              </div>
-            )}
-          </div>
           <button
             onClick={handleBorderSearch}
             disabled={isSearchingBorder || !borderSearchQuery.trim()}
-            className="px-3 py-2 rounded-xl text-sm font-bold text-theme-chrome-fg transition-all disabled:opacity-50"
+            className="h-9 shrink-0 rounded-[10px] px-3 text-sm font-bold text-theme-chrome-fg shadow-sm transition-[opacity,transform] active:scale-[0.98] disabled:opacity-50 sm:h-10"
             style={{ backgroundColor: themeColor }}
           >
-            Search
+            搜索
           </button>
         </div>
 
@@ -198,27 +229,6 @@ export const MapSearchPanel: React.FC<MapSearchPanelProps> = ({
             </div>
           </div>
         )}
-        </AnchoredWorkspaceWindow>
-          </>
-        )}
-      </ResponsiveWindowPresence>
-    ) : null;
-
-  return (
-    <div ref={wrapRef} className="relative">
-      <ChromeIconButton
-        themeColor={themeColor}
-        chromeSurfaceStyle={chromeSurfaceStyle}
-        chromeHoverBackground={chromeHoverBackground}
-        active={isOpen}
-        nonChromeIdleHover="none"
-        className="transition-all hover:scale-105 active:scale-95"
-        onClick={onToggle}
-        tooltip="检索"
-      >
-        <Search size={18} className="sm:w-5 sm:h-5" />
-      </ChromeIconButton>
-      {panel ? createPortal(panel, document.body) : null}
-    </div>
+    </>
   );
-};
+}

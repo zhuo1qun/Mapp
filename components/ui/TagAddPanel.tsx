@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Tag as TagIcon } from 'lucide-react';
 import { TAG_COLORS } from '../../constants';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from './chromeAppearanceContext';
 
 export interface TagAddPanelProps {
   themeColor: string;
@@ -47,7 +48,7 @@ const PORTAL_Z = 10000;
 export const TagAddPanel: React.FC<TagAddPanelProps> = ({
   themeColor,
   panelChromeStyle,
-  chromeAppearance = 'light',
+  chromeAppearance: chromeAppearanceProp,
   title,
   label,
   onLabelChange,
@@ -67,6 +68,7 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
   hideLabelInput = false,
   labelReadOnly = false,
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const rootRef = useRef<HTMLDivElement>(null);
   const outsideRef = useRef(onDismissOutside ?? onApply);
   outsideRef.current = onDismissOutside ?? onApply;

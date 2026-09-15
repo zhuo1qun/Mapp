@@ -6,6 +6,7 @@ import { TagChip } from '../ui/TagChip';
 import { TagAddPanel } from '../ui/TagAddPanel';
 import { computeAnchoredPanelPlacement } from '../ui/anchoredPanelPlacement';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 
 interface TagPropertyEditorProps {
   tags: Tag[];
@@ -49,8 +50,9 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
   addTagAnchorRef,
   themeColor = THEME_COLOR,
   panelChromeStyle,
-  chromeAppearance = 'light'
+  chromeAppearance: chromeAppearanceProp
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const dismiss = onDismissOverlays ?? (() => {});
   const tagsRowRef = useRef<HTMLDivElement>(null);
   const [tagPanelPos, setTagPanelPos] = useState<{ top: number; left: number } | null>(null);

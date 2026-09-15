@@ -253,124 +253,33 @@ export const parseNoteContent = (text: string) => {
   };
 };
 
-export const exportToJpeg = async (elementId: string, fileName: string) => {
-  const node = document.getElementById(elementId);
-  if (!node) {
-    alert('Could not find view to export');
-    return;
-  }
-
-  try {
-    // 处理跨域图片
-    handleCorsImages(node as HTMLElement);
-
-    // 等待所有图片加载完成
-    await checkImagesLoaded(node as HTMLElement);
-
-    // 等待一帧确保图片占位符渲染
-    await new Promise(resolve => requestAnimationFrame(resolve));
-
-    const dataUrl = await toJpeg(node, {
-      quality: 0.95,
-      width: 1920,
-      height: 1080,
-      canvasWidth: 1920,
-      canvasHeight: 1080,
-      backgroundColor: '#f9fafb', // gray-50
-      style: {
-        transform: 'none', // Reset transforms to capture full content if needed, though for fixed viewport this is tricky
-        overflow: 'hidden'
-      },
-      skipFonts: true,
-      includeQueryParams: true,
-    });
-
-    const link = document.createElement('a');
-    link.download = `${fileName}.jpg`;
-    link.href = dataUrl;
-    link.click();
-  } catch (error) {
-    console.error('Export failed', error);
-
-    // 提供更详细的错误信息
-    let errorMessage = 'Failed to export image.';
-    if (error instanceof Error) {
-      if (error.message.includes('cross-origin') || error.message.includes('CORS')) {
-        errorMessage = 'Export failed: Cross-origin image restrictions. Please refresh and try again.';
-      } else if (error.message.includes('canvas') || error.message.includes('Canvas')) {
-        errorMessage = 'Export failed: Canvas rendering error, possibly due to unsupported image format.';
-      } else if (error.message.includes('network') || error.message.includes('Network')) {
-        errorMessage = 'Export failed: Network error, please check if image links are valid.';
-  }
-    }
-
-    alert(errorMessage);
-  }
-};
-
-// 检查图片是否加载完成
-const checkImagesLoaded = (element: HTMLElement): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const images = element.querySelectorAll('img');
-    if (images.length === 0) {
-      resolve();
-      return;
-    }
-
-    let loadedCount = 0;
-    let hasError = false;
-    const totalImages = images.length;
-
-    const onImageLoad = () => {
-      loadedCount++;
-      if (loadedCount === totalImages && !hasError) {
-        resolve();
-      }
-    };
-
-    const onImageError = (img: HTMLImageElement, event: Event) => {
-      console.warn('Image failed to load during export:', img.src, event);
-      hasError = true;
-
-      // 为失败的图片设置占位符
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || img.width || 100;
-      canvas.height = img.naturalHeight || img.height || 100;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#f3f4f6';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('图片加载失败', canvas.width / 2, canvas.height / 2);
-        img.src = canvas.toDataURL();
-      }
-
-      onImageLoad();
-    };
-
-    images.forEach((img) => {
-      if (img.complete && img.naturalHeight > 0) {
-        // 图片已经加载完成
-        onImageLoad();
-      } else {
-        // 监听加载事件
-        img.addEventListener('load', onImageLoad);
-        img.addEventListener('error', (e) => onImageError(img, e));
-
-        // 设置超时
-        setTimeout(() => {
-          if (!img.complete) {
-            console.warn('Image load timeout:', img.src);
-            onImageError(img, new Event('timeout'));
+// 等待视图内图片结束加载；失败或超时也要继续导出，不能让弹窗永久卡住。
+const checkImagesLoaded = async (element: HTMLElement): Promise<void> => {
+  const images = Array.from(element.querySelectorAll('img'));
+  await Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          if (image.complete) {
+            resolve();
+            return;
           }
-        }, 5000); // 5秒超时
-      }
-    });
-  });
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            image.removeEventListener('load', finish);
+            image.removeEventListener('error', finish);
+            window.clearTimeout(timeout);
+            resolve();
+          };
+          const timeout = window.setTimeout(finish, 5000);
+          image.addEventListener('load', finish, { once: true });
+          image.addEventListener('error', finish, { once: true });
+        })
+    )
+  );
 };
-
 // 处理跨域图片
 const handleCorsImages = (element: HTMLElement): void => {
   const images = element.querySelectorAll('img');
@@ -387,189 +296,172 @@ const handleCorsImages = (element: HTMLElement): void => {
 };
 
 // 导出当前视图的中心对齐截图
-export const exportToJpegCentered = async (
-  elementId: string, 
-  fileName: string, 
+export type WorkspaceSnapshotView = 'map' | 'board' | 'graph';
+
+export type WorkspaceSnapshotOptions = {
+  includeBackground?: boolean;
+  includeBorder?: boolean;
+  includePins?: boolean;
+};
+
+/**
+ * 导出当前工作区视口。
+ * 三种视图共用尺寸、编码和 UI 过滤流程，图层差异只保留在明确的视图分支中。
+ */
+export const exportWorkspaceSnapshot = async (
+  elementId: string,
+  fileName: string,
   pixelRatio: number = Math.min(2, window.devicePixelRatio || 1),
-  options: { includeBackground?: boolean; includeBorder?: boolean; includePins?: boolean } = { includeBackground: true, includeBorder: true, includePins: true }
+  options: WorkspaceSnapshotOptions = {
+    includeBackground: true,
+    includeBorder: true,
+    includePins: true
+  },
+  viewOverride?: WorkspaceSnapshotView
 ) => {
   const node = document.getElementById(elementId);
   if (!node) {
-    alert('无法找到要导出的视图');
+    window.alert('无法找到要导出的视图');
     return;
   }
 
-  // 记录需要恢复的状态
-  const originalStyles = new Map<HTMLElement, { display: string, background: string, backgroundColor: string }>();
-  const uiElements = document.querySelectorAll('.fixed, .absolute, [class*="z-["]');
-  const originalUIDisplays: string[] = [];
+  const view: WorkspaceSnapshotView =
+    viewOverride ??
+    (elementId === 'map-view-container'
+      ? 'map'
+      : elementId === 'graph-view-container'
+        ? 'graph'
+        : 'board');
+  const exportAsPng = options.includeBackground === false;
+  const rect = node.getBoundingClientRect();
+  const exportWidth = Math.max(1, Math.round(rect.width));
+  const exportHeight = Math.max(1, Math.round(rect.height));
+  const originalBackgrounds = new Map<
+    HTMLElement,
+    { background: string; backgroundPriority: string; backgroundColor: string; backgroundColorPriority: string }
+  >();
+
+  const setTransparentBackground = (element: HTMLElement | null) => {
+    if (!element || originalBackgrounds.has(element)) return;
+    originalBackgrounds.set(element, {
+      background: element.style.getPropertyValue('background'),
+      backgroundPriority: element.style.getPropertyPriority('background'),
+      backgroundColor: element.style.getPropertyValue('background-color'),
+      backgroundColorPriority: element.style.getPropertyPriority('background-color')
+    });
+    element.style.setProperty('background', 'none', 'important');
+    element.style.setProperty('background-color', 'transparent', 'important');
+  };
+
+  const restoreInlineProperty = (
+    element: HTMLElement,
+    name: 'background' | 'background-color',
+    value: string,
+    priority: string
+  ) => {
+    if (value) element.style.setProperty(name, value, priority);
+    else element.style.removeProperty(name);
+  };
 
   try {
-    // 1. 隐藏 UI 元素
-    uiElements.forEach((el, index) => {
-      const htmlEl = el as HTMLElement;
-      originalUIDisplays[index] = htmlEl.style.display;
-      // 图谱节点 HTML label 等需进截图，勿当控件隐藏
-      if (
-        htmlEl.hasAttribute('data-mapp-export-keep') ||
-        htmlEl.closest('[data-mapp-export-keep]')
-      ) {
-        return;
-      }
-      // 只隐藏按钮、控件、下拉菜单等UI元素，不隐藏地图容器
-      if (htmlEl.tagName === 'BUTTON' || 
-          htmlEl.className.includes('pointer-events-auto') ||
-          htmlEl.className.includes('z-[500]') ||
-          htmlEl.className.includes('z-[400]') ||
-          htmlEl.className.includes('z-[4000]') ||
-          htmlEl.className.includes('z-50') ||
-          htmlEl.className.includes('shadow-lg') ||
-          htmlEl.className.includes('rounded-xl') ||
-          htmlEl.tagName === 'DIV' && htmlEl.className.includes('absolute') && !htmlEl.id.includes('container')) {
-        htmlEl.style.display = 'none';
-      }
-    });
-
-    // 2. 识别并处理图层
-    const isMapView = node.id === 'map-view-container';
-    const exportAsPng = options.includeBackground === false;
-
-    // 找出所有背景相关元素
-    const backgroundElements: HTMLElement[] = [];
-    if (isMapView) {
-      const bg = node.querySelector('.leaflet-tile-pane');
-      const shadow = node.querySelector('.leaflet-shadow-pane');
-      const container = node.querySelector('.leaflet-container');
-      if (bg) backgroundElements.push(bg as HTMLElement);
-      if (shadow) backgroundElements.push(shadow as HTMLElement);
-      if (container) backgroundElements.push(container as HTMLElement);
-    } else {
-      // BoardView 背景
-      const gridBg = Array.from(node.querySelectorAll('div')).find(el => 
-        el.style.backgroundImage && el.style.backgroundImage.includes('radial-gradient')
-      );
-      if (gridBg) backgroundElements.push(gridBg as HTMLElement);
-      
-      const containerBg = node.querySelector('.bg-gray-50');
-      if (containerBg) backgroundElements.push(containerBg as HTMLElement);
-    }
-    // 根节点也可能是背景来源
-    backgroundElements.push(node);
-
-    // 处理背景
     if (exportAsPng) {
-      backgroundElements.forEach(el => {
-        originalStyles.set(el, { 
-          display: el.style.display, 
-          background: el.style.background, 
-          backgroundColor: el.style.backgroundColor 
-        });
-        
-        // 如果是纯背景层则隐藏，如果是容器则透明
-        if (el.classList.contains('leaflet-tile-pane') || (el.style.backgroundImage && el.style.backgroundImage.includes('radial-gradient'))) {
-          el.style.display = 'none';
-        } else {
-          el.style.setProperty('background', 'none', 'important');
-          el.style.setProperty('background-color', 'transparent', 'important');
-        }
-      });
-    }
-
-    // 处理边界 (Border/Frames)
-    if (options.includeBorder === false) {
-      if (isMapView) {
-        const border = node.querySelector('.leaflet-overlay-pane');
-        if (border) {
-          const el = border as HTMLElement;
-          if (!originalStyles.has(el)) originalStyles.set(el, { display: el.style.display, background: el.style.background, backgroundColor: el.style.backgroundColor });
-          el.style.display = 'none';
-        }
-      } else {
-        const frames = node.querySelectorAll('div[style*="z-index: 10"], div[style*="z-index:10"]');
-        frames.forEach(f => {
-          const el = f as HTMLElement;
-          if (el.style.position === 'absolute') {
-            if (!originalStyles.has(el)) originalStyles.set(el, { display: el.style.display, background: el.style.background, backgroundColor: el.style.backgroundColor });
-            el.style.display = 'none';
-          }
-        });
-        const connections = node.querySelector('svg');
-        if (connections) {
-          const el = connections as unknown as HTMLElement;
-          if (!originalStyles.has(el)) originalStyles.set(el, { display: el.style.display, background: el.style.background, backgroundColor: el.style.backgroundColor });
-          el.style.display = 'none';
-        }
+      setTransparentBackground(node);
+      if (view === 'map') {
+        setTransparentBackground(node.querySelector<HTMLElement>('.leaflet-container'));
+      } else if (view === 'graph') {
+        setTransparentBackground(node.querySelector<HTMLElement>('.workspace-canvas--graph'));
       }
     }
 
-    // 处理标记 (Pins/Notes)
-    if (options.includePins === false) {
-      if (isMapView) {
-        const pins = node.querySelector('.leaflet-marker-pane');
-        if (pins) {
-          const el = pins as HTMLElement;
-          if (!originalStyles.has(el)) originalStyles.set(el, { display: el.style.display, background: el.style.background, backgroundColor: el.style.backgroundColor });
-          el.style.display = 'none';
-        }
-        const labels = node.querySelectorAll('.custom-text-label');
-        labels.forEach(l => {
-          const el = l as HTMLElement;
-          if (!originalStyles.has(el)) originalStyles.set(el, { display: el.style.display, background: el.style.background, backgroundColor: el.style.backgroundColor });
-          el.style.display = 'none';
-        });
-      } else {
-        const notes = node.querySelectorAll('[data-is-note="true"]');
-        notes.forEach(n => {
-          const el = n as HTMLElement;
-          if (!originalStyles.has(el)) originalStyles.set(el, { display: el.style.display, background: el.style.background, backgroundColor: el.style.backgroundColor });
-          el.style.display = 'none';
-        });
-      }
-    }
+    handleCorsImages(node);
+    await checkImagesLoaded(node);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-    // 等待渲染
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    handleCorsImages(node as HTMLElement);
-    await checkImagesLoaded(node as HTMLElement);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    // 执行导出
-    const htmlToImage = await import('html-to-image');
-    const toImage = exportAsPng ? htmlToImage.toPng : htmlToImage.toJpeg;
-    
-    const dataUrl = await toImage(node, {
+    const filter = (candidate: HTMLElement) => {
+      if (!(candidate instanceof Element)) return true;
+      if (candidate.closest('[data-mapp-export-keep]')) return true;
+      if (candidate.closest('[data-mapp-export-ui]')) return false;
+      if (candidate.matches('button, input, select, textarea')) return false;
+      if (candidate.classList.contains('fixed')) return false;
+
+      if (view === 'map') {
+        if (candidate.closest('.leaflet-control-zoom')) return false;
+        if (
+          options.includeBackground === false &&
+          candidate.closest('.leaflet-tile-pane, .leaflet-shadow-pane')
+        ) {
+          return false;
+        }
+        if (options.includeBorder === false && candidate.closest('.leaflet-overlay-pane')) {
+          return false;
+        }
+        if (
+          options.includePins === false &&
+          candidate.closest('.leaflet-marker-pane, .custom-text-label')
+        ) {
+          return false;
+        }
+      }
+
+      if (view === 'board') {
+        if (
+          options.includeBackground === false &&
+          candidate instanceof HTMLElement &&
+          candidate.style.backgroundImage.includes('radial-gradient')
+        ) {
+          return false;
+        }
+        if (options.includeBorder === false && candidate.closest('[data-board-export-frame]')) {
+          return false;
+        }
+        if (options.includePins === false && candidate.closest('[data-is-note="true"]')) {
+          return false;
+        }
+      }
+
+      return true;
+    };
+
+    const computedBackground = window.getComputedStyle(node).backgroundColor;
+    const opaqueFallback =
+      computedBackground && computedBackground !== 'rgba(0, 0, 0, 0)'
+        ? computedBackground
+        : '#f9fafb';
+    const render = exportAsPng ? toPng : toJpeg;
+    const dataUrl = await render(node, {
       quality: 0.95,
-      pixelRatio: pixelRatio,
-      backgroundColor: exportAsPng ? 'transparent' : '#f9fafb',
-      width: viewportWidth,
-      height: viewportHeight,
+      pixelRatio: Math.min(4, Math.max(1, pixelRatio)),
+      backgroundColor: exportAsPng ? 'transparent' : opaqueFallback,
+      width: exportWidth,
+      height: exportHeight,
       skipFonts: true,
       includeQueryParams: true,
+      imagePlaceholder:
+        'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=',
+      filter
     });
 
-    // 直接下载
     const link = document.createElement('a');
     link.download = `${fileName}.${exportAsPng ? 'png' : 'jpg'}`;
     link.href = dataUrl;
     link.click();
-
   } catch (error) {
     console.error('Export failed:', error);
-    alert('导出失败，请重试');
+    window.alert('导出失败，请重试');
   } finally {
-    // 恢复所有状态
-    originalStyles.forEach((style, el) => {
-      el.style.display = style.display;
-      el.style.background = style.background;
-      el.style.backgroundColor = style.backgroundColor;
-    });
-
-    uiElements.forEach((el, index) => {
-      (el as HTMLElement).style.display = originalUIDisplays[index];
+    originalBackgrounds.forEach((style, element) => {
+      restoreInlineProperty(
+        element,
+        'background',
+        style.background,
+        style.backgroundPriority
+      );
+      restoreInlineProperty(
+        element,
+        'background-color',
+        style.backgroundColor,
+        style.backgroundColorPriority
+      );
     });
   }
 };

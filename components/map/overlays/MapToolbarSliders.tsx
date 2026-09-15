@@ -62,6 +62,7 @@ export function MapToolbarSliders({
           width={90}
           formatValue={(val) => `${val.toFixed(1)}x`}
           mapInstance={mapInstance}
+          aria-label="Pin Size"
         />
       </ChromeLabeledSlider>
 
@@ -76,6 +77,7 @@ export function MapToolbarSliders({
           width={90}
           formatValue={(val) => `${val.toFixed(1)}x`}
           mapInstance={mapInstance}
+          aria-label="Label Size"
         />
       </ChromeLabeledSlider>
 
@@ -90,6 +92,7 @@ export function MapToolbarSliders({
           width={90}
           formatValue={(val) => `${val}px`}
           mapInstance={mapInstance}
+          aria-label="Cluster Threshold"
         />
       </ChromeLabeledSlider>
     </div>

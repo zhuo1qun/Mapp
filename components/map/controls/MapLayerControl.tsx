@@ -1,17 +1,18 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { Edit3, Save } from 'lucide-react';
 import type { Frame } from '../../../types';
 import type { GraphLayerGroupStandard } from '../../../utils/graph/graphRuntimeCore';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { LayerToolbarIcon } from '../../ui/LayerToolbarIcon';
-import { ResponsiveWindowPresence } from '../../ui/ResponsiveWindowPresence';
+import { ChromeWindow } from '../../ui/ChromeWindow';
 import { useChromeMenuTop } from '../../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 
 interface MapLayerControlProps {
   showPanel: boolean;
   onTogglePanel: () => void;
+  /** 遮罩关闭只关不切，避免与文档捕获阶段的 outside-close 叠成 toggle 再打开。 */
+  onClosePanel?: () => void;
   themeColor: string;
   chromeSurfaceStyle?: React.CSSProperties;
   /** 展开后的文字面板可与图标按钮采用不同材质，保证可读性。 */
@@ -34,21 +35,18 @@ interface MapLayerControlProps {
   dropdownAlign?: 'start' | 'end';
   /** 工具栏按钮图标：与图层面板当前分组方式一致 */
   layerGroupStandard?: GraphLayerGroupStandard;
+  hostedWindow?: boolean;
 }
 
 export const MapLayerControl: React.FC<MapLayerControlProps> = ({
   showPanel,
   onTogglePanel,
+  onClosePanel,
   themeColor,
   chromeSurfaceStyle,
   menuChromeSurfaceStyle,
   menuChromeAppearance = 'light',
   chromeHoverBackground,
-  frames,
-  frameLayerVisibility,
-  setFrameLayerVisibility,
-  showAllFrames,
-  setShowAllFrames,
   activeFrame = null,
   editingFrameDescription = null,
   setEditingFrameDescription = () => {},
@@ -56,99 +54,22 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
   frameLayerRef,
   unifiedNotesLayerSlot,
   dropdownAlign = 'end',
-  layerGroupStandard = 'tag'
+  layerGroupStandard = 'tag',
+  hostedWindow = false
 }) => {
   const ch = chromeSurfaceStyle;
   const menuCh = menuChromeSurfaceStyle ?? ch;
-  const menuTop = useChromeMenuTop(showPanel, frameLayerRef, 8);
-  const [lastMenuTop, setLastMenuTop] = React.useState<number | null>(null);
-  React.useEffect(() => {
-    if (menuTop != null) setLastMenuTop(menuTop);
-  }, [menuTop]);
-  const panelTop = menuTop ?? lastMenuTop;
-  const edgeCls =
-    dropdownAlign === 'start' ? 'ui-chrome-menu-page-left' : 'ui-chrome-menu-page-right';
-
-  const panel = panelTop != null ? (
-      <ResponsiveWindowPresence
-        open={showPanel}
-        onClose={onTogglePanel}
-        backdropLabel="关闭筛选"
-      >
-        {(phase) => (
-          <>
-        <div
-          data-map-layer-chrome-panel
-          className={`map-layer-chrome-panel ui-compact-bottom-sheet map-chrome-content-${menuChromeAppearance} fixed z-[var(--z-map-anchored-panel)] ${edgeCls} flex gap-2 items-start pointer-events-none chrome-responsive-anchored-${phase}`}
-          style={{ top: panelTop }}
-        >
-        {unifiedNotesLayerSlot ? (
-          <div
-            className="pointer-events-auto shrink-0"
-            onPointerDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            {unifiedNotesLayerSlot}
-          </div>
-        ) : null}
-        {activeFrame && (
-          <div
-            className={`w-72 sm:w-80 rounded-xl shadow-xl border border-gray-100 flex flex-col pointer-events-auto overflow-hidden ${menuCh ? '' : 'bg-white'}`}
-            style={{ maxHeight: '60vh', ...menuCh }}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <div className="p-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
-              <div className="flex items-center gap-2 overflow-hidden">
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeFrame.color }} />
-                <h3 className="font-bold text-gray-800 truncate text-xs">{activeFrame.title}</h3>
-              </div>
-              {editingFrameDescription === null ? (
-                <button
-                  onClick={() => setEditingFrameDescription(activeFrame.description || '')}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-500"
-                  title="Edit Description"
-                >
-                  <Edit3 size={12} />
-                </button>
-              ) : (
-                <button
-                  onClick={onSaveFrameDescription}
-                  className="p-1 hover:bg-green-100 text-green-600 rounded transition-colors"
-                  title="Save Description"
-                >
-                  <Save size={12} />
-                </button>
-              )}
-            </div>
-
-            <div
-              className={`flex-1 overflow-y-auto p-3 custom-scrollbar ${menuCh ? '' : 'bg-white'}`}
-              style={menuCh ? { backgroundColor: 'transparent' } : undefined}
-            >
-              {editingFrameDescription !== null ? (
-                <textarea
-                  autoFocus
-                  value={editingFrameDescription}
-                  onChange={(e) => setEditingFrameDescription(e.target.value)}
-                  className="w-full h-full min-h-[100px] bg-transparent border-none focus:ring-0 p-0 text-xs text-gray-800 resize-none"
-                />
-              ) : (
-                <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
-                  {activeFrame.description || (
-                    <span className="text-gray-400 italic">No description added yet. Click edit icon.</span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        </div>
-          </>
-        )}
-      </ResponsiveWindowPresence>
-    ) : null;
+  const menuTop = useChromeMenuTop(showPanel && !hostedWindow, frameLayerRef, 8);
+  const layerBody = (
+    <MapLayerChromeBody
+      unifiedNotesLayerSlot={unifiedNotesLayerSlot}
+      activeFrame={activeFrame}
+      editingFrameDescription={editingFrameDescription}
+      setEditingFrameDescription={setEditingFrameDescription}
+      onSaveFrameDescription={onSaveFrameDescription}
+      menuCh={menuCh}
+    />
+  );
 
   return (
   <div className="relative" ref={frameLayerRef}>
@@ -165,7 +86,103 @@ export const MapLayerControl: React.FC<MapLayerControlProps> = ({
       <LayerToolbarIcon layerGroupStandard={layerGroupStandard} />
     </ChromeIconButton>
 
-    {panel ? createPortal(panel, document.body) : null}
+    {!hostedWindow ? (
+    <ChromeWindow
+      surface="layer"
+      open={showPanel}
+      onClose={onClosePanel ?? onTogglePanel}
+      backdropLabel="关闭筛选"
+      top={menuTop}
+      align={dropdownAlign}
+      appearance={menuChromeAppearance}
+      dismissIgnoreRefs={[frameLayerRef]}
+    >
+      {layerBody}
+    </ChromeWindow>
+    ) : null}
   </div>
   );
 };
+
+export function MapLayerChromeBody({
+  unifiedNotesLayerSlot,
+  activeFrame,
+  editingFrameDescription,
+  setEditingFrameDescription,
+  onSaveFrameDescription,
+  menuCh
+}: {
+  unifiedNotesLayerSlot?: React.ReactNode;
+  activeFrame?: Frame | null;
+  editingFrameDescription?: string | null;
+  setEditingFrameDescription?: (v: string | null) => void;
+  onSaveFrameDescription?: () => void;
+  menuCh?: React.CSSProperties;
+}) {
+  return (
+    <>
+      {unifiedNotesLayerSlot ? (
+        <div
+          className="pointer-events-auto shrink-0"
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          {unifiedNotesLayerSlot}
+        </div>
+      ) : null}
+      {activeFrame ? (
+        <div
+          className={`w-72 sm:w-80 rounded-xl shadow-xl border border-gray-100 flex flex-col pointer-events-auto overflow-hidden ${menuCh ? '' : 'bg-white'}`}
+          style={{ maxHeight: '60vh', ...menuCh }}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <div className="p-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeFrame.color }} />
+              <h3 className="font-bold text-gray-800 truncate text-xs">{activeFrame.title}</h3>
+            </div>
+            {editingFrameDescription === null ? (
+              <button
+                onClick={() => setEditingFrameDescription?.(activeFrame.description || '')}
+                className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-500"
+                title="Edit Description"
+              >
+                <Edit3 size={12} />
+              </button>
+            ) : (
+              <button
+                onClick={onSaveFrameDescription}
+                className="p-1 hover:bg-green-100 text-green-600 rounded transition-colors"
+                title="Save Description"
+              >
+                <Save size={12} />
+              </button>
+            )}
+          </div>
+
+          <div
+            className={`flex-1 overflow-y-auto p-3 custom-scrollbar ${menuCh ? '' : 'bg-white'}`}
+            style={menuCh ? { backgroundColor: 'transparent' } : undefined}
+          >
+            {editingFrameDescription !== null ? (
+              <textarea
+                autoFocus
+                value={editingFrameDescription}
+                onChange={(e) => setEditingFrameDescription?.(e.target.value)}
+                className="w-full h-full min-h-[100px] bg-transparent border-none focus:ring-0 p-0 text-xs text-gray-800 resize-none"
+              />
+            ) : (
+              <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+                {activeFrame.description || (
+                  <span className="text-gray-400 italic">No description added yet. Click edit icon.</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}

@@ -1,8 +1,12 @@
 export type AnchoredPanelAlign = 'start' | 'end' | 'center';
 
+/** flip：下方优先，不够则翻到上方。below/above：固定朝向，超出视口时压缩高度并钳制。 */
+export type AnchoredPanelVertical = 'flip' | 'below' | 'above';
+
 export type AnchoredPanelPlacement = {
   top: number;
   left: number;
+  maxHeight: number;
 };
 
 export type AnchoredPanelPlacementOptions = {
@@ -18,11 +22,18 @@ export type AnchoredPanelPlacementOptions = {
    * center：面板水平居中于锚点
    */
   align?: AnchoredPanelAlign;
+  vertical?: AnchoredPanelVertical;
+  /** 固定朝向时允许压缩到的最小高度，默认 160 */
+  minHeight?: number;
 };
 
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
 /**
- * NoteEditor 浮层统一规则：默认在锚点下方；下方不够则翻到上方；
- * 水平/垂直均钳制在视口内，避免超出界面。
+ * NoteEditor 浮层统一规则：水平钳制在视口内。
+ * 垂直默认下方优先、不够则翻转；也可锁定朝向，用压缩高度处理贴边。
  */
 export function computeAnchoredPanelPlacement(
   rect: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right' | 'width' | 'height'>,
@@ -33,22 +44,43 @@ export function computeAnchoredPanelPlacement(
     panelHeight,
     gap = 8,
     padding = 8,
-    align = 'start'
+    align = 'start',
+    vertical = 'flip',
+    minHeight = 160
   } = options;
 
   const vw = typeof window !== 'undefined' ? window.innerWidth : panelWidth + padding * 2;
   const vh = typeof window !== 'undefined' ? window.innerHeight : panelHeight + padding * 2;
+  const viewportMaxH = Math.max(0, vh - padding * 2);
 
   const effectiveWidth = Math.min(panelWidth, Math.max(0, vw - padding * 2));
-  const effectiveHeight = Math.min(panelHeight, Math.max(0, vh - padding * 2));
 
-  const spaceBelow = vh - rect.bottom;
-  const spaceAbove = rect.top;
-  const preferAbove =
-    spaceBelow < effectiveHeight + gap && spaceAbove >= spaceBelow;
+  let top: number;
+  let maxHeight: number;
 
-  let top = preferAbove ? rect.top - effectiveHeight - gap : rect.bottom + gap;
-  top = Math.max(padding, Math.min(top, vh - effectiveHeight - padding));
+  if (vertical === 'flip') {
+    const effectiveHeight = Math.min(panelHeight, viewportMaxH);
+    const spaceBelow = vh - rect.bottom;
+    const spaceAbove = rect.top;
+    const preferAbove = spaceBelow < effectiveHeight + gap && spaceAbove >= spaceBelow;
+    top = preferAbove ? rect.top - effectiveHeight - gap : rect.bottom + gap;
+    top = clamp(top, padding, vh - effectiveHeight - padding);
+    maxHeight = effectiveHeight;
+  } else {
+    const preferBelow = vertical === 'below';
+    const available = preferBelow
+      ? vh - padding - (rect.bottom + gap)
+      : rect.top - gap - padding;
+    maxHeight = Math.min(panelHeight, viewportMaxH);
+    if (available >= minHeight) {
+      maxHeight = Math.min(maxHeight, available);
+      top = preferBelow ? rect.bottom + gap : rect.top - maxHeight - gap;
+    } else {
+      maxHeight = Math.min(maxHeight, Math.max(minHeight, available > 0 ? available : viewportMaxH));
+      top = preferBelow ? rect.bottom + gap : rect.top - maxHeight - gap;
+    }
+    top = clamp(top, padding, vh - maxHeight - padding);
+  }
 
   let left =
     align === 'end'
@@ -56,7 +88,7 @@ export function computeAnchoredPanelPlacement(
       : align === 'center'
         ? rect.left + rect.width / 2 - effectiveWidth / 2
         : rect.left;
-  left = Math.max(padding, Math.min(left, vw - effectiveWidth - padding));
+  left = clamp(left, padding, vw - effectiveWidth - padding);
 
-  return { top, left };
+  return { top, left, maxHeight };
 }

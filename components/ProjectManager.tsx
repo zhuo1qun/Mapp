@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, Note, ProjectKind } from '../types';
-import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, Camera, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, GitBranch } from 'lucide-react';
-import { generateId, formatDate, exportToJpeg, exportToJpegCentered, compressImageFromBase64 } from '../utils';
+import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, GitBranch } from 'lucide-react';
+import { generateId, formatDate, compressImageFromBase64 } from '../utils';
 import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
 import { downloadMappVizJson } from '../utils/export/mappVizJson';
@@ -24,14 +24,15 @@ import { ThemeColorPicker } from './ThemeColorPicker';
 import { AppearanceSettingsBlock } from './AppearanceSettingsBlock';
 import {
   mapChromeSurfaceStyle,
-  mapChromeHoverBackground,
-  mapChromeModalBackdropStyle
+  mapChromeHoverBackground
 } from '../utils/map/mapChromeStyle';
+import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { MotionDiv } from './ui/MotionDiv';
 import { ChromeMenuItem } from './ui/ChromeMenuItem';
 import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
 import { ChromeMenuShell } from './ui/ChromeMenuShell';
-import { ChromePresence } from './ui/ChromeSheetPresence';
+import { ChromeWindow } from './ui/ChromeWindow';
+import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 
 /** 项目「更多」菜单 portal：高于侧栏与覆盖层，低于删除项目阻断层 10000 */
 const PM_PROJECT_MORE_MENU_Z = 9901;
@@ -89,166 +90,6 @@ function computeProjectMoreMenuFixedStyle(
   }
   return { ...base, top: button.bottom + gap, bottom: 'auto' };
 }
-
-// Export resolution dialog component
-const ExportResolutionDialog: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: (pixelRatio: number, options: { includeBackground: boolean; includeBorder: boolean; includePins: boolean }) => void;
-  currentDimensions: { width: number; height: number };
-  themeColor: string;
-  mapUiChromeOpacity?: number;
-  mapUiChromeBlurPx?: number;
-}> = ({ isOpen, onClose, onConfirm, currentDimensions, themeColor, mapUiChromeOpacity = 0.9, mapUiChromeBlurPx = 8 }) => {
-  const [selectedRatio, setSelectedRatio] = useState(2);
-  const [exportOptions, setExportOptions] = useState({
-    includeBackground: true,
-    includeBorder: true,
-    includePins: true
-  });
-  const [showOptions, setShowOptions] = useState(false);
-
-  if (!isOpen) return null;
-
-  const ratios = [
-    { label: '1x (标准)', value: 1 },
-    { label: '2x (清晰)', value: 2 },
-    { label: '3x (高清)', value: 3 },
-    { label: '4x (超清)', value: 4 }
-  ];
-
-  const finalWidth = Math.round(currentDimensions.width * selectedRatio);
-  const finalHeight = Math.round(currentDimensions.height * selectedRatio);
-
-  const toggleOption = (option: keyof typeof exportOptions) => {
-    setExportOptions(prev => ({
-      ...prev,
-      [option]: !prev[option]
-    }));
-  };
-
-  const selectedOptionsCount = Object.values(exportOptions).filter(Boolean).length;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[3000]" onClick={onClose}>
-      <ChromeDialogSurface
-        className="max-w-[320px] mx-4 p-5 animate-in zoom-in-95 duration-200"
-        style={mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="p-2 rounded-lg" style={{ backgroundColor: `${themeColor}15` }}>
-            <ImageIcon className="w-5 h-5" style={{ color: themeColor }} />
-          </div>
-          <h3 className="text-base font-bold text-gray-900">导出当前视图</h3>
-        </div>
-
-        <div className="space-y-4 mb-6">
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-0.5">
-              导出内容
-            </label>
-            <div className="relative">
-              <button
-                onClick={() => setShowOptions(!showOptions)}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none transition-all flex items-center justify-between hover:border-gray-300"
-              >
-                <span className="truncate">
-                  {selectedOptionsCount === 0 ? '未选择内容' : 
-                   selectedOptionsCount === 3 ? '全部内容' : 
-                   `已选择 ${selectedOptionsCount} 项`}
-                </span>
-                <div className={`transition-transform duration-200 ${showOptions ? 'rotate-180' : ''}`}>
-                  <MoreHorizontal size={14} className="rotate-90" />
-                </div>
-              </button>
-
-              {showOptions && (
-                <ChromeMenuShell
-                  className="absolute top-full left-0 right-0 mt-2 z-10 animate-in fade-in slide-in-from-top-2"
-                  style={mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx)}
-                >
-                  {[
-                    { id: 'includeBackground', label: '背景 (Background)' },
-                    { id: 'includeBorder', label: '边界 (Border)' },
-                    { id: 'includePins', label: '标记 (Pin)' }
-                  ].map((option) => (
-                    <ChromeMenuItem
-                      key={option.id}
-                      onClick={() => toggleOption(option.id as any)}
-                      className="flex items-center justify-between"
-                    >
-                      <span className={exportOptions[option.id as keyof typeof exportOptions] ? 'font-bold' : 'text-gray-500'}>
-                        {option.label}
-                      </span>
-                      {exportOptions[option.id as keyof typeof exportOptions] && (
-                        <Check size={14} style={{ color: themeColor }} />
-                      )}
-                    </ChromeMenuItem>
-                  ))}
-                </ChromeMenuShell>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-0.5">
-              分辨率倍数
-            </label>
-            <select
-              value={selectedRatio}
-              onChange={(e) => setSelectedRatio(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none transition-all cursor-pointer hover:border-gray-300"
-              style={{ focusRingColor: themeColor } as any}
-              onFocus={(e) => e.currentTarget.style.borderColor = themeColor}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#E5E7EB'}
-            >
-              {ratios.map((ratio) => (
-                <option key={ratio.value} value={ratio.value}>
-                  {ratio.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">预计尺寸</span>
-              <span className="text-[10px] px-1.5 py-0.5 bg-white border border-gray-200 rounded-md text-gray-500 font-mono">
-                {!exportOptions.includeBackground ? 'PNG' : 'JPG'}
-              </span>
-            </div>
-            <p className="font-mono text-sm text-gray-700 font-bold">
-              {finalWidth} × {finalHeight} <span className="text-[10px] font-normal text-gray-400 ml-1">px</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
-          >
-            取消
-          </button>
-          <button
-            onClick={() => {
-              onConfirm(selectedRatio, exportOptions);
-              onClose();
-            }}
-            disabled={selectedOptionsCount === 0}
-            className="flex-1 px-4 py-2 text-theme-chrome-fg rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: themeColor }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${themeColor}E6`}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
-          >
-            开始导出
-          </button>
-        </div>
-      </ChromeDialogSurface>
-    </div>
-  );
-};
 
 /** 更多菜单：mapChrome 实色 + 模糊由 surfaceStyle 提供；几何由 fixedPlacementStyle（portal fixed） */
 const MenuDropdown: React.FC<{
@@ -402,6 +243,8 @@ interface ProjectManagerProps {
   onMapUiChromeOpacityChange?: (opacity: number) => void;
   mapUiChromeBlurPx?: number;
   onMapUiChromeBlurPxChange?: (blurPx: number) => void;
+  uiDarkMode?: boolean;
+  onUiDarkModeChange?: (dark: boolean) => void;
   currentMapStyle?: string;
   onMapStyleChange?: (styleId: string) => void;
   /** 加载项目：面板顶部分条，避免全屏遮罩 */
@@ -456,6 +299,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   onMapUiChromeOpacityChange,
   mapUiChromeBlurPx = 8,
   onMapUiChromeBlurPxChange,
+  uiDarkMode = false,
+  onUiDarkModeChange,
   currentMapStyle = 'carto-light-nolabels',
   onMapStyleChange,
   showProjectLoadBar = false,
@@ -521,9 +366,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   };
   
   const themeColorDark = getDarkerColor(themeColor);
-  const mapChromeSurface = mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
-  const mapChromeModalBackdrop = mapChromeModalBackdropStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
-  const mapChromeHoverBg = mapChromeHoverBackground(mapUiChromeOpacity);
+  const chromeAppearance = useChromeAppearance();
+  const mapChromeSurface = mapChromeSurfaceStyle(
+    mapUiChromeOpacity,
+    mapUiChromeBlurPx,
+    chromeAppearance
+  );
+  const mapChromeHoverBg = mapChromeHoverBackground(mapUiChromeOpacity, chromeAppearance);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectKind, setNewProjectKind] = useState<ProjectKind>('mapping');
@@ -540,8 +389,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [showThemeColorPicker, setShowThemeColorPicker] = useState(false);
   const [showHomeSettings, setShowHomeSettings] = useState(false);
   const [showAppearanceSettingsBlockInSettings, setShowAppearanceSettingsBlockInSettings] = useState(true);
-  const [showExportDialog, setShowExportDialog] = useState(false);
-  const [pendingExport, setPendingExport] = useState<{ elementId: string; fileName: string } | null>(null);
   const [newProjectHover, setNewProjectHover] = useState(false);
   const [hoveredProjectRowId, setHoveredProjectRowId] = useState<string | null>(null);
   const [projectMoreAnchor, setProjectMoreAnchor] = useState<{
@@ -569,44 +416,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     // If in sidebar mode, close sidebar after creation
     if (isSidebar && onCloseSidebar) {
       onCloseSidebar();
-    }
-  };
-
-  const handleExportCurrentView = () => {
-    if (!activeProject) {
-      alert("Please open a project first");
-      return;
-    }
-
-    // Table view exports CSV, other views export images
-    if (viewMode === 'table') {
-      if (onExportCSV) {
-        onExportCSV(activeProject);
-      }
-    } else {
-      // Show export dialog for image export
-      const elementId =
-        viewMode === 'map'
-          ? 'map-view-container'
-          : viewMode === 'graph'
-            ? 'graph-view-container'
-            : 'board-view-container';
-      const fileName = `${activeProject.name}-${viewMode}`;
-      setPendingExport({ elementId, fileName });
-      setShowExportDialog(true);
-    }
-  };
-
-  const handleExportConfirm = async (pixelRatio: number, options: { includeBackground: boolean; includeBorder: boolean; includePins: boolean }) => {
-    if (!pendingExport) return;
-
-    try {
-      await exportToJpegCentered(pendingExport.elementId, pendingExport.fileName, pixelRatio, options);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('导出失败，请重试');
-    } finally {
-      setPendingExport(null);
     }
   };
 
@@ -1492,46 +1301,36 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               ) : null}
             </div>
           ) : null}
-          {typeof document !== 'undefined' &&
-            createPortal(
-              <ChromePresence open={showHomeSettings} kind="dialog">
-                {(phase) => (
-                  <>
-                <div
-                  className={`fixed inset-0 z-[5000] min-h-[100dvh] min-h-screen w-full chrome-dialog-backdrop-${phase}`}
-                  style={mapChromeModalBackdrop}
-                  onClick={() => setShowHomeSettings(false)}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  aria-hidden
-                />
-                <div
-                  data-allow-context-menu
-                  className={`fixed top-1/2 left-3 right-3 z-[5001] mx-auto w-full max-w-md sm:max-w-lg sm:left-4 sm:right-4 -translate-y-1/2 transform chrome-dialog-${phase}`}
-                >
-                  <div
-                    className="rounded-xl shadow-2xl flex flex-col max-h-[min(85dvh,85vh)] overflow-hidden border border-gray-100/80"
-                    style={mapChromeSurface}
-                  >
-                    <div className="flex items-center justify-between px-4 py-3 shrink-0">
-                      <div className="flex items-center gap-2">
-                        <Palette size={20} className="text-gray-700" />
-                        <h2 className="text-xl font-semibold text-gray-900">设置</h2>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowHomeSettings(false)}
-                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <X size={20} className="text-gray-600" />
-                      </button>
-                    </div>
-                    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-4 theme-surface-scrollbar">
+          <ChromeWindow
+            open={showHomeSettings}
+            // 主题色选择器是设置窗口之上的子对话框；父窗口不应抢先处理 Escape。
+            onClose={() => {
+              if (!showThemeColorPicker) setShowHomeSettings(false);
+            }}
+            backdropLabel="关闭设置"
+            placement="center"
+            compactBehavior="none"
+            presenceKind="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="home-settings-title"
+            className="flex w-[calc(100vw-1.5rem)] max-h-[min(85dvh,85vh)] min-w-0 max-w-md flex-col sm:w-[min(32rem,calc(100vw-2rem))] sm:max-w-lg"
+            style={mapChromeSurface}
+          >
+                    <ChromeWindowHeader
+                      title="设置"
+                      titleId="home-settings-title"
+                      onClose={() => setShowHomeSettings(false)}
+                    />
+                    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pt-2 pb-3 theme-surface-scrollbar">
                       {showAppearanceSettingsBlockInSettings ? (
                         <AppearanceSettingsBlock
                           themeColor={themeColor}
                           onRequestThemeEdit={() => {
                             setShowThemeColorPicker(true);
                           }}
+                          uiDarkMode={uiDarkMode}
+                          onUiDarkModeChange={onUiDarkModeChange ?? (() => {})}
                           mapUiChromeOpacity={mapUiChromeOpacity}
                           onMapUiChromeOpacityChange={onMapUiChromeOpacityChange}
                           mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -1547,13 +1346,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         />
                       ) : null}
                     </div>
-                  </div>
-                </div>
-                  </>
-                )}
-              </ChromePresence>,
-              document.body
-            )}
+          </ChromeWindow>
         </>
       )}
 
@@ -1574,7 +1367,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
       {isSidebar && !expandToHomeLayout && !transitionListOnly && (
         <>
-          <div className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex items-center gap-2">
+          <div className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex flex-nowrap items-center gap-2">
             <button
               onClick={() => {
                 if (onBackToHome) onBackToHome();
@@ -1605,7 +1398,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 </button>
               )}
           </div>
-          <div className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-4 z-[2000] flex items-center gap-2">
+          <div className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-4 z-[2000] flex flex-nowrap items-center gap-2">
             {activeProject && syncStatus === 'idle' && getLastSyncTime() && (
               <div
                 className="project-sidebar-action project-sidebar-sync-status flex items-center justify-center w-10 h-10 rounded-xl text-theme-chrome-fg transition-colors cursor-help"
@@ -1616,18 +1409,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               >
                 <Cloud size={20} />
               </div>
-            )}
-            {activeProject && (
-              <button 
-                onClick={handleExportCurrentView}
-                className="project-sidebar-action w-10 h-10 p-2 rounded-xl text-theme-chrome-fg transition-colors flex items-center justify-center"
-                style={{ backgroundColor: themeColor }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
-                title="Export Current View"
-              >
-                <Camera size={24} />
-              </button>
             )}
             <button 
               onClick={onCloseSidebar} 
@@ -1715,10 +1496,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               <div className="mt-8 w-full max-w-md px-4">
                 {exampleDevMaintenanceMode ? (
                   <div
-                    className="w-full h-16 rounded-xl border-2 border-dashed shadow-lg transition-colors cursor-pointer flex items-center justify-center"
+                    className={`map-chrome-content-${chromeAppearance} flex h-16 w-full cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-gray-100/80 shadow-lg transition-colors`}
                     style={{
                       ...mapChromeSurface,
-                      borderColor: devImportDragOver ? themeColor : 'rgba(255,255,255,0.35)'
+                      ...(devImportDragOver ? { borderColor: themeColor } : {})
                     }}
                     onClick={() => devImportInputRef.current?.click()}
                     onDragEnter={(e) => {
@@ -1744,7 +1525,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     }}
                     title="拖拽 JSON 到此处导入为项目"
                   >
-                    <Upload size={22} strokeWidth={2} className="text-black" aria-hidden />
+                    <Upload size={22} strokeWidth={2} className="text-gray-800" aria-hidden />
                     <input
                       ref={devImportInputRef}
                       type="file"
@@ -1761,7 +1542,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsCreating(true)}
-                    className="w-full h-16 rounded-xl border border-white/50 shadow-lg transition-colors flex items-center justify-center"
+                    className={`map-chrome-content-${chromeAppearance} flex h-16 w-full items-center justify-center rounded-xl border border-gray-100/80 shadow-lg transition-colors`}
                     style={{
                       ...mapChromeSurface,
                       ...(newProjectHover ? { backgroundColor: mapChromeHoverBg } : {})
@@ -1769,7 +1550,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     onMouseEnter={() => setNewProjectHover(true)}
                     onMouseLeave={() => setNewProjectHover(false)}
                   >
-                    <Plus size={22} strokeWidth={2} className="text-black" aria-hidden />
+                    <Plus size={22} strokeWidth={2} className="text-gray-800" aria-hidden />
                   </button>
                 )}
               </div>
@@ -1852,8 +1633,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               data-pm-project-row={p.id}
               className={`group relative flex items-center justify-between rounded-2xl border border-solid p-4 transition-[color,box-shadow] duration-150 ease-out motion-reduce:transition-none ${
                 onGlassPanel
-                  ? 'border-white/50 text-black shadow-lg'
-                  : 'border-transparent text-theme-chrome-fg shadow-none'
+                  ? `map-chrome-content-${chromeAppearance} border-white/50 text-black shadow-lg`
+                  : 'project-list-row--theme chrome-surface-idle border-transparent shadow-none'
               }`}
               animate={{ opacity: rowOpacity }}
               transition={{
@@ -1912,7 +1693,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         }
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="flex-1 px-2 py-1 bg-white border-2 rounded-lg outline-none text-lg font-bold"
+                      className="flex-1 px-2 py-1 bg-white border-2 rounded-lg outline-none text-lg font-bold text-gray-900"
                       style={{ borderColor: themeColor }}
                     />
                     <button
@@ -1937,15 +1718,16 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 ) : (
                   <>
                     <div className="flex items-center gap-2">
-                      <div
-                        className="font-bold text-lg leading-tight"
-                        style={onGlassPanel ? { color: '#000' } : undefined}
-                      >
+                      <div className={`text-lg font-bold leading-tight ${onGlassPanel ? 'text-gray-900' : ''}`}>
                         {p.name}
                       </div>
                       {isProjectKind(p.projectKind) ? (
                         <span
-                          className="shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-bold text-gray-700 border border-gray-200/80 bg-white/50"
+                          className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold ${
+                            onGlassPanel
+                              ? 'chrome-raised border-gray-200/80 text-gray-700'
+                              : 'project-list-kind-badge border-transparent'
+                          }`}
                           title={p.projectKind === 'graph' ? 'Graph 项目' : 'Mapping 项目'}
                         >
                           {projectKindLabel(p.projectKind)}
@@ -1953,13 +1735,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       ) : null}
                       {builtinExampleIds.has(p.id) ? (
                         <span
-                          className="shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-bold text-gray-800 border border-white/40"
-                          style={{
-                            ...mapChromeSurface,
-                            backgroundColor: 'rgba(255,255,255,0.35)',
-                            backdropFilter: mapChromeSurface.backdropFilter as any,
-                            WebkitBackdropFilter: (mapChromeSurface as any).WebkitBackdropFilter
-                          }}
+                          className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold ${
+                            onGlassPanel
+                              ? 'chrome-raised border-gray-200/80 text-gray-800'
+                              : 'project-list-kind-badge border-transparent'
+                          }`}
                           title="示例项目"
                         >
                           示例
@@ -1968,7 +1748,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     </div>
                     <div
                       className={`text-xs flex items-center gap-1 mt-1 ${
-                        onGlassPanel ? 'text-black/40' : 'text-theme-chrome-fg opacity-40'
+                        onGlassPanel ? 'text-black/40' : 'opacity-40'
                       }`}
                     >
                       {p.projectKind === 'graph' ? (
@@ -1992,8 +1772,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   }}
                   className={`p-2 rounded-full transition-colors ${
                     onGlassPanel
-                      ? 'text-gray-900/90 hover:bg-black/[0.06]'
-                      : 'text-theme-chrome-fg opacity-80 hover:opacity-100 hover:bg-white/10'
+                      ? 'project-list-more-button--glass'
+                      : 'opacity-80 hover:opacity-100 hover:bg-white/10'
                   }`}
                 >
                   <MoreHorizontal size={20} />
@@ -2077,6 +1857,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       {isCreating && (
         <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4">
           <ChromeDialogSurface
+            appearance={chromeAppearance}
             className="max-w-md p-6 animate-in zoom-in-95"
             style={mapChromeSurface}
           >
@@ -2204,6 +1985,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       {showImportDialog && (
         <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4">
           <ChromeDialogSurface
+            appearance={chromeAppearance}
             className="max-w-md p-6 animate-in zoom-in-95"
             style={mapChromeSurface}
           >
@@ -2283,23 +2065,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         />
       )}
 
-      {/* Export Resolution Dialog */}
-      <ExportResolutionDialog
-        isOpen={showExportDialog}
-        onClose={() => {
-          setShowExportDialog(false);
-          setPendingExport(null);
-        }}
-        onConfirm={handleExportConfirm}
-        currentDimensions={{
-          width: window.innerWidth,
-          height: window.innerHeight
-        }}
-        themeColor={themeColor}
-        mapUiChromeOpacity={mapUiChromeOpacity}
-        mapUiChromeBlurPx={mapUiChromeBlurPx}
-        />
-
       {openMenuId &&
         typeof document !== 'undefined' &&
         (() => {
@@ -2312,7 +2077,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               {homeLikeList ? (
                 <div
                   data-pm-more-menu
-                  className="map-chrome-content-light fixed bottom-6 left-1/2 max-h-[min(70dvh,70vh)] w-[calc(100%-2rem)] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-3xl shadow-2xl border border-gray-100/80 py-2 animate-in slide-in-from-bottom-4 theme-surface-scrollbar"
+                  className={`map-chrome-content-${chromeAppearance} fixed bottom-6 left-1/2 max-h-[min(70dvh,70vh)] w-[calc(100%-2rem)] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-3xl shadow-2xl border border-gray-100/80 py-2 animate-in slide-in-from-bottom-4 theme-surface-scrollbar`}
                   style={{
                     ...mapChromeSurface,
                     maxWidth: PROJECT_SIDEBAR_DRAWER_WIDTH_PX,

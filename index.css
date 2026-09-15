@@ -94,12 +94,35 @@
     width var(--workspace-ui-inset-transition);
 }
 
+/* 三类工作区共用画布底材；深色不采用近黑，保留卡片和网格之外的空间层次。 */
+.workspace-canvas {
+  background-color: rgb(249 250 251);
+}
+
+.workspace-canvas--dark {
+  background-color: rgb(39 39 42);
+}
+
+.workspace-canvas--graph {
+  background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.workspace-canvas--graph.workspace-canvas--dark {
+  background-image: radial-gradient(circle, rgb(255 255 255 / 0.11) 1px, transparent 1px);
+}
+
 /* Table 宽屏模式采用可平移的节点画布。点阵只提供空间参照，不参与窗口材质。 */
 .table-node-canvas {
   background-color: rgb(249 250 251);
   background-image: radial-gradient(circle, rgb(148 163 184 / 0.28) 1px, transparent 1.25px);
   background-position: 0 0;
   background-size: 20px 20px;
+}
+
+.table-node-canvas.workspace-canvas--dark {
+  background-color: rgb(39 39 42);
+  background-image: radial-gradient(circle, rgb(255 255 255 / 0.12) 1px, transparent 1.25px);
 }
 
 /**
@@ -132,6 +155,14 @@
     height: 100%;
     max-height: none;
     min-height: 0 !important;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .chrome-note-slot.chrome-note-slot--editor {
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     border: 0 !important;
@@ -420,35 +451,102 @@ body {
   -webkit-backdrop-filter: blur(var(--map-ui-chrome-blur-px, 8px));
 }
 
-/* 深色地图上的 regular 玻璃：编辑器和详情卡需要一套稳定、可读的文字与 icon 墨色。
- * 仅限明确标记为 dark 的面板；普通 Board / Table / Graph 的浅色面不受影响。 */
-.map-chrome-content-dark {
-  color: rgb(243 244 246);
-  border-color: rgb(255 255 255 / 0.16) !important;
+/* ChromeWindow 的中性文字不再使用固定灰阶，而是作为玻璃材质的一部分：
+ * 浅色面由黑色不同透明度构成，深色面则对应白色不同透明度。
+ * 这样透明度/模糊变化时，文字、描边和 hover 仍属于同一块材质。 */
+.map-chrome-content-light {
+  --chrome-fg-strong: rgb(0 0 0 / 0.9);
+  --chrome-fg: rgb(0 0 0 / 0.7);
+  --chrome-fg-muted: rgb(0 0 0 / 0.52);
+  --chrome-fg-faint: rgb(0 0 0 / 0.36);
+  --chrome-border: rgb(0 0 0 / 0.12);
+  color: var(--chrome-fg);
+  border-color: var(--chrome-border) !important;
 }
 
+.map-chrome-content-dark {
+  --chrome-fg-strong: rgb(255 255 255 / 0.92);
+  --chrome-fg: rgb(255 255 255 / 0.72);
+  --chrome-fg-muted: rgb(255 255 255 / 0.56);
+  --chrome-fg-faint: rgb(255 255 255 / 0.4);
+  --chrome-border: rgb(255 255 255 / 0.16);
+  color: var(--chrome-fg);
+  border-color: var(--chrome-border) !important;
+}
+
+/* 有背景的玻璃容器使用 --chrome-border；纯文字项目行则显式处于无表面状态。
+ * 后者在 hover / 选中后移除该类，随即恢复统一的玻璃描边。 */
+.chrome-surface-idle {
+  border-color: transparent !important;
+}
+
+/* 项目列表常态直接铺在主题色页面上：卡片自身保持透明、无描边和阴影，
+ * 文字与图标统一读取主题色的对比前景，而不是被玻璃窗口的明暗模式覆盖。 */
+.project-list-row--theme {
+  color: var(--theme-chrome-fg, #ffffff);
+}
+
+.project-list-row--theme .project-list-kind-badge {
+  color: var(--theme-chrome-fg, #ffffff);
+  background-color: color-mix(in srgb, var(--theme-chrome-fg, #ffffff) 12%, transparent);
+}
+
+/* 项目卡片的更多按钮：卡片浮起后改用玻璃前景，不再沿用主页主题色的文字色。 */
+.map-chrome-content-light .project-list-more-button--glass,
+.map-chrome-content-dark .project-list-more-button--glass {
+  color: var(--chrome-fg-strong);
+}
+
+.map-chrome-content-light .project-list-more-button--glass:hover {
+  background-color: rgb(0 0 0 / 0.06);
+}
+
+.map-chrome-content-dark .project-list-more-button--glass:hover {
+  background-color: rgb(255 255 255 / 0.12);
+}
+
+.map-chrome-content-light .text-gray-900,
+.map-chrome-content-light .text-gray-800,
 .map-chrome-content-dark .text-gray-900,
-.map-chrome-content-dark .text-gray-800,
+.map-chrome-content-dark .text-gray-800 {
+  color: var(--chrome-fg-strong) !important;
+}
+
+.map-chrome-content-light .text-gray-700,
+.map-chrome-content-light .text-gray-600,
 .map-chrome-content-dark .text-gray-700,
 .map-chrome-content-dark .text-gray-600 {
-  color: rgb(243 244 246) !important;
+  color: var(--chrome-fg) !important;
 }
 
+.map-chrome-content-light .text-gray-500,
 .map-chrome-content-dark .text-gray-500 {
-  color: rgb(209 213 219) !important;
+  color: var(--chrome-fg-muted) !important;
 }
 
+.map-chrome-content-light .text-gray-400,
+.map-chrome-content-light .text-gray-300,
 .map-chrome-content-dark .text-gray-400,
 .map-chrome-content-dark .text-gray-300 {
-  color: rgb(156 163 175) !important;
+  color: var(--chrome-fg-faint) !important;
+}
+
+/* 少量旧项目列表仍用 Tailwind 的 black 透明类；映射回同一语义层级。 */
+.map-chrome-content-light .text-black,
+.map-chrome-content-dark .text-black {
+  color: var(--chrome-fg-strong) !important;
+}
+.map-chrome-content-light .text-black\/40,
+.map-chrome-content-dark .text-black\/40 {
+  color: var(--chrome-fg-faint) !important;
 }
 
 /* Typography 的 prose 会为加粗文字单设 --tw-prose-bold；深色编辑器需同步，
  * 否则 strong/b 会回落到默认深色墨色。 */
 .map-chrome-content-dark .note-editor-tiptap-wrap .tiptap-editor {
-  --tw-prose-body: rgb(243 244 246);
-  --tw-prose-headings: rgb(243 244 246);
-  --tw-prose-bold: rgb(243 244 246);
+  --tw-prose-body: var(--chrome-fg);
+  --tw-prose-headings: var(--chrome-fg-strong);
+  --tw-prose-bold: var(--chrome-fg-strong);
 }
 
 .map-chrome-content-dark .note-editor-tiptap-wrap .tiptap-editor strong,
@@ -601,11 +699,86 @@ body {
   to { opacity: 0.58; transform: scale(0.07); }
 }
 
+.chrome-note-slot {
+  will-change: transform, opacity;
+  /* 原点是图钉相对窗口左上角的位置，预览卡与居中编辑器共用。 */
+  transform-origin:
+    calc(var(--note-editor-anchor-x) - var(--note-slot-left, 0px))
+    calc(var(--note-editor-anchor-y) - var(--note-slot-top, 0px));
+}
+.chrome-note-slot.chrome-note-slot-entering {
+  animation: chrome-note-slot-enter 360ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.chrome-note-slot.chrome-note-slot-exiting {
+  animation: chrome-note-slot-exit 280ms cubic-bezier(0.55, 0, 0.9, 0.35) both;
+  pointer-events: none;
+}
+@keyframes chrome-note-slot-enter {
+  from { opacity: 0.92; transform: scale(0.07); }
+  16% { opacity: 1; }
+  72% { opacity: 1; transform: scale(1.018); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes chrome-note-slot-exit {
+  from { opacity: 1; transform: scale(1); }
+  78% { opacity: 1; transform: scale(0.16); }
+  to { opacity: 0.82; transform: scale(0.07); }
+}
+.chrome-note-slot.chrome-window-morph {
+  transition:
+    top 360ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    left 360ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    right 360ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    width 360ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    height 360ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    max-width 360ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    max-height 360ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    border-radius 360ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.chrome-note-slot.chrome-note-slot-exiting.chrome-window-morph {
+  transition: none;
+}
+
 .chrome-responsive-sheet-entering { animation: chrome-sheet-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .chrome-responsive-sheet-exiting { animation: chrome-sheet-exit 220ms ease-in both; pointer-events: none; }
 
 .chrome-responsive-anchored-entering { animation: chrome-sheet-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .chrome-responsive-anchored-exiting { animation: chrome-sheet-exit 220ms ease-in both; pointer-events: none; }
+
+/* 居中窗口的锚点是自身中心。通用进场动画若只写 translateY，会覆盖
+ * `translate(-50%, -50%)`，导致 left/top=50% 实际变成“左上角在中心”。 */
+@keyframes chrome-centered-dialog-enter {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes chrome-centered-dialog-exit {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, calc(-50% + 6px)) scale(0.96); }
+}
+
+.chrome-window-center.chrome-responsive-anchored-entering {
+  animation: chrome-centered-dialog-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chrome-window-center.chrome-responsive-anchored-exiting {
+  animation: chrome-centered-dialog-exit 220ms ease-in both;
+  pointer-events: none;
+}
+
+/* 顶栏槽在 kind 切换时只过渡锚点与尺寸，不重播进出场。 */
+.chrome-window-morph {
+  transition:
+    top 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    right 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.chrome-window-morph.chrome-responsive-anchored-exiting {
+  transition: none;
+}
 
 @media (min-width: 640px) {
   .chrome-responsive-sheet-entering { animation: chrome-dialog-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
@@ -625,6 +798,8 @@ body {
   .chrome-dialog-exiting,
   .note-editor-panel--anchored.note-editor-panel--anchored-entering,
   .note-editor-panel--anchored.note-editor-panel--anchored-exiting,
+  .chrome-note-slot.chrome-note-slot-entering,
+  .chrome-note-slot.chrome-note-slot-exiting,
   .chrome-dialog-backdrop-entering,
   .chrome-dialog-backdrop-exiting,
   .chrome-responsive-sheet-entering,
@@ -655,9 +830,26 @@ body {
     bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem)) !important;
     left: 0.5rem !important;
     width: auto !important;
+    max-width: none !important;
     max-height: min(72dvh, calc(100dvh - 1rem)) !important;
+    overflow-x: hidden;
     border-radius: 1rem !important;
     z-index: var(--z-map-sheet) !important;
+  }
+
+  /* 需要完整操作空间的二级窗口：窄屏占满安全视口，宽屏仍由 ChromeWindow 居中。 */
+  .ui-compact-fullscreen {
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: none !important;
+    max-height: none !important;
+    border-width: 0 !important;
+    border-radius: 0 !important;
+    transform: none !important;
   }
 
   .map-layer-chrome-panel.ui-compact-bottom-sheet {
@@ -667,10 +859,43 @@ body {
     pointer-events: auto;
   }
 
+  .map-layer-chrome-panel.ui-compact-bottom-sheet > * {
+    width: 100%;
+    max-width: none;
+  }
+
   .map-layer-chrome-panel .map-layer-panel-body {
     width: 100% !important;
     max-width: none !important;
     max-height: min(58dvh, calc(100dvh - 7rem)) !important;
+  }
+
+  /* 图谱布局 / 表格子视图底栏：靠左，给右下纵向页签留空，避免 wrap 叠上去。 */
+  .ui-workspace-center-x.ui-workspace-secondary-bottom-bar {
+    left: max(0.5rem, env(safe-area-inset-left, 0px));
+    right: auto;
+    translate: none;
+  }
+
+  .ui-workspace-secondary-bottom-bar {
+    bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+    transform: none;
+    max-width: calc(100vw - 5.75rem);
+    flex-wrap: nowrap;
+  }
+
+  .chrome-window-center {
+    max-width: calc(100vw - 1rem);
+  }
+}
+
+@media (min-width: 640px) {
+  .chrome-window-center {
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%);
   }
 }
 
@@ -728,6 +953,48 @@ body {
 .map-chrome-content-dark .chrome-raised {
   background-color: rgb(255 255 255 / 0.2);
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+}
+
+/* 胶囊滑块：亮/暗两套都明确表达「凹槽轨道 + 凸起填充」，
+ * 不让亮色退化成一条平灰底。 */
+.chrome-capsule-track {
+  background-color: rgb(243 244 246 / 0.9);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.08);
+}
+.map-chrome-content-dark .chrome-capsule-track {
+  background-color: rgb(255 255 255 / 0.1);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
+}
+.chrome-capsule-fill {
+  background-color: rgb(255 255 255 / 0.96);
+  box-shadow: 1px 0 2px rgb(15 23 42 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+.map-chrome-content-dark .chrome-capsule-fill {
+  background-color: rgb(255 255 255 / 0.32);
+  box-shadow: 1px 0 2px rgb(0 0 0 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.14);
+}
+.map-chrome-content-dark .chrome-capsule-track:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.42);
+  outline-offset: 2px;
+}
+
+/* 设置滑块的两端说明属于第二级信息：只在指向/键盘聚焦该项时展开，
+ * 并以与胶囊内部相同的左右 padding 对齐。 */
+.settings-compact-slider-captions {
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-0.15rem);
+  transition: max-height 160ms ease, margin-top 160ms ease, opacity 140ms ease, transform 160ms ease;
+}
+
+.settings-compact-slider:hover .settings-compact-slider-captions,
+.settings-compact-slider:focus-within .settings-compact-slider-captions {
+  max-height: 1.25rem;
+  margin-top: 0.125rem;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .chrome-field {

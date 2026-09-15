@@ -32,31 +32,6 @@ export const useMapLayers = ({ notes, projectFrames }: UseMapLayersProps) => {
     }
   }, [projectFrames, frameLayerVisibility]);
 
-  // 必须用捕获阶段：MapControls 会在容器上 capture + stopPropagation，
-  // 冒泡 mousedown 到不了 document，点定位/新建时图层不会关。设置面板同理。
-  useEffect(() => {
-    if (!showFrameLayerPanel) return;
-    const handlePointerDownCapture = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (frameLayerRef.current?.contains(target)) return;
-      if (target instanceof Element) {
-        // MapLayerControl / ProjectNotesLayerPanel / 颜色与时间浮层均可能 portal 到 body
-        if (
-          target.closest('[data-map-layer-chrome-panel]') ||
-          target.closest('[data-graph-top-left-panel]') ||
-          target.closest('[data-tag-add-panel]') ||
-          target.closest('[data-note-time-range-panel]')
-        ) {
-          return;
-        }
-      }
-      setShowFrameLayerPanel(false);
-    };
-    document.addEventListener('pointerdown', handlePointerDownCapture, true);
-    return () => document.removeEventListener('pointerdown', handlePointerDownCapture, true);
-  }, [showFrameLayerPanel]);
-
   // Filter notes based on frame layer visibility
   const getFilteredNotes = useMemo(() => {
     if (!projectFrames || projectFrames.length === 0) {

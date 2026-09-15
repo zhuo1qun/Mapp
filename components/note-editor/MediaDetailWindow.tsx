@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { ArrowLeft, ArrowRight, RotateCcw, X } from 'lucide-react';
 import type { NormPoint } from '../../types';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 import { ChromePresence } from '../ui/ChromeSheetPresence';
 import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from '../ui/ChromeDialogSurface';
 import { LassoStickerEditor } from './LassoStickerEditor';
@@ -42,8 +43,9 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
   onConfirmLasso,
   presentation = 'modal',
   panelChromeStyle,
-  chromeAppearance = 'light'
+  chromeAppearance: chromeAppearanceProp
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const isCanvasWindow = presentation === 'canvas-window';
   const retainedLassoSourceRef = useRef<string | null>(null);
   if (open) retainedLassoSourceRef.current = lassoImageSrc ?? null;

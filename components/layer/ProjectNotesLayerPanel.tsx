@@ -35,6 +35,7 @@ import { AnchoredWorkspaceWindow } from '../ui/AnchoredWorkspaceWindow';
 import { insertLayerOrderRelative } from '../../utils/layer/tagHierarchy';
 import { useChromeMenuTop } from '../../utils/ui/chromeMenuPosition';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 
 function insertRelative(order: string[], fromKey: string, toKey: string, place: 'before' | 'after'): string[] {
   return insertLayerOrderRelative(order, fromKey, toKey, place);
@@ -75,6 +76,8 @@ export interface ProjectNotesLayerPanelProps {
    * 面板自身不再 absolute/fixed。
    */
   flow?: boolean;
+  /** 由顶栏槽提供 ChromeWindow 外壳时只渲染内容，不再自绘卡片。 */
+  hosted?: boolean;
   /** 非 flow 时：`start` 对齐页面左侧，`end` 对齐页面右侧（与顶栏按钮 margin 一致） */
   dockAlign?: 'start' | 'end';
   /** flow=false 时用于计算菜单 top 的锚点（通常为图层按钮容器） */
@@ -92,7 +95,7 @@ export interface ProjectNotesLayerPanelProps {
 export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   themeColor,
   panelChromeStyle,
-  chromeAppearance = 'light',
+  chromeAppearance: chromeAppearanceProp,
   variant: _layerPanelVariant = 'dock',
   projectId,
   merged,
@@ -107,6 +110,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   boardVariantToggles,
   embed = false,
   flow = false,
+  hosted = false,
   dockAlign = 'start',
   menuAnchorRef,
   tableMode = false,
@@ -114,6 +118,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   onUpdateFrame,
   hideStandardToggle = false
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const hiddenSet = new Set((merged.hidden ?? []).map((h) => String(h).trim()));
   const keysSet = useMemo(() => new Set((merged.order ?? []).map((k) => String(k).trim())), [merged.order]);
   const framesById = useMemo(() => new Map(frames.map((f) => [String(f.id).trim(), f])), [frames]);
@@ -543,7 +548,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
     [notes, onBatchUpdateNotes, onUpdateNote]
   );
 
-  const pageMenuOpen = !embed && !flow;
+  const pageMenuOpen = !embed && !flow && !hosted;
   const fallbackAnchorRef = useRef<HTMLElement | null>(null);
   const menuTop = useChromeMenuTop(
     pageMenuOpen,
@@ -554,20 +559,30 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
 
   const posCls = embed
     ? 'relative z-[40] my-2'
-    : flow
-      ? 'relative z-[2000]'
-      : `fixed z-[2000] ${pageEdgeCls}`;
+    : hosted
+      ? 'relative min-h-0 min-w-0 flex-1'
+      : flow
+        ? 'relative z-[2000]'
+        : `fixed z-[2000] ${pageEdgeCls}`;
+  const frameCls = hosted
+    ? 'w-full max-h-none overflow-hidden'
+    : `${embed ? 'w-full max-w-xl' : 'w-[min(20rem,calc(100vw-2rem))]'} ${
+        tableMode ? 'max-h-none overflow-visible' : 'max-h-[min(24rem,70vh)] overflow-hidden'
+      } rounded-xl border border-gray-100/80 shadow-xl`;
+  const appearanceCls = hosted ? '' : `map-chrome-content-${chromeAppearance}`;
 
   const panelBody = (
     <AnchoredWorkspaceWindow
       data-graph-top-left-panel
-      className={`map-layer-panel-body map-chrome-content-${chromeAppearance} ${posCls} ${embed ? 'mt-2' : ''} flex ${tableMode ? 'max-h-none overflow-visible' : 'max-h-[min(24rem,70vh)] overflow-hidden'} rounded-xl border border-gray-100/80 shadow-xl ${
-        embed ? 'w-full max-w-xl' : 'w-[min(20rem,calc(100vw-2rem))]'
-      }`}
-      style={{
-        ...(panelChromeStyle ?? { backgroundColor: 'rgba(255,255,255,0.96)' }),
-        ...(pageMenuOpen && menuTop != null ? { top: menuTop } : undefined)
-      }}
+      className={`map-layer-panel-body ${appearanceCls} ${posCls} ${embed ? 'mt-2' : ''} flex ${frameCls}`.trim()}
+      style={
+        hosted
+          ? undefined
+          : {
+              ...(panelChromeStyle ?? { backgroundColor: 'rgba(255,255,255,0.96)' }),
+              ...(pageMenuOpen && menuTop != null ? { top: menuTop } : undefined)
+            }
+      }
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {!tableMode ? (
@@ -614,7 +629,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
             />
           </div>
         ) : null}
-        <div className={`${tableMode ? 'overflow-visible' : 'max-h-[min(22rem,68vh)] overflow-y-auto overscroll-contain theme-surface-scrollbar'} min-h-0 flex-1 px-1.5 py-0.5`}>
+        <div className={`${tableMode ? 'overflow-visible' : hosted ? 'overflow-y-auto overscroll-contain theme-surface-scrollbar' : 'max-h-[min(22rem,68vh)] overflow-y-auto overscroll-contain theme-surface-scrollbar'} min-h-0 flex-1 px-1.5 py-0.5`}>
           {boardVariantToggles ? (
             <>
               <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">显示类型</div>
@@ -1156,7 +1171,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
     </AnchoredWorkspaceWindow>
   );
 
-  if (embed || flow) return panelBody;
+  if (embed || flow || hosted) return panelBody;
   if (menuTop == null) return null;
   return createPortal(panelBody, document.body);
 };

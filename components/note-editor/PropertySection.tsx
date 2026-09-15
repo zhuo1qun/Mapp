@@ -10,6 +10,7 @@ import {
   NoteEditorAddPillLabel
 } from './addPillStyles';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 
 interface PropertySectionProps {
   standalone?: boolean;
@@ -51,7 +52,7 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
   onTimeChange,
   themeColor,
   panelChromeStyle,
-  chromeAppearance = 'light',
+  chromeAppearance: chromeAppearanceProp,
   active,
   onProvideTimeDismiss,
   tags,
@@ -71,6 +72,7 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
   onBeforeOpenTime,
   trailingSlot
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const addTagBtnRef = useRef<HTMLButtonElement>(null);
   const dismiss = onDismissOverlays ?? (() => {});
 

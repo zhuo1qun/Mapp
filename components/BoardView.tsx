@@ -9,12 +9,13 @@ import {
 } from '../utils/layer/unifiedNoteLayer';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { NoteEditor } from './NoteEditor';
-import { Square, X, Check, Minus, Move, Hash, Plus, FileJson, Locate, Settings } from 'lucide-react';
+import { X, Check, Minus, Locate, Settings } from 'lucide-react';
 import exifr from 'exifr';
 import { generateId, fileToBase64, parseNoteContent } from '../utils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
 import { DEFAULT_THEME_COLOR, TAG_COLORS } from '../constants';
 import { mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
+import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
 import { saveImage, saveSketch, loadImage, loadNoteImages, getViewPositionCache } from '../utils/persistence/storage';
 import { useNotesWithResolvedMedia } from '../utils/persistence/useNotesWithResolvedMedia';
@@ -22,6 +23,8 @@ import { noteRendersAsBoardSticker } from '../utils/persistence/mediaDisplay';
 import { compressImageToBase64 } from '../utils/board/board-utils';
 import { useBoardNoteDrag } from './hooks/useBoardNoteDrag';
 import { useBoardNoteInteraction } from './hooks/useBoardNoteInteraction';
+import { useBoardInteractionMachine } from './hooks/useBoardInteractionMachine';
+import { useBoardPointerCapture } from './hooks/useBoardPointerCapture';
 import {
   PLACEMENT_PADDING,
   PLACEMENT_GAP,
@@ -30,9 +33,7 @@ import {
   computeBoardBounds,
   createGridAllocator,
   fitBoardMediaDimensions,
-  nextSequentialSlot,
-  type BoardBounds,
-  type GridAllocator
+  nextSequentialSlot
 } from '../utils/board/boardPlacement';
 import { TagAddPanel } from './ui/TagAddPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -48,32 +49,30 @@ import { BoardBrowseTagFilterPanel } from './board/BoardBrowseTagFilterPanel';
 import { BoardBrowseTimeFilterPanel } from './board/BoardBrowseTimeFilterPanel';
 import { BoardBatchTimePanel } from './board/BoardBatchTimePanel';
 import { BoardMultiSelectToolbar } from './board/BoardMultiSelectToolbar';
-import { BoardConnectionQuickEditBar } from './board/BoardConnectionQuickEditBar';
 import { BoardTopRightEditToggle } from './board/BoardTopRightEditToggle';
 import { type EditInspectorPanelProps, type InspectorGroupContext } from './map/overlays/MapEditInspectorPanel';
 import { useRegisterEditInspector } from './editInspector/EditInspectorProvider';
 import { GraphConnectionPanel } from './graph/GraphConnectionPanel';
 import { useSimpleConnectionPanel } from './hooks/useSimpleConnectionPanel';
 import { BoardTopCenterEditToolbar } from './board/BoardTopCenterEditToolbar';
+import {
+  BoardFrameControls,
+  type BoardFrameResizeCorner
+} from './board/BoardFrameControls';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { LayerToolbarIcon } from './ui/LayerToolbarIcon';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
-import { ResponsiveWindowPresence } from './ui/ResponsiveWindowPresence';
+import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolbarSlot';
 import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
 import ReactMarkdown from 'react-markdown';
+import { VIBRATION_MEDIUM } from './board-constants';
 import {
-  CONNECTION_OFFSET,
-  CONNECTION_POINT_SIZE,
-  CONNECTION_POINT_DETECT_RADIUS,
-  CONNECTION_LINE_WIDTH,
-  CONNECTION_LINE_CLICKABLE_WIDTH,
-  CONNECTION_LINE_CORNER_RADIUS,
-  SVG_OVERFLOW_PADDING,
-  LONG_PRESS_DURATION,
-  VIBRATION_SHORT,
-  VIBRATION_MEDIUM,
-  VIBRATION_LONG
-} from './board-constants';
+  clientPoint,
+  clientToBoardPoint,
+  clientToViewPoint,
+  distanceBetween,
+  transformAroundViewPoint
+} from '../utils/board/boardCoordinates';
 
 const BOARD_NOTE_INTRO_MS = 280;
 const BOARD_NOTE_INTRO_DISMISS_DELAY_MS = 560;
@@ -236,13 +235,11 @@ interface BoardViewProps {
     updates?: Partial<Project>
   ) => void | Promise<void>;
   onSwitchToMapView?: (coords?: { lat: number; lng: number }) => void;
-  onSwitchToBoardView?: (coords?: { x: number; y: number }) => void;
   onSwitchToGraphView?: (noteId: string) => void;
   navigateToCoords?: { x: number; y: number } | null;
   projectId?: string;
   onNavigateComplete?: () => void;
   onTransformChange?: (x: number, y: number, scale: number) => void;
-  mapViewFileInputRef?: React.RefObject<HTMLInputElement>;
   themeColor?: string;
   panelChromeStyle?: React.CSSProperties;
   /** 与 MapView 浮层按钮悬停一致，由 `mapChromeHoverBackground(opacity)` 传入 */
@@ -250,6 +247,8 @@ interface BoardViewProps {
   isUIVisible?: boolean;
   /** 与 MapView 相同的设置面板（界面外观、地图样式等） */
   onThemeColorChange?: (color: string) => void;
+  uiDarkMode?: boolean;
+  onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
   mapUiChromeBlurPx?: number;
@@ -274,18 +273,18 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   project,
   onUpdateProject,
   onSwitchToMapView,
-  onSwitchToBoardView,
   onSwitchToGraphView,
   navigateToCoords,
   projectId,
   onNavigateComplete,
   onTransformChange,
-  mapViewFileInputRef,
   themeColor = DEFAULT_THEME_COLOR,
   panelChromeStyle,
   chromeHoverBackground,
   isUIVisible = true,
   onThemeColorChange,
+  uiDarkMode,
+  onUiDarkModeChange,
   mapUiChromeOpacity = 0.9,
   onMapUiChromeOpacityChange,
   mapUiChromeBlurPx = 8,
@@ -297,9 +296,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const displayNotes = useNotesWithResolvedMedia(notes);
   const ch = panelChromeStyle;
   const chHover = chromeHoverBackground;
+  const chromeAppearance = useChromeAppearance();
   const frameChromeStyle = useMemo(
-    () => ch ?? mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx),
-    [ch, mapUiChromeOpacity, mapUiChromeBlurPx]
+    () => ch ?? mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx, chromeAppearance),
+    [ch, chromeAppearance, mapUiChromeOpacity, mapUiChromeBlurPx]
   );
   const { handleCsvImport: handleCsvDataImport } = useCsvImport({
     project: project ?? ({} as Project),
@@ -310,6 +310,30 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       : undefined
   });
   const containerRef = useRef<HTMLDivElement>(null);
+  const {
+    interactionRef,
+    interactionState,
+    interactionKind,
+    beginPanning,
+    beginBoxSelecting,
+    beginDrawingFrame,
+    beginDraggingFrame,
+    beginResizingFrame,
+    beginResizingImage,
+    updatePanning,
+    movementFromOrigin,
+    resetInteraction
+  } = useBoardInteractionMachine();
+  const { capturePointer, releasePointer, releaseAllPointers } = useBoardPointerCapture(containerRef);
+  const isPanning = interactionKind === 'panning';
+  const draggingFrameId =
+    interactionState.kind === 'dragging-frame' ? interactionState.id : null;
+  const draggingFrameOffset =
+    interactionState.kind === 'dragging-frame' ? interactionState.offset : null;
+  const resizingFrame =
+    interactionState.kind === 'resizing-frame' ? interactionState : null;
+  const resizingImage =
+    interactionState.kind === 'resizing-image' ? interactionState : null;
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   // New text notes briefly live here before their editor opens, so their
   // creation has a visible anchor instead of appearing as an abrupt modal.
@@ -371,7 +395,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   );
 
   const openNewBoardNoteEditorAfterIntro = useCallback(
-    (note: Note, elapsedMs = 0) => {
+    (elapsedMs = 0) => {
       if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
       const remainingIntroMs = Math.max(120, BOARD_NOTE_INTRO_MS - elapsedMs);
       introTimerRef.current = window.setTimeout(() => {
@@ -441,9 +465,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   // 标记是否已经执行过重排
   const [hasRearranged, setHasRearranged] = useState(false);
 
-  // 标记是否正在拖拽背景（用于在拖拽结束后保存位置）
-  const [isDraggingBackground, setIsDraggingBackground] = useState(false);
-
   // 缩放保存的防抖定时器
   const zoomSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -510,10 +531,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       y: rect.top + transform.y + (editingNote.boardY + height / 2) * transform.scale,
     };
   }, [editingNote?.id, editingNote?.boardX, editingNote?.boardY, transform.x, transform.y, transform.scale]);
-  const [isPanning, setIsPanning] = useState(false);
-  const isPanningRef = useRef(false);
-  isPanningRef.current = isPanning;
-  
   // Note position selection state
   const [isSelectingNotePosition, setIsSelectingNotePosition] = useState(false);
   const [notePositionPreview, setNotePositionPreview] = useState<{ x: number; y: number } | null>(null);
@@ -557,12 +574,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const boardLayerBtnRef = useRef<HTMLDivElement>(null);
-  const boardLayerMenuTop = useChromeMenuTop(showLayerPanel, boardLayerBtnRef, 8);
-  const [lastBoardLayerMenuTop, setLastBoardLayerMenuTop] = useState<number | null>(null);
-  useEffect(() => {
-    if (boardLayerMenuTop != null) setLastBoardLayerMenuTop(boardLayerMenuTop);
-  }, [boardLayerMenuTop]);
-  const boardLayerPanelTop = boardLayerMenuTop ?? lastBoardLayerMenuTop;
+  const boardToolbarRef = useRef<HTMLDivElement>(null);
+  const boardToolbarKind = showSettingsPanel ? 'settings' : showLayerPanel ? 'layer' : null;
+  const boardLayerMenuTop = useChromeMenuTop(boardToolbarKind != null, boardToolbarRef, 8);
 
   /** NoteEditor 打开即统一释放左上角工作窗口，避免不同打开入口遗漏收起逻辑。 */
   useEffect(() => {
@@ -664,16 +678,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   
   // Layout state: global standard size scale is stored in project.standardSizeScale
   
-  // Dragging / pan pointer（pan 仍用 lastMousePos；便签拖动见 useBoardNoteDrag）
-  const lastMousePos = useRef<{ x: number, y: number } | null>(null);
-  const panStartPos = useRef<{ x: number, y: number } | null>(null);
   const isZoomingRef = useRef(false);
   const [isZooming, setIsZooming] = useState(false);
   const dragRectRef = useRef<DOMRect | null>(null);
   
-  // Blank click count for exit logic
-  const blankClickCountRef = useRef<number>(0);
-  const blankClickResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   // 触屏长按卡片进入编辑时保留当前视图，不触发“进入编辑自动适配”。
   const skipNextEditModeZoomRef = useRef(false);
@@ -690,11 +698,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set()); // Multi-select state
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
-  const [editingConnectionLabel, setEditingConnectionLabel] = useState<string>('');
-  const editingConnectionLabelRef = useRef<string>('');
-  useEffect(() => {
-    editingConnectionLabelRef.current = editingConnectionLabel;
-  }, [editingConnectionLabel]);
 
   // Multi-select state
   const [isShiftPressed, setIsShiftPressed] = useState(false);
@@ -703,9 +706,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
   const [boxSelectStart, setBoxSelectStart] = useState<{ x: number; y: number } | null>(null);
   const [boxSelectEnd, setBoxSelectEnd] = useState<{ x: number; y: number } | null>(null);
-  const [connectingFrom, setConnectingFrom] = useState<{ noteId: string; side: 'top' | 'right' | 'bottom' | 'left' } | null>(null);
-  const [connectingTo, setConnectingTo] = useState<{ x: number; y: number } | null>(null);
-  const [hoveringConnectionPoint, setHoveringConnectionPoint] = useState<{ noteId: string; side: 'top' | 'right' | 'bottom' | 'left' } | null>(null);
 
   /** 多选批量工具栏：标签 / 时间子面板 */
   const [multiBatchPanel, setMultiBatchPanel] = useState<'none' | 'tag' | 'time'>('none');
@@ -808,17 +808,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     effectiveConnections
   ]);
 
-  const [resizingImage, setResizingImage] = useState<{
-    id: string;
-    corner: 'tl' | 'tr' | 'bl' | 'br';
-    startX: number;
-    startY: number;
-    startWidth: number;
-    startHeight: number;
-    startBoardX: number;
-    startBoardY: number;
-    aspect: number;
-  } | null>(null);
   // 在非编辑模式下选中的frames用于过滤显示（支持多frame）
   const [filterFrameIds, setFilterFrameIds] = useState<Set<string>>(new Set());
   /** 非编辑模式：画板级按标签筛选（与多选面板预览无关） */
@@ -849,11 +838,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [editingFrameTitle, setEditingFrameTitle] = useState('');
   const frameTitleInputRef = useRef<HTMLInputElement | null>(null);
   const frameTitleSaveButtonRef = useRef<HTMLButtonElement | null>(null);
-  const [resizingFrame, setResizingFrame] = useState<{ id: string; fixedX: number; fixedY: number } | null>(null);
-  const resizingFrameRef = useRef<{ id: string; fixedX: number; fixedY: number } | null>(null);
-  const [draggingFrameId, setDraggingFrameId] = useState<string | null>(null);
-  const draggingFrameRef = useRef<string | null>(null);
-  const [draggingFrameOffset, setDraggingFrameOffset] = useState<{ x: number; y: number } | null>(null);
   const [localDraggingFramePos, setLocalDraggingFramePos] = useState<{ x: number; y: number } | null>(null);
   const [localResizingFrameSize, setLocalResizingFrameSize] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const isWaitingForSyncRef = useRef(false);
@@ -903,17 +887,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     return () => window.removeEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
   }, [setShowBoardInsConnPanel, setBoardInsConnPick]);
   
-  // Text measurement refs removed (text variant removed)
-
-  // 重置空白点击计数
-  const resetBlankClickCount = () => {
-    blankClickCountRef.current = 0;
-    if (blankClickResetTimerRef.current) {
-      clearTimeout(blankClickResetTimerRef.current);
-      blankClickResetTimerRef.current = null;
-    }
-  };
-
   const openBoardNoteEditor = useCallback(
     (note: Note) => {
       void (async () => {
@@ -953,10 +926,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       setSelectedNoteIds(new Set([note.id]));
       setSelectedConnectionId(null);
       setSelectedFrameId(null);
-      setConnectingFrom(null);
-      setConnectingTo(null);
-      setHoveringConnectionPoint(null);
-      resetBlankClickCount();
       onWorkspaceEditModeChange(true);
     },
     [onWorkspaceEditModeChange]
@@ -973,8 +942,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     handleNotePointerCancel,
     cancelBrowseLongPress,
     consumeSuppressedNoteClick,
-    clearNotePressTracking,
-    currentNotePressIdRef
+    clearNotePressTracking
   } = useBoardNoteDrag({
     workspaceEditMode,
     isZoomingRef,
@@ -1002,10 +970,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setSelectedNoteIds,
     setSelectedConnectionId,
     setSelectedFrameId,
-    setConnectingFrom: setConnectingFrom as (v: null) => void,
-    setConnectingTo: setConnectingTo as (v: null) => void,
-    setHoveringConnectionPoint: setHoveringConnectionPoint as (v: null) => void,
-    resetBlankClickCount,
     onOpenNoteEditor: openBoardNoteEditor
   });
 
@@ -1052,14 +1016,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setSelectedNoteIds(nextIds);
     setSelectedNoteId(nextIds.size === 0 ? null : Array.from(nextIds)[0]);
     setBrowseTagFilterPanelOpen(false);
-    resetBlankClickCount();
   };
 
   const applyBrowseTimeFilterFromPanel = () => {
     setBoardFilterTimeRange(null);
     if (!browseTimeSelectionHasTimedNotes) {
       setBrowseTimeFilterPanelOpen(false);
-      resetBlankClickCount();
       return;
     }
     const range = {
@@ -1074,13 +1036,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setSelectedNoteIds(nextIds);
     setSelectedNoteId(nextIds.size === 0 ? null : Array.from(nextIds)[0]);
     setBrowseTimeFilterPanelOpen(false);
-    resetBlankClickCount();
   };
 
-  const browseTagFilterLayoutRevision = useMemo(
+  const browseFilterLayoutRevision = useMemo(
     () =>
       JSON.stringify({
-        open: browseTagFilterPanelOpen,
         edit: workspaceEditMode,
         ids: [...selectedNoteIds].sort(),
         tx: transform.x,
@@ -1091,33 +1051,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         mdy: multiSelectDragOffset.y
       }),
     [
-      browseTagFilterPanelOpen,
-      workspaceEditMode,
-      selectedNoteIds,
-      transform.x,
-      transform.y,
-      transform.scale,
-      isMultiSelectDragging,
-      multiSelectDragOffset.x,
-      multiSelectDragOffset.y
-    ]
-  );
-
-  const browseTimeFilterLayoutRevision = useMemo(
-    () =>
-      JSON.stringify({
-        open: browseTimeFilterPanelOpen,
-        edit: workspaceEditMode,
-        ids: [...selectedNoteIds].sort(),
-        tx: transform.x,
-        ty: transform.y,
-        ts: transform.scale,
-        mdrag: isMultiSelectDragging,
-        mdx: multiSelectDragOffset.x,
-        mdy: multiSelectDragOffset.y
-      }),
-    [
-      browseTimeFilterPanelOpen,
       workspaceEditMode,
       selectedNoteIds,
       transform.x,
@@ -1267,11 +1200,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   }, [notes, project, selectedNoteIds, onUpdateProject]);
 
   useEffect(() => {
-    // 退出编辑模式时清除所有连接相关状态和长按状态
+    // 退出编辑模式时清除选中和长按状态
     if (!workspaceEditMode) {
-      setConnectingFrom(null);
-      setConnectingTo(null);
-      setHoveringConnectionPoint(null);
       setSelectedConnectionId(null);
       setSelectedFrameId(null); // 清除frame选中状态
       setSelectedNoteIds(new Set()); // Clear multi-select
@@ -1396,326 +1326,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }, 500); // 增加延迟时间
     return () => clearTimeout(timer);
   }, [notes.length]); // 当notes数量改变时重新执行
-
-  // 获取连接点位置
-  const getConnectionPoint = (note: Note, side: 'top' | 'right' | 'bottom' | 'left', isDragging: boolean, dragOffset: { x: number; y: number }) => {
-    const x = note.boardX + (isDragging ? dragOffset.x : 0);
-    const y = note.boardY + (isDragging ? dragOffset.y : 0);
-    const { width, height } = boardNoteDimensions(note);
-    
-    switch (side) {
-      case 'top':
-        return { x: x + width / 2, y: y - 8 };
-      case 'right':
-        return { x: x + width + 8, y: y + height / 2 };
-      case 'bottom':
-        return { x: x + width / 2, y: y + height + 8 };
-      case 'left':
-        return { x: x - 8, y: y + height / 2 };
-    }
-  };
-
-  // 生成带圆角的连接线路径（使用二次贝塞尔曲线）
-  const createRoundedPath = (points: {x: number, y: number}[], radius: number): string => {
-    if (points.length < 2) return '';
-    
-    let path = `M ${points[0].x + SVG_OVERFLOW_PADDING} ${points[0].y + SVG_OVERFLOW_PADDING}`;
-    
-    for (let i = 1; i < points.length - 1; i++) {
-      const prev = points[i - 1];
-      const curr = points[i];
-      const next = points[i + 1];
-      
-      // 计算到当前点的距离
-      const distPrev = Math.sqrt(Math.pow(curr.x - prev.x, 2) + Math.pow(curr.y - prev.y, 2));
-      const distNext = Math.sqrt(Math.pow(next.x - curr.x, 2) + Math.pow(next.y - curr.y, 2));
-      
-      // 自适应圆角半径：优先使用指定半径，如果线段太短则降级为6px，再短就直线
-      let actualRadius = radius;
-      if (distPrev < radius * 2 || distNext < radius * 2) {
-        // 线段太短，降级使用6px圆角
-        actualRadius = 6;
-      }
-      
-      // 如果连6px圆角都放不下，使用直线连接
-      if (distPrev < actualRadius * 2 || distNext < actualRadius * 2) {
-        path += ` L ${curr.x + SVG_OVERFLOW_PADDING} ${curr.y + SVG_OVERFLOW_PADDING}`;
-        continue;
-      }
-      
-      // 计算圆角前的点
-      const ratioP = actualRadius / distPrev;
-      const beforeX = curr.x - (curr.x - prev.x) * ratioP;
-      const beforeY = curr.y - (curr.y - prev.y) * ratioP;
-      
-      // 计算圆角后的点
-      const ratioN = actualRadius / distNext;
-      const afterX = curr.x + (next.x - curr.x) * ratioN;
-      const afterY = curr.y + (next.y - curr.y) * ratioN;
-      
-      // 直线到圆角前
-      path += ` L ${beforeX + SVG_OVERFLOW_PADDING} ${beforeY + SVG_OVERFLOW_PADDING}`;
-      // 二次贝塞尔曲线形成圆角
-      path += ` Q ${curr.x + SVG_OVERFLOW_PADDING} ${curr.y + SVG_OVERFLOW_PADDING}, ${afterX + SVG_OVERFLOW_PADDING} ${afterY + SVG_OVERFLOW_PADDING}`;
-    }
-    
-    // 最后一段直线
-    const last = points[points.length - 1];
-    path += ` L ${last.x + SVG_OVERFLOW_PADDING} ${last.y + SVG_OVERFLOW_PADDING}`;
-    
-    return path;
-  };
-
-  // 计算连接线路径的辅助函数（参考流程图库的正交路由算法，优化短距离路径）
-  const calculateConnectionPath = (
-    fromPoint: { x: number; y: number },
-    toPoint: { x: number; y: number },
-    fromSide: 'top' | 'right' | 'bottom' | 'left',
-    toSide: 'top' | 'right' | 'bottom' | 'left'
-  ): string => {
-    const offset = CONNECTION_OFFSET;
-    
-    // 计算从起点延伸后的点（向外延伸）
-    let fromExtendX = fromPoint.x, fromExtendY = fromPoint.y;
-    if (fromSide === 'right') fromExtendX += offset;
-    else if (fromSide === 'left') fromExtendX -= offset;
-    else if (fromSide === 'bottom') fromExtendY += offset;
-    else if (fromSide === 'top') fromExtendY -= offset;
-    
-    // 计算垂直接入终点前的点（向外延伸）
-    let toExtendX = toPoint.x, toExtendY = toPoint.y;
-    if (toSide === 'right') toExtendX += offset;
-    else if (toSide === 'left') toExtendX -= offset;
-    else if (toSide === 'bottom') toExtendY += offset;
-    else if (toSide === 'top') toExtendY -= offset;
-    
-    // 计算曼哈顿距离，用于判断是否使用简化路径
-    const manhattanDist = Math.abs(fromPoint.x - toPoint.x) + Math.abs(fromPoint.y - toPoint.y);
-    const isShortDistance = manhattanDist < offset * 3; // 短距离阈值
-    
-    let points: {x: number, y: number}[] = [];
-    
-    const fromIsHorizontal = fromSide === 'left' || fromSide === 'right';
-    const toIsHorizontal = toSide === 'left' || toSide === 'right';
-    
-    // 情况1: 水平 → 垂直（L形，最优）
-    if (fromIsHorizontal && !toIsHorizontal) {
-      // 短距离时，直接连接，减少转折
-      if (isShortDistance && Math.abs(fromExtendX - toExtendX) < offset * 2) {
-        points = [fromPoint, {x: fromExtendX, y: toExtendY}, toPoint];
-      } else {
-        // 标准L形路径
-        points = [
-          fromPoint,
-          {x: fromExtendX, y: fromPoint.y},
-          {x: toExtendX, y: fromPoint.y},
-          {x: toExtendX, y: toExtendY},
-          toPoint
-        ];
-      }
-    }
-    // 情况2: 垂直 → 水平（L形，最优）
-    else if (!fromIsHorizontal && toIsHorizontal) {
-      // 短距离时，直接连接
-      if (isShortDistance && Math.abs(fromExtendY - toExtendY) < offset * 2) {
-        points = [fromPoint, {x: toExtendX, y: fromExtendY}, toPoint];
-      } else {
-        // 标准L形路径
-        points = [
-          fromPoint,
-          {x: fromPoint.x, y: fromExtendY},
-          {x: toExtendX, y: fromExtendY},
-          {x: toExtendX, y: toPoint.y},
-          toPoint
-        ];
-      }
-    }
-    // 情况3: 水平 → 水平
-    else if (fromIsHorizontal && toIsHorizontal) {
-      const sameDirection = (fromSide === 'right' && toSide === 'right') || 
-                           (fromSide === 'left' && toSide === 'left');
-      
-      if (sameDirection) {
-        // 同向：直接连接，使用L形路径（2个转折点）
-        // 对于"左连左"或"右连右"，路径应该是：向外延伸 -> 水平移动 -> 垂直移动到目标 -> 向内连接
-        if (fromSide === 'left') {
-          // 左连左：两个点都在左侧，路径应该在左侧外部
-          // 使用更左侧的点作为水平移动的X坐标
-          const horizontalX = Math.min(fromExtendX, toExtendX);
-          points = [
-            fromPoint,
-            {x: fromExtendX, y: fromPoint.y},
-            {x: horizontalX, y: fromPoint.y}, // 水平移动到更左侧
-            {x: horizontalX, y: toPoint.y},   // 垂直移动到目标Y
-            {x: toExtendX, y: toPoint.y},
-            toPoint
-          ];
-        } else {
-          // 右连右：两个点都在右侧，路径应该在右侧外部
-          // 使用更右侧的点作为水平移动的X坐标
-          const horizontalX = Math.max(fromExtendX, toExtendX);
-          points = [
-            fromPoint,
-            {x: fromExtendX, y: fromPoint.y},
-            {x: horizontalX, y: fromPoint.y}, // 水平移动到更右侧
-            {x: horizontalX, y: toPoint.y},   // 垂直移动到目标Y
-            {x: toExtendX, y: toPoint.y},
-            toPoint
-          ];
-        }
-      } else {
-        // 反向：Z形路径，短距离时简化
-        if (isShortDistance) {
-          // 短距离：直接使用中点，减少转折
-          const midY = (fromPoint.y + toPoint.y) / 2;
-          points = [
-            fromPoint,
-            {x: fromExtendX, y: fromPoint.y},
-            {x: fromExtendX, y: midY},
-            {x: toExtendX, y: midY},
-            {x: toExtendX, y: toPoint.y},
-            toPoint
-          ];
-        } else {
-          // 长距离：标准Z形
-          const midY = (fromPoint.y + toPoint.y) / 2;
-          const safeMidY = Math.abs(midY - fromPoint.y) < offset ? 
-            (fromPoint.y < toPoint.y ? fromPoint.y - offset : fromPoint.y + offset) : midY;
-          points = [
-            fromPoint,
-            {x: fromExtendX, y: fromPoint.y},
-            {x: fromExtendX, y: safeMidY},
-            {x: toExtendX, y: safeMidY},
-            {x: toExtendX, y: toPoint.y},
-            toPoint
-          ];
-        }
-      }
-    }
-    // 情况4: 垂直 → 垂直
-    else {
-      const sameDirection = (fromSide === 'bottom' && toSide === 'bottom') || 
-                           (fromSide === 'top' && toSide === 'top');
-      
-      if (sameDirection) {
-        // 同向：直接连接，使用L形路径（2个转折点）
-        // 对于"上连上"或"下连下"，路径应该是：向外延伸 -> 垂直移动 -> 水平移动到目标 -> 向内连接
-        if (fromSide === 'top') {
-          // 上连上：两个点都在上方，路径应该在上方外部
-          // 使用更上方的点作为垂直移动的Y坐标
-          const verticalY = Math.min(fromExtendY, toExtendY);
-          points = [
-            fromPoint,
-            {x: fromPoint.x, y: fromExtendY},
-            {x: fromPoint.x, y: verticalY},  // 垂直移动到更上方
-            {x: toPoint.x, y: verticalY},    // 水平移动到目标X
-            {x: toPoint.x, y: toExtendY},
-            toPoint
-          ];
-        } else {
-          // 下连下：两个点都在下方，路径应该在下方外部
-          // 使用更下方的点作为垂直移动的Y坐标
-          const verticalY = Math.max(fromExtendY, toExtendY);
-          points = [
-            fromPoint,
-            {x: fromPoint.x, y: fromExtendY},
-            {x: fromPoint.x, y: verticalY},  // 垂直移动到更下方
-            {x: toPoint.x, y: verticalY},    // 水平移动到目标X
-            {x: toPoint.x, y: toExtendY},
-            toPoint
-          ];
-        }
-      } else {
-        // 反向：Z形路径，短距离时简化
-        if (isShortDistance) {
-          // 短距离：直接使用中点
-          const midX = (fromPoint.x + toPoint.x) / 2;
-          points = [
-            fromPoint,
-            {x: fromPoint.x, y: fromExtendY},
-            {x: midX, y: fromExtendY},
-            {x: midX, y: toExtendY},
-            {x: toPoint.x, y: toExtendY},
-            toPoint
-          ];
-        } else {
-          // 长距离：标准Z形
-          const midX = (fromPoint.x + toPoint.x) / 2;
-          const safeMidX = Math.abs(midX - fromPoint.x) < offset ? 
-            (fromPoint.x < toPoint.x ? fromPoint.x - offset : fromPoint.x + offset) : midX;
-          points = [
-            fromPoint,
-            {x: fromPoint.x, y: fromExtendY},
-            {x: safeMidX, y: fromExtendY},
-            {x: safeMidX, y: toExtendY},
-            {x: toPoint.x, y: toExtendY},
-            toPoint
-          ];
-        }
-      }
-    }
-    
-    // 智能路径优化：移除不必要的中间点
-    const optimizedPoints: {x: number, y: number}[] = [points[0]];
-    
-    for (let i = 1; i < points.length - 1; i++) {
-      const prev = optimizedPoints[optimizedPoints.length - 1];
-      const curr = points[i];
-      const next = points[i + 1];
-      
-      // 计算三个点形成的角度
-      const dx1 = curr.x - prev.x;
-      const dy1 = curr.y - prev.y;
-      const dx2 = next.x - curr.x;
-      const dy2 = next.y - curr.y;
-      
-      // 如果三个点几乎在一条直线上（角度接近180度），跳过中间点
-      const dot = dx1 * dx2 + dy1 * dy2;
-      const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
-      const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-      const cosAngle = dot / (len1 * len2);
-      
-      // 如果角度接近180度（cos接近-1），说明是直线，可以跳过中间点
-      if (cosAngle < -0.99 && len1 > 1 && len2 > 1) {
-        // 跳过这个中间点
-        continue;
-      }
-      
-      // 检查距离，太近的点合并
-      const dist = Math.sqrt(Math.pow(curr.x - prev.x, 2) + Math.pow(curr.y - prev.y, 2));
-      if (dist < 2) {
-        continue;
-      }
-      
-      optimizedPoints.push(curr);
-    }
-    
-    // 添加终点
-    optimizedPoints.push(points[points.length - 1]);
-    
-    // 最终清理：移除重复的连续点
-    const cleanedPoints: {x: number, y: number}[] = [];
-    for (let i = 0; i < optimizedPoints.length; i++) {
-      const curr = optimizedPoints[i];
-      if (cleanedPoints.length === 0) {
-        cleanedPoints.push(curr);
-        continue;
-      }
-      
-      const prev = cleanedPoints[cleanedPoints.length - 1];
-      const dist = Math.sqrt(Math.pow(curr.x - prev.x, 2) + Math.pow(curr.y - prev.y, 2));
-      if (dist > 1) {
-        cleanedPoints.push(curr);
-      }
-    }
-    
-    // 确保至少有两个点
-    if (cleanedPoints.length < 2) {
-      cleanedPoints.push(toPoint);
-    }
-    
-    return createRoundedPath(cleanedPoints, CONNECTION_LINE_CORNER_RADIUS);
-  };
 
   // Apply initial transform when project changes or container is ready
   const lastProjectIdRef = useRef<string | null>(null);
@@ -1868,7 +1478,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   };
 
   // Handle image import (from photos with GPS) - show preview in BoardView
-  const handleImageImport = async (files: FileList | null, showLimitMessage = false) => {
+  const handleImageImport = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     
     const fileArray = Array.from(files); // No limit on number of images
@@ -2266,7 +1876,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   };
 
-  const handleDragEnd = (e: React.DragEvent) => {
+  const handleDragEnd = () => {
     // Always hide drag overlay when drag ends (even if cancelled)
     setIsDragging(false);
   };
@@ -2307,9 +1917,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               const rect = containerRef.current?.getBoundingClientRect();
               let position;
               if (rect) {
-                const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                position = { x: worldX, y: worldY };
+                position = clientToBoardPoint(clientPoint(e.clientX, e.clientY), rect, transform);
               }
               createImageNote(base64, width, height, position);
             }
@@ -2339,7 +1947,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           imageFiles.forEach((file) => {
             dataTransfer.items.add(file as File);
           });
-          handleImageImport(dataTransfer.files, true);
+          handleImageImport(dataTransfer.files);
         }
       } else if (jsonFiles.length > 0 && jsonFiles[0]) {
         handleDataImport(jsonFiles[0] as File);
@@ -2348,8 +1956,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       }
     }
   };
-
-// compressImageToBase64 function moved to utils/board/board-utils.ts
 
   const createImageNote = (base64: string, imgWidth: number, imgHeight: number, position?: { x: number; y: number }) => {
     if (!containerRef.current) return;
@@ -2428,30 +2034,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     if (waitForLongPressRelease) {
       boardLongPressPreviewNoteRef.current = newNote;
     } else {
-      openNewBoardNoteEditorAfterIntro(newNote);
+      openNewBoardNoteEditorAfterIntro();
     }
     setIsSelectingNotePosition(false);
-  };
-
-const createNoteAtCenter = () => {
-     const boardNotes = notes.filter((n) => n.boardX !== undefined && n.boardY !== undefined);
-     const { boardX, boardY } = nextSequentialSlot(boardNotes.length);
-     const newNote: Note = {
-         id: generateId(),
-         createdAt: Date.now(),
-         coords: { lat: 0, lng: 0 },
-         emoji: '',
-         text: '',
-         fontSize: 3,
-         images: [],
-         tags: [],
-         boardX,
-         boardY,
-         variant: 'standard',
-         color: '#FFFDF5'
-     };
-     beginNewBoardNoteIntro(newNote);
-     openNewBoardNoteEditorAfterIntro(newNote);
   };
 
   const clearBoardLongPress = useCallback(() => {
@@ -2468,7 +2053,7 @@ const createNoteAtCenter = () => {
     const note = boardLongPressPreviewNoteRef.current;
     if (!note) return;
     boardLongPressPreviewNoteRef.current = null;
-    openNewBoardNoteEditorAfterIntro(note, Date.now() - introStartedAtRef.current);
+    openNewBoardNoteEditorAfterIntro(Date.now() - introStartedAtRef.current);
   }, [openNewBoardNoteEditorAfterIntro]);
 
   const cancelBoardLongPressPreview = useCallback(() => {
@@ -2479,6 +2064,47 @@ const createNoteAtCenter = () => {
     setIntroNote(null);
     setEditingNote(null);
   }, []);
+
+  const cancelTransientBoardInteraction = useCallback(
+    (pointerId?: number) => {
+      const active = interactionRef.current;
+      if (
+        pointerId != null &&
+        active.kind !== 'idle' &&
+        active.pointerId !== pointerId
+      ) {
+        return;
+      }
+      clearBoardLongPress();
+      if (boardLongPressTriggeredRef.current) cancelBoardLongPressPreview();
+      boardLongPressTriggeredRef.current = false;
+      resetInteraction(pointerId);
+      if (pointerId == null) releaseAllPointers();
+      else releasePointer(pointerId);
+      setBoxSelectStart(null);
+      setBoxSelectEnd(null);
+      setDrawingFrameStart(null);
+      setDrawingFrameEnd(null);
+      setLocalDraggingFramePos(null);
+      setLocalResizingFrameSize(null);
+      setLocalResizingImageSize(null);
+      dragRectRef.current = null;
+    },
+    [
+      cancelBoardLongPressPreview,
+      clearBoardLongPress,
+      interactionRef,
+      releaseAllPointers,
+      releasePointer,
+      resetInteraction
+    ]
+  );
+
+  useEffect(() => {
+    const handleWindowBlur = () => cancelTransientBoardInteraction();
+    window.addEventListener('blur', handleWindowBlur);
+    return () => window.removeEventListener('blur', handleWindowBlur);
+  }, [cancelTransientBoardInteraction]);
 
   const boardObjectContainsPosition = useCallback(
     (boardX: number, boardY: number) => {
@@ -2514,8 +2140,11 @@ const createNoteAtCenter = () => {
       if (target !== e.currentTarget && target.closest('.pointer-events-auto')) return;
       const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const boardX = (e.clientX - rect.left - transform.x) / transform.scale;
-      const boardY = (e.clientY - rect.top - transform.y) / transform.scale;
+      const { x: boardX, y: boardY } = clientToBoardPoint(
+        clientPoint(e.clientX, e.clientY),
+        rect,
+        transform
+      );
       if (boardObjectContainsPosition(boardX, boardY)) return;
 
       clearBoardLongPress();
@@ -2526,10 +2155,7 @@ const createNoteAtCenter = () => {
         const press = boardLongPressStartRef.current;
         if (!press || boardObjectContainsPosition(press.boardX, press.boardY)) return;
         boardLongPressTriggeredRef.current = true;
-        setIsPanning(false);
-        setIsDraggingBackground(false);
-        lastMousePos.current = null;
-        panStartPos.current = null;
+        resetInteraction();
         if (navigator.vibrate) navigator.vibrate(VIBRATION_MEDIUM);
         createNoteAtPosition(press.boardX, press.boardY, true);
       }, 500);
@@ -2544,6 +2170,7 @@ const createNoteAtCenter = () => {
       isZooming,
       resizingFrame,
       resizingImage,
+      resetInteraction,
       transform.scale,
       transform.x,
       transform.y
@@ -2561,42 +2188,10 @@ const createNoteAtCenter = () => {
     }, 500);
   }, [onTransformChange]);
 
-  // 以指定视图坐标点为中心进行缩放（坐标相对容器左上角，与地图/图视图滚轮缩放一致）
-  const zoomAtViewPoint = useCallback(
-    (newScale: number, viewX: number, viewY: number) => {
-      const clamped = Math.min(Math.max(0.2, newScale), 4);
-      let nextX = 0;
-      let nextY = 0;
-      setTransform((prev) => {
-        const worldX = (viewX - prev.x) / prev.scale;
-        const worldY = (viewY - prev.y) / prev.scale;
-        nextX = viewX - worldX * clamped;
-        nextY = viewY - worldY * clamped;
-        return { x: nextX, y: nextY, scale: clamped };
-      });
-      scheduleZoomTransformPersist(nextX, nextY, clamped);
-    },
-    [scheduleZoomTransformPersist]
-  );
-
-  // 以视图中心为中心进行缩放
-  const zoomAtViewCenter = useCallback(
-    (newScale: number) => {
-      if (!containerRef.current) return;
-      const { width, height } = containerRef.current.getBoundingClientRect();
-      zoomAtViewPoint(newScale, width / 2, height / 2);
-    },
-    [zoomAtViewPoint]
-  );
-
   // 处理触摸双指缩放
   const touchStartRef = useRef<{
     distance: number;
     scale: number;
-    centerX: number;
-    centerY: number;
-    transformX: number;
-    transformY: number;
   } | null>(null);
 
   isZoomingRef.current = isZooming;
@@ -2608,24 +2203,9 @@ const createNoteAtCenter = () => {
     if (!container) return;
 
     const cancelSingleFingerPan = () => {
-      if (!isPanningRef.current) return;
-      isPanningRef.current = false;
-      setIsPanning(false);
-      setIsDraggingBackground(false);
-      lastMousePos.current = null;
-      panStartPos.current = null;
-      try {
-        // Release any active pointer captures on the board container
-        const captures = (container as HTMLElement & { hasPointerCapture?: (id: number) => boolean });
-        // Best-effort: clear common pointer ids if still captured
-        for (let id = 0; id < 8; id++) {
-          if (typeof captures.hasPointerCapture === 'function' && captures.hasPointerCapture(id)) {
-            captures.releasePointerCapture(id);
-          }
-        }
-      } catch {
-        // ignore
-      }
+      if (interactionRef.current.kind !== 'panning') return;
+      resetInteraction();
+      releaseAllPointers();
     };
 
     const handleTouchStart = (e: TouchEvent) => {
@@ -2640,24 +2220,13 @@ const createNoteAtCenter = () => {
 
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
-        const distance = Math.sqrt(
-          Math.pow(touch2.clientX - touch1.clientX, 2) +
-            Math.pow(touch2.clientY - touch1.clientY, 2)
+        const distance = distanceBetween(
+          clientPoint(touch1.clientX, touch1.clientY),
+          clientPoint(touch2.clientX, touch2.clientY)
         );
-        const centerX = (touch1.clientX + touch2.clientX) / 2;
-        const centerY = (touch1.clientY + touch2.clientY) / 2;
-        const rect = container.getBoundingClientRect();
-        const relativeCenterX = centerX - rect.left;
-        const relativeCenterY = centerY - rect.top;
-        const t = transformRef.current;
-
         touchStartRef.current = {
           distance,
-          scale: t.scale,
-          centerX: relativeCenterX,
-          centerY: relativeCenterY,
-          transformX: t.x,
-          transformY: t.y
+          scale: transformRef.current.scale
         };
       }
     };
@@ -2669,9 +2238,9 @@ const createNoteAtCenter = () => {
 
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
-        const distance = Math.sqrt(
-          Math.pow(touch2.clientX - touch1.clientX, 2) +
-            Math.pow(touch2.clientY - touch1.clientY, 2)
+        const distance = distanceBetween(
+          clientPoint(touch1.clientX, touch1.clientY),
+          clientPoint(touch2.clientX, touch2.clientY)
         );
 
         const start = touchStartRef.current;
@@ -2682,16 +2251,10 @@ const createNoteAtCenter = () => {
         const currentCenterX = (touch1.clientX + touch2.clientX) / 2;
         const currentCenterY = (touch1.clientY + touch2.clientY) / 2;
         const rect = container.getBoundingClientRect();
-        const relativeCenterX = currentCenterX - rect.left;
-        const relativeCenterY = currentCenterY - rect.top;
+        const relativeCenter = clientToViewPoint(clientPoint(currentCenterX, currentCenterY), rect);
 
         const t = transformRef.current;
-        const liveWorldX = (relativeCenterX - t.x) / t.scale;
-        const liveWorldY = (relativeCenterY - t.y) / t.scale;
-        const newX = relativeCenterX - liveWorldX * newScale;
-        const newY = relativeCenterY - liveWorldY * newScale;
-
-        const next = { x: newX, y: newY, scale: newScale };
+        const next = transformAroundViewPoint(t, relativeCenter, newScale);
         transformRef.current = next;
         setTransform(next);
       }
@@ -2723,7 +2286,13 @@ const createNoteAtCenter = () => {
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [scheduleZoomTransformPersist, cancelBrowseLongPress]);
+  }, [
+    scheduleZoomTransformPersist,
+    cancelBrowseLongPress,
+    interactionRef,
+    releaseAllPointers,
+    resetInteraction
+  ]);
 
   // Add wheel event listener with passive: false to allow preventDefault（与普通滚轮缩放一致，以指针为中心）
   useEffect(() => {
@@ -2733,8 +2302,7 @@ const createNoteAtCenter = () => {
     const wheelHandler = (e: WheelEvent) => {
       e.preventDefault();
       const rect = container.getBoundingClientRect();
-      const viewX = e.clientX - rect.left;
-      const viewY = e.clientY - rect.top;
+      const viewPoint = clientToViewPoint(clientPoint(e.clientX, e.clientY), rect);
       const zoomSensitivity = 0.001;
       // Shift+滚轮时系统常把纵向增量映射到 deltaX，仅用 deltaY 会导致无法缩放
       const scrollDelta = e.shiftKey
@@ -2748,11 +2316,10 @@ const createNoteAtCenter = () => {
       let nextScale = 1;
       setTransform((prev) => {
         nextScale = Math.min(Math.max(0.2, prev.scale + delta), 4);
-        const worldX = (viewX - prev.x) / prev.scale;
-        const worldY = (viewY - prev.y) / prev.scale;
-        nextX = viewX - worldX * nextScale;
-        nextY = viewY - worldY * nextScale;
-        return { x: nextX, y: nextY, scale: nextScale };
+        const next = transformAroundViewPoint(prev, viewPoint, nextScale);
+        nextX = next.x;
+        nextY = next.y;
+        return next;
       });
       scheduleZoomTransformPersist(nextX, nextY, nextScale);
     };
@@ -2773,18 +2340,17 @@ const createNoteAtCenter = () => {
 
       // 缓存容器位置，减少抖动并提高性能
       dragRectRef.current = containerRef.current?.getBoundingClientRect() || null;
+      const pointerClient = clientPoint(e.clientX, e.clientY);
       
       // 如果在Frame绘制模式 (必须在编辑模式下才有效)
       if (isDrawingFrame && workspaceEditMode) {
           const rect = dragRectRef.current;
           if (!rect) return;
-          // 坐标转换：从屏幕坐标转换为世界坐标
-          // 使用与拖动frame相同的公式，确保一致性
-          const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-          setDrawingFrameStart({ x: worldX, y: worldY });
-          setDrawingFrameEnd({ x: worldX, y: worldY });
-          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
+          beginDrawingFrame(e.pointerId, boardPoint);
+          setDrawingFrameStart(boardPoint);
+          setDrawingFrameEnd(boardPoint);
+          capturePointer(e.pointerId);
           return;
       } else if (isDrawingFrame && !workspaceEditMode) {
           // 如果不在编辑模式但处于绘制状态，自动退出绘制模式
@@ -2811,85 +2377,88 @@ const createNoteAtCenter = () => {
       if (
         e.button === 0 &&
         shiftOrBoxSelect &&
+        interactionRef.current.kind === 'idle' &&
         !draggingNoteId &&
-        !resizingFrame &&
-        !draggingFrameId &&
         !isNoteClick &&
         !resizingImage
       ) {
           const rect = dragRectRef.current;
           if (!rect) return;
-          const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-          setBoxSelectStart({ x: worldX, y: worldY });
-          setBoxSelectEnd({ x: worldX, y: worldY });
+          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
+          beginBoxSelecting(e.pointerId, boardPoint);
+          setBoxSelectStart(boardPoint);
+          setBoxSelectEnd(boardPoint);
           // Shift 时保留已有选中；否则替换
           if (!isShiftPressed && !e.shiftKey) {
               setSelectedNoteIds(new Set());
               setSelectedNoteId(null);
           }
-          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          capturePointer(e.pointerId);
           return;
       }
       
       // Allow panning in both edit and non-edit modes, but not when dragging notes or frames
-      if (e.button === 0 && !draggingNoteId && !resizingFrame && !draggingFrameId) { 
-          setIsPanning(true);
-          setIsDraggingBackground(true); // 标记开始拖拽背景
-          const startPos = { x: e.clientX, y: e.clientY };
-          panStartPos.current = startPos; // Save the initial pan position
-          lastMousePos.current = startPos;
-          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      if (e.button === 0 && !draggingNoteId && interactionRef.current.kind === 'idle') {
+          beginPanning(e.pointerId, pointerClient);
+          capturePointer(e.pointerId);
       }
   };
 
   const handleBoardPointerMove = (e: React.PointerEvent) => {
+      const pointerClient = clientPoint(e.clientX, e.clientY);
       const longPressStart = boardLongPressStartRef.current;
       if (longPressStart) {
-        const dx = e.clientX - longPressStart.clientX;
-        const dy = e.clientY - longPressStart.clientY;
-        if (Math.hypot(dx, dy) > 10) clearBoardLongPress();
+        if (
+          distanceBetween(
+            pointerClient,
+            clientPoint(longPressStart.clientX, longPressStart.clientY)
+          ) > 10
+        ) {
+          clearBoardLongPress();
+        }
       }
       // 如果处于位置选择模式，更新预览位置
       if (isSelectingNotePosition && (containerRef.current || dragRectRef.current)) {
           const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const boardX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const boardY = (e.clientY - rect.top - transform.y) / transform.scale;
-          setNotePositionPreview({ x: boardX, y: boardY });
+          setNotePositionPreview(clientToBoardPoint(pointerClient, rect, transform));
       }
       
-      // 如果正在拖动Frame
-      const activeDraggingFrameId = draggingFrameRef.current || draggingFrameId;
-      if (activeDraggingFrameId && draggingFrameOffset) {
+      const activeInteraction = interactionRef.current;
+
+      // Frame 拖动、Frame/图片缩放与 Frame 绘制共用同一互斥手势状态。
+      if (
+        activeInteraction.kind === 'dragging-frame' &&
+        activeInteraction.pointerId === e.pointerId
+      ) {
           const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
+          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
           
           setLocalDraggingFramePos({
-              x: worldX - draggingFrameOffset.x,
-              y: worldY - draggingFrameOffset.y
+              x: boardPoint.x - activeInteraction.offset.x,
+              y: boardPoint.y - activeInteraction.offset.y
           });
           return;
       }
       
       // 如果正在调整图片大小（等比例缩放）
-      if (resizingImage) {
+      if (
+        activeInteraction.kind === 'resizing-image' &&
+        activeInteraction.pointerId === e.pointerId
+      ) {
           const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-          
-          const dx = worldX - resizingImage.startX;
-          const dy = worldY - resizingImage.startY;
+          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
+          const worldX = boardPoint.x;
+          const worldY = boardPoint.y;
           
           // 计算距离中心点的距离变化（用于等比例缩放）
-          const centerX = resizingImage.startBoardX + resizingImage.startWidth / 2;
-          const centerY = resizingImage.startBoardY + resizingImage.startHeight / 2;
+          const centerX = activeInteraction.startBoardX + activeInteraction.startWidth / 2;
+          const centerY = activeInteraction.startBoardY + activeInteraction.startHeight / 2;
           
           let distanceX = 0, distanceY = 0;
-          switch (resizingImage.corner) {
+          switch (activeInteraction.corner) {
               case 'tl':
                   distanceX = centerX - worldX;
                   distanceY = centerY - worldY;
@@ -2910,20 +2479,20 @@ const createNoteAtCenter = () => {
           
           // 使用较大的距离变化来保持等比例
           const distance = Math.max(Math.abs(distanceX), Math.abs(distanceY));
-          const scale = distance / (Math.min(resizingImage.startWidth, resizingImage.startHeight) / 2);
+          const scale = distance / (Math.min(activeInteraction.startWidth, activeInteraction.startHeight) / 2);
           
           // 保持宽高比
-          const newWidth = Math.max(50, resizingImage.startWidth * scale);
-          const newHeight = Math.max(50, resizingImage.startHeight * scale);
+          const newWidth = Math.max(50, activeInteraction.startWidth * scale);
+          const newHeight = Math.max(50, activeInteraction.startHeight * scale);
           
           // 计算新的位置（保持中心点不变）
           const newBoardX = centerX - newWidth / 2;
           const newBoardY = centerY - newHeight / 2;
           
-          const note = notes.find(n => n.id === resizingImage.id);
+          const note = notes.find(n => n.id === activeInteraction.id);
           if (note) {
               setLocalResizingImageSize({
-                  id: resizingImage.id,
+                  id: activeInteraction.id,
                   x: newBoardX,
                   y: newBoardY,
                   width: newWidth,
@@ -2934,15 +2503,16 @@ const createNoteAtCenter = () => {
       }
       
       // 如果正在调整Frame大小
-      const activeResizingFrame = resizingFrameRef.current || resizingFrame;
-      if (activeResizingFrame) {
+      if (
+        activeInteraction.kind === 'resizing-frame' &&
+        activeInteraction.pointerId === e.pointerId
+      ) {
           const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
+          const { x: worldX, y: worldY } = clientToBoardPoint(pointerClient, rect, transform);
           
-          const fixedX = activeResizingFrame.fixedX;
-          const fixedY = activeResizingFrame.fixedY;
+          const fixedX = activeInteraction.fixedX;
+          const fixedY = activeInteraction.fixedY;
           
           // 相当于以固定点为起点，当前鼠标位置为对角点重新计算矩形
           const newX = Math.min(fixedX, worldX);
@@ -2955,23 +2525,25 @@ const createNoteAtCenter = () => {
       }
       
       // 如果正在绘制Frame
-      if (isDrawingFrame && drawingFrameStart) {
+      if (
+        activeInteraction.kind === 'drawing-frame' &&
+        activeInteraction.pointerId === e.pointerId
+      ) {
           const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
           if (!rect) return;
-          // 坐标转换：从屏幕坐标转换为世界坐标
-          // 使用与拖动frame相同的公式，确保一致性
-          const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-          setDrawingFrameEnd({ x: worldX, y: worldY });
+          setDrawingFrameEnd(clientToBoardPoint(pointerClient, rect, transform));
           return;
       }
       
       // 如果正在框选（含按住 Shift 触发的临时框选）
-      if (boxSelectStart) {
+      if (
+        interactionRef.current.kind === 'box-selecting' &&
+        interactionRef.current.pointerId === e.pointerId &&
+        boxSelectStart
+      ) {
           const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-          const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
+          const { x: worldX, y: worldY } = clientToBoardPoint(pointerClient, rect, transform);
           setBoxSelectEnd({ x: worldX, y: worldY });
           
           // 计算框选区域
@@ -2998,43 +2570,37 @@ const createNoteAtCenter = () => {
           return;
       }
       
-      if (!isPanning || !lastMousePos.current) return;
+      if (interactionRef.current.kind !== 'panning') return;
       if (isZoomingRef.current) return;
       e.preventDefault(); // 阻止浏览器默认行为
-      const dx = e.clientX - lastMousePos.current.x;
-      const dy = e.clientY - lastMousePos.current.y;
+      const delta = updatePanning(e.pointerId, pointerClient);
+      if (!delta) return;
       setTransform(prev => {
-        const next = { ...prev, x: prev.x + dx, y: prev.y + dy };
+        const next = { ...prev, x: prev.x + delta.x, y: prev.y + delta.y };
         transformRef.current = next;
         return next;
       });
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleBoardPointerUp = (e: React.PointerEvent) => {
+      const pointerClient = clientPoint(e.clientX, e.clientY);
+      const activeInteraction = interactionRef.current;
+      if (activeInteraction.kind !== 'idle' && activeInteraction.pointerId !== e.pointerId) return;
       // 优先处理需要释放状态的操作，避免提前返回导致状态未释放
       const didCreateFromLongPress = boardLongPressTriggeredRef.current;
       clearBoardLongPress();
       if (didCreateFromLongPress) {
           boardLongPressTriggeredRef.current = false;
           commitBoardLongPressPreview();
-          setIsPanning(false);
-          setIsDraggingBackground(false);
-          lastMousePos.current = null;
-          panStartPos.current = null;
+          resetInteraction(e.pointerId);
           dragRectRef.current = null;
-          try {
-            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-          } catch {
-            /* pointer capture may already have been released */
-          }
+          releasePointer(e.pointerId);
           return;
       }
 
-      // 如果正在调整Frame大小，结束调整
-      if (resizingFrameRef.current || resizingFrame) {
-          const currentResizing = resizingFrameRef.current || resizingFrame;
-          if (localResizingFrameSize && currentResizing) {
+      // 所有对象手势都由画布层统一提交；子元素不再抢先清除状态。
+      if (activeInteraction.kind === 'resizing-frame') {
+          if (localResizingFrameSize) {
               isWaitingForSyncRef.current = true;
               // 安全回退：如果 props 没更新，500ms 后强制清除
               setTimeout(() => {
@@ -3046,19 +2612,18 @@ const createNoteAtCenter = () => {
               }, 500);
               
               onUpdateFrames?.(frames.map(f => 
-                  f.id === currentResizing.id ? { ...f, ...localResizingFrameSize } : f
+                  f.id === activeInteraction.id ? { ...f, ...localResizingFrameSize } : f
               ));
           }
-          setResizingFrame(null);
-          resizingFrameRef.current = null;
+          resetInteraction(e.pointerId);
           // setLocalResizingFrameSize(null); // 不立即清除，等待 props 更新
           dragRectRef.current = null;
-          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          releasePointer(e.pointerId);
           return;
       }
 
       // 如果正在调整图片大小，结束调整
-      if (resizingImage) {
+      if (activeInteraction.kind === 'resizing-image') {
           if (localResizingImageSize) {
               const note = notes.find(n => n.id === localResizingImageSize.id);
               if (note) {
@@ -3071,17 +2636,16 @@ const createNoteAtCenter = () => {
                   });
               }
           }
-          setResizingImage(null);
+          resetInteraction(e.pointerId);
           setLocalResizingImageSize(null);
           dragRectRef.current = null;
-          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          releasePointer(e.pointerId);
           return;
       }
 
       // 如果正在拖动Frame，结束拖动
-      if (draggingFrameId || draggingFrameRef.current) {
-          const currentDraggingId = draggingFrameId || draggingFrameRef.current;
-          if (localDraggingFramePos && currentDraggingId) {
+      if (activeInteraction.kind === 'dragging-frame') {
+          if (localDraggingFramePos) {
               isWaitingForSyncRef.current = true;
               // 安全回退：如果 props 没更新，500ms 后强制清除
               setTimeout(() => {
@@ -3093,23 +2657,62 @@ const createNoteAtCenter = () => {
               }, 500);
 
               onUpdateFrames?.(frames.map(f => 
-                  f.id === currentDraggingId ? { ...f, x: localDraggingFramePos.x, y: localDraggingFramePos.y } : f
+                  f.id === activeInteraction.id ? { ...f, x: localDraggingFramePos.x, y: localDraggingFramePos.y } : f
               ));
           }
-          setDraggingFrameId(null);
-          draggingFrameRef.current = null;
-          setDraggingFrameOffset(null);
+          resetInteraction(e.pointerId);
           // setLocalDraggingFramePos(null); // 不立即清除，等待 props 更新
           dragRectRef.current = null;
+          releasePointer(e.pointerId);
           return;
       }
       
       // 结束当前框选拖拽（保持「多选/框选」按钮状态；Shift 临时框选本就不改 isBoxSelecting）
-      if (boxSelectStart) {
+      if (activeInteraction.kind === 'box-selecting') {
           setBoxSelectStart(null);
           setBoxSelectEnd(null);
+          resetInteraction(e.pointerId);
           dragRectRef.current = null;
-          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          releasePointer(e.pointerId);
+          return;
+      }
+
+      if (activeInteraction.kind === 'drawing-frame') {
+          const end = drawingFrameEnd ?? activeInteraction.originBoard;
+          const minWidth = 100;
+          const minHeight = 100;
+          const newFrame: Frame = {
+              id: generateId(),
+              title: 'Frame',
+              x: Math.min(activeInteraction.originBoard.x, end.x),
+              y: Math.min(activeInteraction.originBoard.y, end.y),
+              width: Math.max(Math.abs(end.x - activeInteraction.originBoard.x), minWidth),
+              height: Math.max(Math.abs(end.y - activeInteraction.originBoard.y), minHeight),
+              color: 'rgba(255, 255, 255, 0.5)'
+          };
+
+          onUpdateFrames?.([...frames, newFrame]);
+          selectedNoteIds.forEach(noteId => {
+            const note = notes.find(n => n.id === noteId);
+            if (!note) return;
+            onUpdateNote({
+              ...note,
+              groupIds: [newFrame.id],
+              groupNames: [newFrame.title],
+              groupId: newFrame.id,
+              groupName: newFrame.title
+            });
+          });
+
+          resetInteraction(e.pointerId);
+          setIsDrawingFrame(false);
+          setDrawingFrameStart(null);
+          setDrawingFrameEnd(null);
+          setSelectedFrameId(newFrame.id);
+          setEditingFrameId(newFrame.id);
+          setEditingFrameTitle('Frame');
+          dragRectRef.current = null;
+          releasePointer(e.pointerId);
           return;
       }
       
@@ -3119,7 +2722,6 @@ const createNoteAtCenter = () => {
           // 检查是否是交互元素
           const interactiveTags = ['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A'];
           if (interactiveTags.includes(target.tagName)) {
-              resetBlankClickCount();
               dragRectRef.current = null;
               return;
           }
@@ -3129,13 +2731,11 @@ const createNoteAtCenter = () => {
           while (current) {
               const zIndex = window.getComputedStyle(current).zIndex;
               if (zIndex && (zIndex === '500' || parseInt(zIndex) >= 500)) {
-                  resetBlankClickCount();
                   dragRectRef.current = null;
                   return;
               }
               if (current.classList.contains('pointer-events-auto') && 
                   (current.classList.contains('fixed') || current.classList.contains('absolute'))) {
-                  resetBlankClickCount();
                   dragRectRef.current = null;
                   return;
               }
@@ -3147,85 +2747,30 @@ const createNoteAtCenter = () => {
       // 使用拖动开始时的位置来计算总移动距离
       let hasMoved = false;
       
-      if (isPanning && panStartPos.current) {
-          const dx = e.clientX - panStartPos.current.x;
-          const dy = e.clientY - panStartPos.current.y;
-          const totalMoveDistance = Math.sqrt(dx * dx + dy * dy);
-          hasMoved = totalMoveDistance > 5; // 如果总移动距离超过5px，认为是拖动
+      if (interactionRef.current.kind === 'panning') {
+          hasMoved = movementFromOrigin(e.pointerId, pointerClient) > 5;
       }
       
       // 结束panning状态
-      if (isPanning) {
-          setIsPanning(false);
-          lastMousePos.current = null;
-          panStartPos.current = null; // Clear pan start position
-          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      if (interactionRef.current.kind === 'panning') {
+          resetInteraction(e.pointerId);
+          releasePointer(e.pointerId);
 
           // 如果刚才在拖拽背景，现在保存位置（类似MapPositionTracker的moveend事件）
-          if (isDraggingBackground && onTransformChange) {
-              onTransformChange(transform.x, transform.y, transform.scale);
+          if (onTransformChange) {
+              const currentTransform = transformRef.current;
+              onTransformChange(currentTransform.x, currentTransform.y, currentTransform.scale);
           }
-          setIsDraggingBackground(false);
       }
       
       // 点击空白处的退出逻辑（只在非拖动/非缩放状态下触发）
-      // 如果发生了拖动，不应该触发点击计数
+      // 拖动完成后不再继续处理空白点击。
       if (hasMoved) {
-          resetBlankClickCount();
           // 多选拖动的结束逻辑会在后面的代码中处理，不要在这里提前返回
           if (!isMultiSelectDragging) {
               dragRectRef.current = null;
               return;
           }
-      }
-      
-      // 如果正在绘制Frame，完成绘制（优先处理，不进行退出编辑模式的计数）
-      if (isDrawingFrame && drawingFrameStart && drawingFrameEnd) {
-          const minWidth = 100;
-          const minHeight = 100;
-          const x = Math.min(drawingFrameStart.x, drawingFrameEnd.x);
-          const y = Math.min(drawingFrameStart.y, drawingFrameEnd.y);
-          const width = Math.max(Math.abs(drawingFrameEnd.x - drawingFrameStart.x), minWidth);
-          const height = Math.max(Math.abs(drawingFrameEnd.y - drawingFrameStart.y), minHeight);
-          
-          const newFrame: Frame = {
-              id: generateId(),
-              title: 'Frame',
-              x,
-              y,
-              width,
-              height,
-              color: 'rgba(255, 255, 255, 0.5)'
-          };
-
-          onUpdateFrames?.([...frames, newFrame]);
-
-          // 被框选的便签归属到新 frame（单簇）
-          if (selectedNoteIds.size > 0) {
-            selectedNoteIds.forEach(noteId => {
-              const note = notes.find(n => n.id === noteId);
-              if (note) {
-                const updatedNote = {
-                  ...note,
-                  groupIds: [newFrame.id],
-                  groupNames: [newFrame.title],
-                  groupId: newFrame.id,
-                  groupName: newFrame.title
-                };
-                onUpdateNote(updatedNote);
-              }
-            });
-          }
-
-          setIsDrawingFrame(false);
-          setDrawingFrameStart(null);
-          setDrawingFrameEnd(null);
-          setSelectedFrameId(newFrame.id);
-          setEditingFrameId(newFrame.id);
-          setEditingFrameTitle('Frame');
-          dragRectRef.current = null;
-          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-          return;
       }
       
       // 只有在没有拖动（点击）且没有缩放时才执行退出逻辑
@@ -3234,12 +2779,11 @@ const createNoteAtCenter = () => {
           if (isSelectingNotePosition && (containerRef.current || dragRectRef.current)) {
               const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
               if (rect) {
-                const boardX = (e.clientX - rect.left - transform.x) / transform.scale;
-                const boardY = (e.clientY - rect.top - transform.y) / transform.scale;
-                createNoteAtPosition(boardX, boardY);
+                const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
+                createNoteAtPosition(boardPoint.x, boardPoint.y);
               }
               dragRectRef.current = null;
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              releasePointer(e.pointerId);
               return;
           }
           
@@ -3251,7 +2795,6 @@ const createNoteAtCenter = () => {
               setBoxSelectEnd(null);
               setDrawingFrameStart(null);
               setDrawingFrameEnd(null);
-              resetBlankClickCount();
               dragRectRef.current = null;
               return;
           }
@@ -3259,7 +2802,6 @@ const createNoteAtCenter = () => {
           // 1. 如果有编辑中的Frame标题，先退出标题编辑
           if (editingFrameId) {
               setEditingFrameId(null);
-              resetBlankClickCount();
               dragRectRef.current = null;
               return;
           }
@@ -3273,7 +2815,6 @@ const createNoteAtCenter = () => {
                 setSelectedNoteIds(new Set());
               }
               setSelectedConnectionId(null);
-              resetBlankClickCount();
               dragRectRef.current = null;
               return;
           }
@@ -3294,7 +2835,7 @@ const createNoteAtCenter = () => {
               return;
           }
           
-          // 4. 编辑模式退出改为“空白画布双击”，不再在单击中做计数退出
+          // 4. 编辑模式只通过双击空白画布退出。
       }
       
       // 如果正在绘制Frame但还没有结束点，不处理（已在上面处理完成情况）
@@ -3326,116 +2867,12 @@ const createNoteAtCenter = () => {
       setDrawingFrameEnd(null);
       setEditingFrameId(null);
     }
-    resetBlankClickCount();
-  };
-
-  // 获取连接点的位置
-  // 处理连接点点击
-  const handleConnectionPointDown = (e: React.PointerEvent, noteId: string, side: 'top' | 'right' | 'bottom' | 'left') => {
-    e.stopPropagation();
-    e.preventDefault();
-    
-    // 缩放时不触发连接
-    if (isZooming) return;
-    
-    // 振动反馈
-    if (navigator.vibrate) {
-      navigator.vibrate(VIBRATION_SHORT);
-    }
-    
-    setSelectedNoteId(noteId);
-    setConnectingFrom({ noteId, side });
-    resetBlankClickCount();
-    
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = (e.clientX - rect.left - transform.x) / transform.scale;
-      const y = (e.clientY - rect.top - transform.y) / transform.scale;
-      setConnectingTo({ x, y });
-    }
-  };
-  
-  // 处理连接点移动
-  const handleConnectionPointMove = (e: React.PointerEvent) => {
-    if (!connectingFrom || !containerRef.current) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left - transform.x) / transform.scale;
-    const y = (e.clientY - rect.top - transform.y) / transform.scale;
-    
-    setConnectingTo({ x, y });
-    
-    // 检查是否悬停在连接点附近
-    const target = findConnectionPointAt(x, y, connectingFrom.noteId);
-    if (target) {
-      setHoveringConnectionPoint({ noteId: target.noteId, side: target.side });
-    } else {
-      setHoveringConnectionPoint(null);
-    }
-  };
-  
-  // 处理连接点释放
-  const handleConnectionPointUp = (e: React.PointerEvent, targetNoteId?: string, targetSide?: 'top' | 'right' | 'bottom' | 'left') => {
-    if (!connectingFrom) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // 释放指针捕获
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    
-    if (targetNoteId && targetSide && targetNoteId !== connectingFrom.noteId) {
-      // 创建连接成功，振动反馈
-      if (navigator.vibrate) {
-        navigator.vibrate(VIBRATION_LONG);
-      }
-      
-      // 创建连接
-      const newConnection = {
-        id: generateId(),
-        fromNoteId: connectingFrom.noteId,
-        toNoteId: targetNoteId,
-        fromSide: connectingFrom.side,
-        toSide: targetSide,
-        arrow: 'forward' as const // 默认正向箭头
-      };
-      
-      const updatedConnections = [...effectiveConnections, newConnection];
-      onUpdateConnections?.(updatedConnections);
-    }
-    
-    setConnectingFrom(null);
-    setConnectingTo(null);
-    setHoveringConnectionPoint(null);
-  };
-  
-  // 检查点是否在连接点附近
-  const findConnectionPointAt = (x: number, y: number, excludeNoteId?: string) => {
-    for (const note of notes) {
-      if (note.id === excludeNoteId) continue;
-      
-      const isDragging = draggingNoteId === note.id;
-      for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-        const point = getConnectionPoint(note, side, isDragging, dragOffset);
-        const dist = Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2));
-        if (dist < CONNECTION_POINT_DETECT_RADIUS) {
-          return { noteId: note.id, side };
-        }
-      }
-    }
-    return null;
   };
 
   const handleDeleteClick = (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
       e.preventDefault();
       // Reset blank click count to prevent exiting edit mode
-      resetBlankClickCount();
       
       // If multiple notes are selected, delete all selected notes
       if (selectedNoteIds.size > 1 && selectedNoteIds.has(id)) {
@@ -3445,6 +2882,79 @@ const createNoteAtCenter = () => {
         deleteBoardNotesWithExit([id]);
       }
   };
+
+  const handleFrameSelect = useCallback(
+    (frameId: string) => {
+      if (isZooming || !workspaceEditMode) return;
+      setSelectedFrameId(frameId);
+      setSelectedNoteId(null);
+      setSelectedConnectionId(null);
+    },
+    [isZooming, workspaceEditMode]
+  );
+
+  const handleFrameDragStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>, frame: Frame) => {
+      event.stopPropagation();
+      stopAnimations();
+      if (!workspaceEditMode || isZooming) return;
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      dragRectRef.current = rect;
+      const boardPoint = clientToBoardPoint(
+        clientPoint(event.clientX, event.clientY),
+        rect,
+        transform
+      );
+      beginDraggingFrame(event.pointerId, frame.id, {
+        x: boardPoint.x - frame.x,
+        y: boardPoint.y - frame.y
+      });
+      setSelectedFrameId(frame.id);
+      setSelectedNoteId(null);
+      setSelectedConnectionId(null);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [
+      beginDraggingFrame,
+      isZooming,
+      stopAnimations,
+      transform.scale,
+      transform.x,
+      transform.y,
+      workspaceEditMode
+    ]
+  );
+
+  const handleFrameResizeStart = useCallback(
+    (
+      event: React.PointerEvent<HTMLDivElement>,
+      frame: Frame,
+      corner: BoardFrameResizeCorner
+    ) => {
+      event.stopPropagation();
+      stopAnimations();
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      dragRectRef.current = rect;
+      const { x: worldX, y: worldY } = clientToBoardPoint(
+        clientPoint(event.clientX, event.clientY),
+        rect,
+        transform
+      );
+      const fixedX = corner.includes('left') ? frame.x + frame.width : frame.x;
+      const fixedY = corner.includes('top') ? frame.y + frame.height : frame.y;
+      beginResizingFrame(event.pointerId, frame.id, fixedX, fixedY);
+      setLocalResizingFrameSize({
+        x: Math.min(fixedX, worldX),
+        y: Math.min(fixedY, worldY),
+        width: Math.max(100, Math.abs(fixedX - worldX)),
+        height: Math.max(100, Math.abs(fixedY - worldY))
+      });
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [beginResizingFrame, stopAnimations, transform.scale, transform.x, transform.y]
+  );
 
   // Visuals
   const gridSize = 40 * transform.scale;
@@ -3541,15 +3051,19 @@ const createNoteAtCenter = () => {
       `}</style>
       <div 
         ref={containerRef}
-        className={`w-full h-full overflow-hidden bg-gray-50 relative touch-none select-none ${
+        className={`workspace-canvas w-full h-full overflow-hidden relative touch-none select-none ${
+          chromeAppearance === 'dark' ? 'workspace-canvas--dark ' : ''
+        }${
           isPanning 
             ? 'cursor-grabbing' 
             : 'cursor-grab'
         }`}
-        style={isDragging ? { boxShadow: `0 0 0 4px ${themeColor}` } : undefined}
+        style={{
+          ...(isDragging ? { boxShadow: `0 0 0 4px ${themeColor}` } : {})
+        }}
         onPointerDown={handleBoardPointerDown}
         onPointerMove={handleBoardPointerMove}
-        onPointerLeave={(e) => {
+        onPointerLeave={() => {
             clearBoardLongPress();
             // 当鼠标离开画布时，清除位置预览
             if (isSelectingNotePosition) {
@@ -3562,16 +3076,7 @@ const createNoteAtCenter = () => {
         onDrop={handleDrop}
         onDragEnd={handleDragEnd}
         onPointerUp={handleBoardPointerUp}
-        onPointerCancel={() => {
-          clearBoardLongPress();
-          if (boardLongPressTriggeredRef.current) cancelBoardLongPressPreview();
-          boardLongPressTriggeredRef.current = false;
-          setIsPanning(false);
-          setIsDraggingBackground(false);
-          lastMousePos.current = null;
-          panStartPos.current = null;
-          dragRectRef.current = null;
-        }}
+        onPointerCancel={(event) => cancelTransientBoardInteraction(event.pointerId)}
         onDoubleClick={handleBoardDoubleClick}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -3711,6 +3216,7 @@ const createNoteAtCenter = () => {
               return (
                 <div
                   key={frame.id}
+                  data-board-export-frame=""
                   className="absolute overflow-visible"
                   style={{
                     left: `${displayX}px`,
@@ -3753,358 +3259,18 @@ const createNoteAtCenter = () => {
                   bottom: '10px',
                   cursor: 'default',
                 }}
-                onClick={(e) => {
-                  // 不阻止事件冒泡，让事件传递到背景，使用背景的计数逻辑
-                }}
               />
-              {/* 可交互的边框区域 - 使用4个边框div覆盖边框部分 */}
-              {/* 上边框 */}
-              <div
-                className="absolute pointer-events-auto"
-                style={{
-                  left: '0',
-                  top: '0',
-                  right: '0',
-                  height: '10px',
-                  cursor: draggingFrameId === frame.id ? 'grabbing' : 'grab',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isZooming || !workspaceEditMode) return;
-                  setSelectedFrameId(frame.id);
-                  setSelectedNoteId(null);
-                  setSelectedConnectionId(null);
-                  resetBlankClickCount();
-                }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    stopAnimations();
-                    if (!workspaceEditMode || isZooming) return;
-                    const rect = containerRef.current?.getBoundingClientRect();
-                    if (!rect) return;
-                    dragRectRef.current = rect;
-                    const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                    const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                    setDraggingFrameId(frame.id);
-                    draggingFrameRef.current = frame.id;
-                    setDraggingFrameOffset({ x: worldX - frame.x, y: worldY - frame.y });
-                    setSelectedFrameId(frame.id);
-                    setSelectedNoteId(null);
-                    setSelectedConnectionId(null);
-                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                  }}
-                  onPointerUp={(e) => {
-                    e.stopPropagation();
-                    if (draggingFrameId === frame.id || draggingFrameRef.current === frame.id) {
-                      setDraggingFrameId(null);
-                      draggingFrameRef.current = null;
-                      setDraggingFrameOffset(null);
-                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                    }
-                  }}
+              <BoardFrameControls
+                frameId={frame.id}
+                isDragging={draggingFrameId === frame.id}
+                showResizeHandles={workspaceEditMode && selectedFrameId === frame.id}
+                scale={transform.scale}
+                themeColor={themeColor}
+                chromeStyle={frameChromeStyle}
+                onSelect={handleFrameSelect}
+                onDragStart={(event) => handleFrameDragStart(event, frame)}
+                onResizeStart={(event, corner) => handleFrameResizeStart(event, frame, corner)}
               />
-              {/* 下边框 */}
-              <div
-                className="absolute pointer-events-auto"
-                style={{
-                  left: '0',
-                  bottom: '0',
-                  right: '0',
-                  height: '10px',
-                  cursor: draggingFrameId === frame.id ? 'grabbing' : 'grab',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isZooming || !workspaceEditMode) return;
-                  setSelectedFrameId(frame.id);
-                  setSelectedNoteId(null);
-                  setSelectedConnectionId(null);
-                  resetBlankClickCount();
-                }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    stopAnimations();
-                    if (!workspaceEditMode || isZooming) return;
-                    const rect = containerRef.current?.getBoundingClientRect();
-                    if (!rect) return;
-                    dragRectRef.current = rect;
-                    const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                    const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                    setDraggingFrameId(frame.id);
-                    draggingFrameRef.current = frame.id;
-                    setDraggingFrameOffset({ x: worldX - frame.x, y: worldY - frame.y });
-                    setSelectedFrameId(frame.id);
-                    setSelectedNoteId(null);
-                    setSelectedConnectionId(null);
-                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                  }}
-                  onPointerUp={(e) => {
-                    e.stopPropagation();
-                    if (draggingFrameId === frame.id || draggingFrameRef.current === frame.id) {
-                      setDraggingFrameId(null);
-                      draggingFrameRef.current = null;
-                      setDraggingFrameOffset(null);
-                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                    }
-                  }}
-              />
-              {/* 左边框 */}
-              <div
-                className="absolute pointer-events-auto"
-                style={{
-                  left: '0',
-                  top: '10px',
-                  bottom: '10px',
-                  width: '10px',
-                  cursor: draggingFrameId === frame.id ? 'grabbing' : 'grab',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isZooming || !workspaceEditMode) return;
-                  setSelectedFrameId(frame.id);
-                  setSelectedNoteId(null);
-                  setSelectedConnectionId(null);
-                  resetBlankClickCount();
-                }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    stopAnimations();
-                    if (!workspaceEditMode || isZooming) return;
-                    const rect = containerRef.current?.getBoundingClientRect();
-                    if (!rect) return;
-                    dragRectRef.current = rect;
-                    const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                    const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                    setDraggingFrameId(frame.id);
-                    draggingFrameRef.current = frame.id;
-                    setDraggingFrameOffset({ x: worldX - frame.x, y: worldY - frame.y });
-                    setSelectedFrameId(frame.id);
-                    setSelectedNoteId(null);
-                    setSelectedConnectionId(null);
-                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                  }}
-                  onPointerUp={(e) => {
-                    e.stopPropagation();
-                    if (draggingFrameId === frame.id || draggingFrameRef.current === frame.id) {
-                      setDraggingFrameId(null);
-                      draggingFrameRef.current = null;
-                      setDraggingFrameOffset(null);
-                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                    }
-                  }}
-              />
-              {/* 右边框 */}
-              <div
-                className="absolute pointer-events-auto"
-                style={{
-                  right: '0',
-                  top: '10px',
-                  bottom: '10px',
-                  width: '10px',
-                  cursor: draggingFrameId === frame.id ? 'grabbing' : 'grab',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isZooming || !workspaceEditMode) return;
-                  setSelectedFrameId(frame.id);
-                  setSelectedNoteId(null);
-                  setSelectedConnectionId(null);
-                  resetBlankClickCount();
-                }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    stopAnimations();
-                    if (!workspaceEditMode || isZooming) return;
-                    const rect = containerRef.current?.getBoundingClientRect();
-                    if (!rect) return;
-                    dragRectRef.current = rect;
-                    const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                    const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                    setDraggingFrameId(frame.id);
-                    draggingFrameRef.current = frame.id;
-                    setDraggingFrameOffset({ x: worldX - frame.x, y: worldY - frame.y });
-                    setSelectedFrameId(frame.id);
-                    setSelectedNoteId(null);
-                    setSelectedConnectionId(null);
-                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                  }}
-                  onPointerUp={(e) => {
-                    e.stopPropagation();
-                    if (draggingFrameId === frame.id || draggingFrameRef.current === frame.id) {
-                      setDraggingFrameId(null);
-                      draggingFrameRef.current = null;
-                      setDraggingFrameOffset(null);
-                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                    }
-                  }}
-              />
-              
-              {/* Resize Handles - 只在编辑模式且选中时显示 */}
-              {workspaceEditMode && selectedFrameId === frame.id && (
-                <>
-                  {/* Top Left */}
-                  <div
-                    className="absolute cursor-nwse-resize pointer-events-auto"
-                    style={{
-                      left: '-6px',
-                      top: '-6px',
-                      width: '12px',
-                      height: '12px',
-                      ...frameChromeStyle,
-                      border: `2px solid ${themeColor}`,
-                      borderRadius: '2px',
-                      transform: `scale(${1 / transform.scale})`,
-                      transformOrigin: 'top left',
-                      zIndex: 2000, // 确保高于标题层
-                    }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      stopAnimations();
-                      const rect = containerRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      dragRectRef.current = rect;
-                      const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                      const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                      
-                      const fixedX = frame.x + frame.width;
-                      const fixedY = frame.y + frame.height;
-                      
-                      const resizeInfo = { id: frame.id, fixedX, fixedY };
-                      setResizingFrame(resizeInfo);
-                      resizingFrameRef.current = resizeInfo;
-                      
-                      // 立即设置初始位置，避免第一帧跳跃
-                      const newX = Math.min(fixedX, worldX);
-                      const newY = Math.min(fixedY, worldY);
-                      const newWidth = Math.max(100, Math.abs(fixedX - worldX));
-                      const newHeight = Math.max(100, Math.abs(fixedY - worldY));
-                      setLocalResizingFrameSize({ x: newX, y: newY, width: newWidth, height: newHeight });
-                      
-                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                    }}
-                  />
-                  
-                  {/* Top Right */}
-                  <div
-                    className="absolute cursor-nesw-resize pointer-events-auto"
-                    style={{
-                      right: '-6px',
-                      top: '-6px',
-                      width: '12px',
-                      height: '12px',
-                      ...frameChromeStyle,
-                      border: `2px solid ${themeColor}`,
-                      borderRadius: '2px',
-                      transform: `scale(${1 / transform.scale})`,
-                      transformOrigin: 'top right',
-                      zIndex: 2000,
-                    }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      stopAnimations();
-                      const rect = containerRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      dragRectRef.current = rect;
-                      const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                      const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                      
-                      const fixedX = frame.x;
-                      const fixedY = frame.y + frame.height;
-                      
-                      setResizingFrame({ id: frame.id, fixedX, fixedY });
-                      
-                      // 立即设置初始位置，避免第一帧跳跃
-                      const newX = Math.min(fixedX, worldX);
-                      const newY = Math.min(fixedY, worldY);
-                      const newWidth = Math.max(100, Math.abs(fixedX - worldX));
-                      const newHeight = Math.max(100, Math.abs(fixedY - worldY));
-                      setLocalResizingFrameSize({ x: newX, y: newY, width: newWidth, height: newHeight });
-                      
-                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                    }}
-                  />
-                  
-                  {/* Bottom Left */}
-                  <div
-                    className="absolute cursor-nesw-resize pointer-events-auto"
-                    style={{
-                      left: '-6px',
-                      bottom: '-6px',
-                      width: '12px',
-                      height: '12px',
-                      ...frameChromeStyle,
-                      border: `2px solid ${themeColor}`,
-                      borderRadius: '2px',
-                      transform: `scale(${1 / transform.scale})`,
-                      transformOrigin: 'bottom left',
-                      zIndex: 2000,
-                    }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      stopAnimations();
-                      const rect = containerRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      dragRectRef.current = rect;
-                      const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                      const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                      
-                      const fixedX = frame.x + frame.width;
-                      const fixedY = frame.y;
-                      
-                      setResizingFrame({ id: frame.id, fixedX, fixedY });
-                      
-                      // 立即设置初始位置，避免第一帧跳跃
-                      const newX = Math.min(fixedX, worldX);
-                      const newY = Math.min(fixedY, worldY);
-                      const newWidth = Math.max(100, Math.abs(fixedX - worldX));
-                      const newHeight = Math.max(100, Math.abs(fixedY - worldY));
-                      setLocalResizingFrameSize({ x: newX, y: newY, width: newWidth, height: newHeight });
-                      
-                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                    }}
-                  />
-                  
-                  {/* Bottom Right */}
-                  <div
-                    className="absolute cursor-nwse-resize pointer-events-auto"
-                    style={{
-                      right: '-6px',
-                      bottom: '-6px',
-                      width: '12px',
-                      height: '12px',
-                      ...frameChromeStyle,
-                      border: `2px solid ${themeColor}`,
-                      borderRadius: '2px',
-                      transform: `scale(${1 / transform.scale})`,
-                      transformOrigin: 'bottom right',
-                      zIndex: 2000,
-                    }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      stopAnimations();
-                      const rect = containerRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      dragRectRef.current = rect;
-                      const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                      const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                      
-                      const fixedX = frame.x;
-                      const fixedY = frame.y;
-                      
-                      setResizingFrame({ id: frame.id, fixedX, fixedY });
-                      
-                      // 立即设置初始位置，避免第一帧跳跃
-                      const newX = Math.min(fixedX, worldX);
-                      const newY = Math.min(fixedY, worldY);
-                      const newWidth = Math.max(100, Math.abs(fixedX - worldX));
-                      const newHeight = Math.max(100, Math.abs(fixedY - worldY));
-                      setLocalResizingFrameSize({ x: newX, y: newY, width: newWidth, height: newHeight });
-                      
-                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                    }}
-                  />
-                </>
-              )}
             </div>
               );
             })}
@@ -4114,8 +3280,6 @@ const createNoteAtCenter = () => {
             // 使用本地拖拽/缩放位置，避免全局状态更新带来的延迟和抖动
             let displayX = frame.x;
             let displayY = frame.y;
-            let displayWidth = frame.width;
-            let displayHeight = frame.height;
             
             if (draggingFrameId === frame.id && localDraggingFramePos) {
                 displayX = localDraggingFramePos.x;
@@ -4123,8 +3287,6 @@ const createNoteAtCenter = () => {
             } else if (resizingFrame?.id === frame.id && localResizingFrameSize) {
                 displayX = localResizingFrameSize.x;
                 displayY = localResizingFrameSize.y;
-                displayWidth = localResizingFrameSize.width;
-                displayHeight = localResizingFrameSize.height;
             }
 
             const filterActive = filterFrameIds.size > 0;
@@ -4142,6 +3304,7 @@ const createNoteAtCenter = () => {
             <React.Fragment key={frame.id}>
               <div
                 key={`title-${frame.id}`}
+                data-board-export-frame=""
                 className={`absolute -top-8 left-0 rounded-lg shadow-md flex flex-col pointer-events-auto overflow-hidden border ${
                   ch ? 'border-gray-200/70' : 'border-white/45'
                 }`}
@@ -4167,7 +3330,6 @@ const createNoteAtCenter = () => {
                   setSelectedFrameId(frame.id);
                   setSelectedNoteId(null);
                   setSelectedConnectionId(null);
-                  resetBlankClickCount();
                 } else {
                   // 非编辑模式下，点击frame标题进行过滤（支持shift多选）
                   const newFilterFrameIds = new Set(filterFrameIds);
@@ -4199,31 +3361,19 @@ const createNoteAtCenter = () => {
                 const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
                 if (!rect) return;
                 dragRectRef.current = rect;
-                const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                setDraggingFrameId(frame.id);
-                setDraggingFrameOffset({ x: worldX - frame.x, y: worldY - frame.y });
+                const boardPoint = clientToBoardPoint(
+                  clientPoint(e.clientX, e.clientY),
+                  rect,
+                  transform
+                );
+                beginDraggingFrame(e.pointerId, frame.id, {
+                  x: boardPoint.x - frame.x,
+                  y: boardPoint.y - frame.y
+                });
                 setSelectedFrameId(frame.id);
                 setSelectedNoteId(null);
                 setSelectedConnectionId(null);
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-              }}
-              onPointerUp={(e) => {
-                e.stopPropagation(); // 阻止传播到背景
-                
-                // 处理通过标题拖拽移动 Frame 的最终保存逻辑
-                if (draggingFrameId === frame.id && localDraggingFramePos) {
-                  onUpdateFrames?.(frames.map(f => 
-                    f.id === frame.id ? { ...f, x: localDraggingFramePos.x, y: localDraggingFramePos.y } : f
-                  ));
-                }
-
-                // 结束拖拽
-                if (draggingFrameId === frame.id) {
-                  setDraggingFrameId(null);
-                  setDraggingFrameOffset(null);
-                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-                }
               }}
             >
                 <div className="absolute inset-0 pointer-events-none" style={frameChromeStyle} />
@@ -4403,10 +3553,7 @@ const createNoteAtCenter = () => {
                         transformOrigin: 'center',
                   }}
                   className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
-                    onPointerDown={(e) => {
-                        lastMousePos.current = { x: e.clientX, y: e.clientY };
-                        handleNotePointerDown(e, note.id, note);
-                    }}
+                    onPointerDown={(e) => handleNotePointerDown(e, note.id, note)}
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={(e) => handleNotePointerUp(e, note)}
                   onPointerCancel={handleNotePointerCancel}
@@ -4431,7 +3578,7 @@ const createNoteAtCenter = () => {
                         <X size={14} />
                       </button>
                         {/* Resize handles for image notes - show when selected */}
-                        {((selectedNoteId === note.id || selectedNoteIds.has(note.id)) && !connectingFrom) && (
+                        {(selectedNoteId === note.id || selectedNoteIds.has(note.id)) && (
                           <>
                             {(['tl', 'tr', 'bl', 'br'] as const).map(corner => {
                               const width = noteWidth;
@@ -4471,18 +3618,14 @@ const createNoteAtCenter = () => {
                                     e.preventDefault();
                                     const rect = containerRef.current?.getBoundingClientRect();
                                     if (!rect) return;
-                                    const worldX = (e.clientX - rect.left - transform.x) / transform.scale;
-                                    const worldY = (e.clientY - rect.top - transform.y) / transform.scale;
-                                    setResizingImage({
+                                    dragRectRef.current = rect;
+                                    beginResizingImage(e.pointerId, {
                                       id: note.id,
                                       corner,
-                                      startX: worldX,
-                                      startY: worldY,
                                       startWidth: noteWidth,
                                       startHeight: noteHeight,
                                       startBoardX: note.boardX,
-                                      startBoardY: note.boardY,
-                                      aspect: noteWidth / noteHeight
+                                      startBoardY: note.boardY
                                     });
                                     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                                   }}
@@ -4543,10 +3686,7 @@ const createNoteAtCenter = () => {
                       transformOrigin: 'center',
                   }}
                   className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
-                  onPointerDown={(e) => {
-                      lastMousePos.current = { x: e.clientX, y: e.clientY };
-                      handleNotePointerDown(e, note.id, note);
-                  }}
+                  onPointerDown={(e) => handleNotePointerDown(e, note.id, note)}
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={(e) => handleNotePointerUp(e, note)}
                   onPointerCancel={handleNotePointerCancel}
@@ -4783,7 +3923,6 @@ const createNoteAtCenter = () => {
                 return;
               }
               deleteBoardNotesWithExit(idsToDelete);
-              resetBlankClickCount();
               setMultiBatchPanel('none');
             };
 
@@ -4825,7 +3964,6 @@ const createNoteAtCenter = () => {
               setBatchTimeEndStr('');
               setBrowseTagFilterPanelOpen(false);
               setBrowseTimeFilterPanelOpen(false);
-              resetBlankClickCount();
             };
 
             const stopToolbarEvent = (e: React.SyntheticEvent) => {
@@ -4872,7 +4010,6 @@ const createNoteAtCenter = () => {
                     setBrowseTagFilterPanelOpen(false);
                     setBrowseTimeFilterPanelOpen(false);
                     onWorkspaceEditModeChange(true);
-                    resetBlankClickCount();
                   }}
                   onOpenBrowseTagFilterPanel={() => {
                     setBrowseTagFilterPanelOpen((open) => {
@@ -4959,6 +4096,7 @@ const createNoteAtCenter = () => {
         {/* 设置 + 图层：左上角（与 Mapping 一致） */}
         {isUIVisible && (
             <div
+                ref={boardToolbarRef}
                 data-allow-context-menu
                 className="fixed top-2 sm:top-4 ui-workspace-left z-[500] pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2"
                 onPointerDown={(e) => e.stopPropagation()}
@@ -4998,24 +4136,85 @@ const createNoteAtCenter = () => {
                     </ChromeIconButton>
                 </div>
                 )}
-                {boardLayerPanelTop != null && projectFull ? (
-                  <ResponsiveWindowPresence
-                    open={showLayerPanel}
-                    onClose={() => setShowLayerPanel(false)}
-                    backdropLabel="关闭筛选"
-                  >
-                    {(phase) => (
-                      <div
-                        data-map-layer-chrome-panel
-                        className={`map-layer-chrome-panel ui-compact-bottom-sheet map-chrome-content-light fixed z-[var(--z-map-anchored-panel)] ui-chrome-menu-page-left flex items-start pointer-events-none chrome-responsive-anchored-${phase}`}
-                        style={{ top: boardLayerPanelTop }}
-                      >
-                        <div className="pointer-events-auto shrink-0">
+                <ChromeToolbarSlot
+                  kind={boardToolbarKind}
+                  appearance={chromeAppearance}
+                  onClose={() => {
+                    setShowLayerPanel(false);
+                    setShowSettingsPanel(false);
+                  }}
+                  top={boardLayerMenuTop}
+                  dismissIgnoreRefs={[boardToolbarRef]}
+                  resolve={(kind) => {
+                    if (kind === 'settings') {
+                      return {
+                        align: 'start' as const,
+                        surface: 'window' as const,
+                        backdropLabel: '关闭设置',
+                        className: CHROME_TOOLBAR_WINDOW_CLASS,
+                        style: panelChromeStyle,
+                        role: 'dialog',
+                        'aria-label': '设置',
+                        children: (
+                          <SettingsPanel
+                            shell={false}
+                            isOpen={showSettingsPanel}
+                            onClose={() => setShowSettingsPanel(false)}
+                            anchorRef={settingsButtonRef}
+                            settingsContextView="board"
+                            themeColor={themeColor}
+                            onThemeColorChange={onThemeColorChange ?? (() => {})}
+                            uiDarkMode={uiDarkMode}
+                            onUiDarkModeChange={onUiDarkModeChange}
+                            mapUiChromeOpacity={mapUiChromeOpacity}
+                            onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
+                            mapUiChromeBlurPx={mapUiChromeBlurPx}
+                            onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
+                            currentMapStyle={mapStyleId}
+                            onMapStyleChange={onMapStyleChange ?? (() => {})}
+                            boardVariantToggles={{
+                              primary: layerVisibility.primary,
+                              image: layerVisibility.image,
+                              onChange: (next) =>
+                                setLayerVisibility((prev) => ({ ...prev, ...next }))
+                            }}
+                            graphProject={project as Project | undefined}
+                            onGraphProjectPatch={
+                              onUpdateProject && project
+                                ? projectId
+                                  ? (patch) =>
+                                      void (
+                                        onUpdateProject as (
+                                          a: string | Project,
+                                          b?: Partial<Project>
+                                        ) => void
+                                      )(projectId, patch)
+                                  : (patch) =>
+                                      void onUpdateProject({
+                                        ...project,
+                                        ...patch
+                                      } as Project)
+                                : undefined
+                            }
+                          />
+                        )
+                      };
+                    }
+                    return {
+                      align: 'start' as const,
+                      surface: 'window' as const,
+                      backdropLabel: '关闭筛选',
+                      className: CHROME_TOOLBAR_WINDOW_CLASS,
+                      style: panelChromeStyle,
+                      role: 'dialog',
+                      'aria-label': '筛选',
+                      children: projectFull ? (
+                        <div className="pointer-events-auto flex min-h-0 min-w-0 flex-1 flex-col">
                           <ProjectNotesLayerPanel
                             themeColor={themeColor ?? DEFAULT_THEME_COLOR}
-                            panelChromeStyle={panelChromeStyle}
                             variant="dock"
                             flow
+                            hosted
                             dockAlign="start"
                             projectId={projectId ?? ''}
                             merged={mergedProjectBoardLayers}
@@ -5027,15 +4226,17 @@ const createNoteAtCenter = () => {
                             onBatchUpdateNotes={handleBoardBatchNotes}
                             frames={frames ?? []}
                             onUpdateFrame={
-                              onUpdateFrames || onUpdateProject ? handleBoardUpdateFrame : undefined
+                              onUpdateFrames || onUpdateProject
+                                ? handleBoardUpdateFrame
+                                : undefined
                             }
                             onActivateNote={panBoardToNoteCenter}
                           />
                         </div>
-                      </div>
-                    )}
-                  </ResponsiveWindowPresence>
-                ) : null}
+                      ) : null
+                    };
+                  }}
+                />
             </div>
         )}
 
@@ -5061,8 +4262,10 @@ const createNoteAtCenter = () => {
               setDrawingFrameStart(null);
               setDrawingFrameEnd(null);
               setSelectedFrameId(null);
-              setResizingFrame(null);
-              resizingFrameRef.current = null;
+              resetInteraction();
+              setLocalDraggingFramePos(null);
+              setLocalResizingFrameSize(null);
+              setLocalResizingImageSize(null);
               setEditingFrameTitle('');
               setEditingFrameId(null);
             }}
@@ -5181,7 +4384,6 @@ const createNoteAtCenter = () => {
               mapUiChromeOpacity={mapUiChromeOpacity}
               mapUiChromeBlurPx={mapUiChromeBlurPx}
               onSave={(updated) => {
-                  // Text variant removed
                   if (updated.id && notes.some(n => n.id === updated.id)) {
                       // 确保保留原始note的variant
                       const existingNote = notes.find(n => n.id === updated.id);
@@ -5243,7 +4445,7 @@ const createNoteAtCenter = () => {
         isEditMode={workspaceEditMode}
         selectedCount={selectedNoteIds.size}
         anchorRef={boardBrowseTagFilterButtonRef}
-        layoutRevision={browseTagFilterLayoutRevision}
+        layoutRevision={`${browseFilterLayoutRevision}:tag:${browseTagFilterPanelOpen}`}
         themeColor={themeColor}
         panelChromeStyle={panelChromeStyle}
         labelsInSelection={browseTagLabelsInSelection}
@@ -5264,7 +4466,7 @@ const createNoteAtCenter = () => {
         isEditMode={workspaceEditMode}
         selectedCount={selectedNoteIds.size}
         anchorRef={boardBrowseTimeFilterButtonRef}
-        layoutRevision={browseTimeFilterLayoutRevision}
+        layoutRevision={`${browseFilterLayoutRevision}:time:${browseTimeFilterPanelOpen}`}
         themeColor={themeColor}
         panelChromeStyle={panelChromeStyle}
         hasTimedNotesInSelection={browseTimeSelectionHasTimedNotes}
@@ -5308,41 +4510,7 @@ const createNoteAtCenter = () => {
         />
       )}
 
-      <SettingsPanel
-        isOpen={showSettingsPanel}
-        onClose={() => setShowSettingsPanel(false)}
-        anchorRef={settingsButtonRef}
-        settingsContextView="board"
-        themeColor={themeColor}
-        onThemeColorChange={onThemeColorChange ?? (() => {})}
-        mapUiChromeOpacity={mapUiChromeOpacity}
-        onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
-        mapUiChromeBlurPx={mapUiChromeBlurPx}
-        onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
-        currentMapStyle={mapStyleId}
-        onMapStyleChange={onMapStyleChange ?? (() => {})}
-        boardVariantToggles={{
-          primary: layerVisibility.primary,
-          image: layerVisibility.image,
-          onChange: (next) => setLayerVisibility((prev) => ({ ...prev, ...next }))
-        }}
-        graphProject={project as Project | undefined}
-        onGraphProjectPatch={
-          onUpdateProject && project
-            ? projectId
-              ? (patch) =>
-                  void (onUpdateProject as (a: string | Project, b?: Partial<Project>) => void)(
-                    projectId,
-                    patch
-                  )
-              : (patch) =>
-                  void onUpdateProject({
-                    ...project,
-                    ...patch
-                  } as Project)
-            : undefined
-        }
-      />
+      {/* Settings hosted by ChromeToolbarSlot */}
     </div>
   );
 };

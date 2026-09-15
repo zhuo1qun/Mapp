@@ -13,6 +13,7 @@ import { NoteEditor } from './NoteEditor';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
 import { SettingsPanel } from './SettingsPanel';
+import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { TableTopLeftSettingsButton } from './table/TableTopLeftSettingsButton';
 import { TableTopRightDownloadButton } from './table/TableTopRightDownloadButton';
 import { TableBottomSubViewBar } from './table/TableBottomSubViewBar';
@@ -33,11 +34,14 @@ interface TableViewProps {
   onSwitchToBoardView?: (coords?: { x: number; y: number }) => void;
   onSwitchToMapView?: (coords?: { lat: number; lng: number; zoom?: number }) => void;
   onSwitchToGraphView?: (noteId: string) => void;
+  onToggleEditor?: (isOpen: boolean) => void;
   themeColor: string;
   panelChromeStyle?: React.CSSProperties;
   isUIVisible?: boolean;
   chromeHoverBackground?: string;
   onThemeColorChange?: (color: string) => void;
+  uiDarkMode?: boolean;
+  onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
   mapUiChromeBlurPx?: number;
@@ -119,11 +123,14 @@ export const TableView: React.FC<TableViewProps> = ({
   onSwitchToBoardView,
   onSwitchToMapView,
   onSwitchToGraphView,
+  onToggleEditor,
   themeColor,
   panelChromeStyle,
   isUIVisible = true,
   chromeHoverBackground,
   onThemeColorChange,
+  uiDarkMode,
+  onUiDarkModeChange,
   mapUiChromeOpacity = 0.9,
   onMapUiChromeOpacityChange,
   mapUiChromeBlurPx = 8,
@@ -131,6 +138,7 @@ export const TableView: React.FC<TableViewProps> = ({
   mapStyleId = 'carto-light-nolabels',
   onMapStyleChange,
 }) => {
+  const chromeAppearance = useChromeAppearance();
   const ch = panelChromeStyle;
   const chHover = chromeHoverBackground;
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -211,6 +219,17 @@ export const TableView: React.FC<TableViewProps> = ({
   useEffect(() => {
     if (activeSubView !== 'points') setEditorNoteId(null);
   }, [activeSubView]);
+
+  useEffect(() => {
+    // 宽屏 Table 的编辑器是可平移画布上的并列窗口，而非覆盖工作区的 modal。
+    // 因此不占用 App 的全局 editor 状态，侧栏入口与视图栏仍应可用。
+    onToggleEditor?.(!!editorNoteId && !isWideTableCanvas);
+  }, [editorNoteId, isWideTableCanvas, onToggleEditor]);
+
+  useEffect(
+    () => () => onToggleEditor?.(false),
+    [onToggleEditor]
+  );
 
   useEffect(() => {
     const editorIsOpen = !!editorNoteId;
@@ -683,7 +702,9 @@ export const TableView: React.FC<TableViewProps> = ({
   );
 
   return (
-    <div className="relative h-full bg-gray-50 flex flex-col min-h-0">
+    <div className={`workspace-canvas relative h-full flex flex-col min-h-0 ${
+      chromeAppearance === 'dark' ? 'workspace-canvas--dark' : ''
+    }`}>
       <TableTopLeftSettingsButton
         isUIVisible={isUIVisible}
         themeColor={themeColor}
@@ -725,7 +746,9 @@ export const TableView: React.FC<TableViewProps> = ({
       <div
         ref={canvasViewportRef}
         className={isWideTableCanvas
-          ? `table-node-canvas relative flex-1 min-h-0 overflow-hidden box-border ${isCanvasDragging ? 'cursor-grabbing' : 'cursor-grab'}`
+          ? `table-node-canvas relative flex-1 min-h-0 overflow-hidden box-border ${
+              chromeAppearance === 'dark' ? 'workspace-canvas--dark ' : ''
+            }${isCanvasDragging ? 'cursor-grabbing' : 'cursor-grab'}`
           : `flex-1 min-h-0 overflow-auto px-4 sm:px-6 box-border ${edgesTableEnabled ? 'pb-28' : 'pb-8'}`}
         style={isWideTableCanvas ? { touchAction: 'none' } : { paddingTop: tableScrollTopPad }}
         onPointerDown={handleCanvasPointerDown}
@@ -952,6 +975,8 @@ export const TableView: React.FC<TableViewProps> = ({
         settingsContextView="table"
         themeColor={themeColor}
         onThemeColorChange={onThemeColorChange ?? (() => {})}
+        uiDarkMode={uiDarkMode}
+        onUiDarkModeChange={onUiDarkModeChange}
         mapUiChromeOpacity={mapUiChromeOpacity}
         onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
         mapUiChromeBlurPx={mapUiChromeBlurPx}

@@ -59,8 +59,10 @@ import {
   mapChromeSurfaceStyle,
   mapChromeHoverBackground,
   mapChromeControlStyle,
-  mapChromeControlHoverBackground
+  mapChromeControlHoverBackground,
+  resolveChromeAppearance
 } from './utils/map/mapChromeStyle';
+import { ChromeAppearanceContext } from './components/ui/chromeAppearanceContext';
 import { applyThemeChromeCssVars } from './utils/theme/themeChrome';
 import { cancelPendingMapLocate, isMapLocatePending } from './utils/map/pendingMapLocate';
 import { useDataImport } from './components/hooks/useDataImport';
@@ -574,7 +576,7 @@ export default function App() {
       if (!(target instanceof Element)) return;
       if (
         target.closest(
-          '[data-allow-context-menu], [data-workspace-transient], [data-graph-top-left-panel], [data-workspace-modal], [data-map-search-chrome-panel], [data-tag-add-panel], [data-note-time-range-panel]'
+          '[data-allow-context-menu], [data-workspace-transient], [data-graph-top-left-panel], [data-workspace-modal], [data-map-search-chrome-panel], [data-tag-add-panel], [data-note-time-range-panel], [data-note-emoji-picker]'
         )
       ) {
         return;
@@ -826,37 +828,43 @@ export default function App() {
 
   const [mapUiChromeOpacity, setMapUiChromeOpacity] = useState(0.9);
   const [mapUiChromeBlurPx, setMapUiChromeBlurPx] = useState(8);
+  const [uiDarkMode, setUiDarkMode] = useState(false);
+
+  const forceSatelliteDark = projectKind === 'mapping' && viewMode === 'map';
+  const chromeAppearance = useMemo(
+    () =>
+      resolveChromeAppearance({
+        darkMode: uiDarkMode,
+        mapStyleId: mapStyle,
+        forceSatelliteDark
+      }),
+    [uiDarkMode, mapStyle, forceSatelliteDark]
+  );
 
   const panelChromeStyle = useMemo(
-    () => mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx),
-    [mapUiChromeOpacity, mapUiChromeBlurPx]
+    () => mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx, chromeAppearance),
+    [mapUiChromeOpacity, mapUiChromeBlurPx, chromeAppearance]
   );
 
   const mapChromeHoverBg = useMemo(
-    () => mapChromeHoverBackground(mapUiChromeOpacity),
-    [mapUiChromeOpacity]
+    () => mapChromeHoverBackground(mapUiChromeOpacity, chromeAppearance),
+    [mapUiChromeOpacity, chromeAppearance]
   );
 
-  // 底部页签在地图视图中属于小型悬浮控件，随底图切换前景；其他视图继续使用普通面板。
-  const mapViewSwitcherUsesMapChrome = projectKind === 'mapping' && viewMode === 'map';
-  const mapViewSwitcherChromeStyle = mapViewSwitcherUsesMapChrome
-    ? mapChromeControlStyle(mapUiChromeOpacity, mapUiChromeBlurPx, mapStyle)
-    : panelChromeStyle;
-  const mapViewSwitcherInactiveStyle = mapViewSwitcherUsesMapChrome
-    ? { color: mapViewSwitcherChromeStyle.color }
-    : undefined;
-  const mapViewSwitcherInactiveClass = mapViewSwitcherUsesMapChrome
-    ? 'ui-map-chrome-view-switcher-tab'
-    : 'hover:bg-gray-100';
-  const mapViewSwitcherStyle = mapViewSwitcherUsesMapChrome
-    ? {
-        ...mapViewSwitcherChromeStyle,
-        '--map-chrome-tab-hover-bg': mapChromeControlHoverBackground(
-          mapUiChromeOpacity,
-          mapStyle
-        )
-      }
-    : mapViewSwitcherChromeStyle;
+  const mapViewSwitcherChromeStyle = mapChromeControlStyle(
+    mapUiChromeOpacity,
+    mapUiChromeBlurPx,
+    chromeAppearance
+  );
+  const mapViewSwitcherInactiveStyle = { color: mapViewSwitcherChromeStyle.color };
+  const mapViewSwitcherInactiveClass = 'ui-map-chrome-view-switcher-tab';
+  const mapViewSwitcherStyle = {
+    ...mapViewSwitcherChromeStyle,
+    '--map-chrome-tab-hover-bg': mapChromeControlHoverBackground(
+      mapUiChromeOpacity,
+      chromeAppearance
+    )
+  };
 
   useEffect(() => {
     applyThemeChromeCssVars(document.documentElement, themeColor);
@@ -926,6 +934,10 @@ export default function App() {
         const savedBlur = await get<number>('mapp-map-ui-chrome-blur-px');
         if (typeof savedBlur === 'number' && !Number.isNaN(savedBlur)) {
           setMapUiChromeBlurPx(Math.min(48, Math.max(0, Math.round(savedBlur))));
+        }
+        const savedDark = await get<boolean>('mapp-ui-dark-mode');
+        if (typeof savedDark === 'boolean') {
+          setUiDarkMode(savedDark);
         }
       } catch (err) {
         console.error('Failed to load map UI chrome settings', err);
@@ -1479,6 +1491,11 @@ export default function App() {
     await set('mapp-map-ui-chrome-blur-px', b);
   };
 
+  const handleUiDarkModeChange = async (dark: boolean) => {
+    setUiDarkMode(dark);
+    await set('mapp-ui-dark-mode', dark);
+  };
+
   if (isLoading) {
     return (
       <>
@@ -1495,6 +1512,7 @@ export default function App() {
 
   return (
     <EditInspectorProvider>
+      <ChromeAppearanceContext.Provider value={chromeAppearance}>
       {kindPromptProject ? (
         <ProjectKindPromptDialog
           projectName={kindPromptProject.name}
@@ -1505,7 +1523,9 @@ export default function App() {
         />
       ) : null}
     <div
-      className="app-root w-full h-dvh max-h-dvh flex flex-col overflow-hidden relative bg-gray-50"
+      className={`app-root w-full h-dvh max-h-dvh flex flex-col overflow-hidden relative ${
+        uiDarkMode ? 'bg-zinc-800' : 'bg-gray-50'
+      }`}
       style={{
         touchAction: 'manipulation'
       }}
@@ -1535,8 +1555,8 @@ export default function App() {
         </div>
       )}
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-gray-50">
-        <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-row bg-gray-50">
+      <div className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${uiDarkMode ? 'bg-zinc-800' : 'bg-gray-50'}`}>
+        <div className={`flex h-full min-h-0 min-w-0 w-full flex-1 flex-row ${uiDarkMode ? 'bg-zinc-800' : 'bg-gray-50'}`}>
           <AnimatePresence initial={false}>
             {showDockedProjectSidebar && (
               <MotionDiv
@@ -1613,6 +1633,8 @@ export default function App() {
                   onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
                   mapUiChromeBlurPx={mapUiChromeBlurPx}
                   onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
+                  uiDarkMode={uiDarkMode}
+                  onUiDarkModeChange={handleUiDarkModeChange}
                   currentMapStyle={mapStyle}
                   onMapStyleChange={(styleId) => {
                     setMapStyle(styleId);
@@ -1722,6 +1744,8 @@ export default function App() {
                   onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
  mapUiChromeBlurPx={mapUiChromeBlurPx}
                   onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
+                  uiDarkMode={uiDarkMode}
+                  onUiDarkModeChange={handleUiDarkModeChange}
                   currentMapStyle={mapStyle}
                   onMapStyleChange={(styleId) => {
                     setMapStyle(styleId);
@@ -1893,6 +1917,8 @@ export default function App() {
             waypoints={waypoints}
             setWaypoints={setWaypoints}
             onThemeColorChange={handleThemeColorChange}
+            uiDarkMode={uiDarkMode}
+            onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
@@ -1975,12 +2001,6 @@ export default function App() {
                   }
                 : undefined
             }
-            onSwitchToBoardView={(coords?: { x: number; y: number }) => {
-              if (coords) {
-                navigateToBoard(coords);
-              }
-              setViewMode('board');
-            }}
             onSwitchToGraphView={
               projectKind === 'graph'
                 ? (noteId: string) => {
@@ -1990,11 +2010,12 @@ export default function App() {
                   }
                 : undefined
             }
-            mapViewFileInputRef={mapViewFileInputRef}
             themeColor={themeColor}
             panelChromeStyle={panelChromeStyle}
             chromeHoverBackground={mapChromeHoverBg}
             onThemeColorChange={handleThemeColorChange}
+            uiDarkMode={uiDarkMode}
+            onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -2039,6 +2060,8 @@ export default function App() {
             panelChromeStyle={panelChromeStyle}
             chromeHoverBackground={mapChromeHoverBg}
             onThemeColorChange={handleThemeColorChange}
+            uiDarkMode={uiDarkMode}
+            onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -2056,6 +2079,7 @@ export default function App() {
             project={activeProject}
             onUpdateNote={updateNote}
             onDeleteNote={deleteNote}
+            onToggleEditor={setIsEditorOpen}
             onUpdateFrames={async (frames) => {
               if (!currentProjectId || !activeProject) return;
               await projectState.updateProject({ ...activeProject, frames });
@@ -2065,6 +2089,7 @@ export default function App() {
               await projectState.updateProject({ ...activeProject, connections });
             }}
             onSwitchToBoardView={(coords?: { x: number; y: number }) => {
+              setIsEditorOpen(false);
               if (coords) {
                 navigateToBoard(coords);
               }
@@ -2094,6 +2119,8 @@ export default function App() {
             isUIVisible={isUIVisible}
             chromeHoverBackground={mapChromeHoverBg}
             onThemeColorChange={handleThemeColorChange}
+            uiDarkMode={uiDarkMode}
+            onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -2206,6 +2233,7 @@ export default function App() {
       </div>
 
     </div>
+      </ChromeAppearanceContext.Provider>
     </EditInspectorProvider>
   );
 }

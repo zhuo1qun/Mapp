@@ -1,8 +1,9 @@
 import React, { CSSProperties, RefObject } from 'react';
 import { Clock } from 'lucide-react';
 import { BoardYearRangeSlider } from '../ui/BoardYearRangeSlider';
-import { AnchorFloatingPortal } from '../ui/AnchorFloatingPortal';
+import { ChromeWindow } from '../ui/ChromeWindow';
 import { useFixedAnchorPosition } from '../ui/useFixedAnchorPosition';
+import { useCompactViewport } from '../../utils/ui/useCompactViewport';
 
 export type BoardBrowseTimeFilterPanelProps = {
   open: boolean;
@@ -41,21 +42,17 @@ export const BoardBrowseTimeFilterPanel: React.FC<BoardBrowseTimeFilterPanelProp
   onCancel,
   onApply
 }) => {
-  const positioningEnabled = open && !isEditMode && selectedCount > 1;
-  const position = useFixedAnchorPosition(positioningEnabled, anchorRef, { panelWidth: 288 }, layoutRevision);
+  const compact = useCompactViewport();
+  const visible = open && !isEditMode && selectedCount > 1;
+  const position = useFixedAnchorPosition(
+    visible && !compact,
+    anchorRef,
+    { panelWidth: 288, panelHeight: 260 },
+    layoutRevision
+  );
 
-  const portalOpen = open && !isEditMode && selectedCount > 1 && position != null;
-
-  return (
-    <AnchorFloatingPortal
-      open={portalOpen}
-      position={position}
-      browseDataAttr="time-filter"
-      className={`w-72 rounded-xl border border-gray-100/80 py-2 shadow-xl ${
-        panelChromeStyle ? '' : 'bg-white'
-      }`}
-      style={panelChromeStyle}
-    >
+  const body = (
+    <>
       <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wide text-gray-500">
         <Clock size={14} className="shrink-0 text-gray-500" />
         按起止年筛选
@@ -140,6 +137,27 @@ export const BoardBrowseTimeFilterPanel: React.FC<BoardBrowseTimeFilterPanelProp
           确定
         </button>
       </div>
-    </AnchorFloatingPortal>
+    </>
+  );
+
+  const cardClass = `w-72 overflow-hidden rounded-xl border border-gray-100/80 py-2 shadow-xl ${
+    panelChromeStyle ? '' : 'bg-white'
+  }`;
+
+  return (
+    <ChromeWindow
+      surface="window"
+      open={visible}
+      onClose={onCancel}
+      backdropLabel="关闭筛选"
+      top={position?.top ?? null}
+      left={position?.left ?? null}
+      className={cardClass}
+      style={panelChromeStyle}
+      dismissIgnoreRefs={[anchorRef]}
+      data-browse-time-filter-panel=""
+    >
+      {body}
+    </ChromeWindow>
   );
 };

@@ -455,7 +455,6 @@ export function useBoardNoteDrag({
       suppressNextClickNoteIdRef.current = null;
       return true;
     },
-    clearNotePressTracking,
-    currentNotePressIdRef
+    clearNotePressTracking
   };
 }

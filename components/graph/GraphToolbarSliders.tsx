@@ -62,6 +62,7 @@ export function GraphToolbarSliders({
           width={90}
           formatValue={(v) => `${Math.round(v)}px`}
           mapInstance={null}
+          aria-label="Min Size"
         />
       </ChromeLabeledSlider>
 
@@ -76,6 +77,7 @@ export function GraphToolbarSliders({
           width={90}
           formatValue={(v) => `${Math.round(v)}px`}
           mapInstance={null}
+          aria-label="Idle Label"
         />
       </ChromeLabeledSlider>
 
@@ -90,6 +92,7 @@ export function GraphToolbarSliders({
           width={90}
           formatValue={(v) => v.toFixed(1)}
           mapInstance={null}
+          aria-label="Edge Weight"
         />
       </ChromeLabeledSlider>
 
@@ -104,6 +107,7 @@ export function GraphToolbarSliders({
           width={90}
           formatValue={(v) => `${Math.round(v)}px`}
           mapInstance={null}
+          aria-label="Idle Edge Label"
         />
       </ChromeLabeledSlider>
 
@@ -118,6 +122,7 @@ export function GraphToolbarSliders({
           width={90}
           formatValue={(v) => String(Math.round(v))}
           mapInstance={null}
+          aria-label="hop distance"
         />
       </ChromeLabeledSlider>
     </div>

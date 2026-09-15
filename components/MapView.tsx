@@ -33,7 +33,7 @@ import { MapNavigationHandler } from './map/MapNavigationHandler';
 import { TextLabelsLayer } from './map/TextLabelsLayer';
 import { MapPositionTracker } from './map/MapPositionTracker';
 import { MapCenterHandler } from './map/MapCenterHandler';
-import { MapControls } from './map/MapControls';
+import { MapControls, MapLocateCreateMenu } from './map/MapControls';
 import {
   PENDING_MAP_LOCATE_EVENT,
   applyReadyMapLocate,
@@ -43,7 +43,7 @@ import {
   getPendingMapLocate,
   peekReadyMapLocate
 } from '../utils/map/pendingMapLocate';
-import { MapSearchPanel } from './map/controls/MapSearchPanel';
+import { MapSearchPanel, MapSearchPanelBody } from './map/controls/MapSearchPanel';
 import { MapLayerControl } from './map/controls/MapLayerControl';
 import { NotePreviewCard } from './map/overlays/NotePreviewCard';
 import { MapLocationErrorBanner } from './map/overlays/MapLocationErrorBanner';
@@ -60,6 +60,8 @@ import { MapClickHandler } from './map/MapClickHandler';
 import { MapShiftBoxSelect } from './map/MapShiftBoxSelect';
 import { MapConnectionLinesOverlay } from './map/MapConnectionLinesOverlay';
 import { SettingsPanel } from './SettingsPanel';
+import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolbarSlot';
+import { ChromeNoteSlot } from './ui/ChromeNoteSlot';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { parseNoteContent } from '../utils';
 import exifr from 'exifr';
@@ -74,15 +76,19 @@ import { buildMapTabExportPayload } from '../utils/map/mapTabExportPayload';
 import { buildStandaloneMapTabHtml } from '../utils/map/mapTabExportHtml';
 import { downloadTextFile } from '../utils/graph/graphExportHtml';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
+import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
+import { useCompactViewport } from '../utils/ui/useCompactViewport';
+import { useStickyValue } from '../utils/ui/useStickyValue';
 import {
   mapChromeSurfaceStyle,
   mapChromeControlStyle,
   mapChromeControlHoverBackground,
   mapChromeContentStyle,
-  mapChromeAppearance,
   DEFAULT_MAP_UI_CHROME_OPACITY,
-  DEFAULT_MAP_UI_CHROME_BLUR_PX
+  DEFAULT_MAP_UI_CHROME_BLUR_PX,
+  type MapChromeAppearance
 } from '../utils/map/mapChromeStyle';
+import { useChromeAppearance } from './ui/chromeAppearanceContext';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -98,6 +104,17 @@ const MapAttributionPrefix: React.FC = () => {
   useEffect(() => {
     map.attributionControl?.setPrefix(false);
   }, [map]);
+
+  return null;
+};
+
+/** MapContainer 的 style 仅在初始化时读取；底图切换后须直接同步实际地图容器的底色。 */
+const MapCanvasBackground: React.FC<{ color: string }> = ({ color }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    map.getContainer().style.backgroundColor = color;
+  }, [color, map]);
 
   return null;
 };
@@ -353,6 +370,8 @@ interface MapViewProps {
   onWorkspaceEditModeChange: (edit: boolean) => void;
   fileInputRef?: React.RefObject<HTMLInputElement | null>;
   onThemeColorChange?: (color: string) => void;
+  uiDarkMode?: boolean;
+  onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity?: number;
   mapUiChromeBlurPx?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
@@ -363,6 +382,7 @@ interface MapViewProps {
   setWaypoints?: (w: Note[]) => void;
   /** 与 App 中「界面外观」一致的面板玻璃样式（设置、编辑器等） */
   panelChromeStyle?: React.CSSProperties;
+  chromeAppearance?: MapChromeAppearance;
   /** 编辑地图关联边（大屏属性面板） */
   onUpdateConnections?: (connections: Connection[]) => void | Promise<void>;
 }
@@ -397,6 +417,8 @@ export const MapView: React.FC<MapViewProps> = ({
   onMapClick,
   isUIVisible = true,
   onThemeColorChange,
+  uiDarkMode,
+  onUiDarkModeChange,
   mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
   mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
   onMapUiChromeOpacityChange,
@@ -405,33 +427,36 @@ export const MapView: React.FC<MapViewProps> = ({
   setIsRouteMode: _setIsRouteMode,
   waypoints: _waypoints,
   setWaypoints: _setWaypoints,
-  panelChromeStyle: panelChromeStyleProp
+  panelChromeStyle: panelChromeStyleProp,
+  chromeAppearance: chromeAppearanceProp
 }) => {
   // 触摸设备在拖动时只在停下后补瓦片，避免请求队列反过来拖慢手势；
   // 鼠标设备则沿用 Leaflet 的实时补图路径，横向平移不会等到松手才开始加载。
   const [isTouchFirstInput] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   );
+  const mapChromeTone = useChromeAppearance(chromeAppearanceProp);
   if (!project) return null;
   const notes = project.notes;
   const connections = project.connections || [];
   const mapChromeSurface =
-    panelChromeStyleProp ?? mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx);
-  // 图标控件可随深/浅底图切换前景；文字密集的面板仍复用 mapChromeSurface。
+    panelChromeStyleProp ??
+    mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx, mapChromeTone);
   const mapChromeControlSurface = mapChromeControlStyle(
     mapUiChromeOpacity,
     mapUiChromeBlurPx,
-    mapStyleId
+    mapChromeTone
   );
   const mapChromeContentSurface = mapChromeContentStyle(
     mapUiChromeOpacity,
     mapUiChromeBlurPx,
-    mapStyleId
+    mapChromeTone
   );
-  const mapChromeTone = mapChromeAppearance(mapStyleId);
-  const mapChromeHoverBg = mapChromeControlHoverBackground(mapUiChromeOpacity, mapStyleId);
+  const mapChromeHoverBg = mapChromeControlHoverBackground(mapUiChromeOpacity, mapChromeTone);
   const [editingNote, setEditingNote] = useState<Partial<Note> | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const mapNoteSaveRef = useRef<(() => Promise<void>) | null>(null);
+  const compactViewport = useCompactViewport();
   const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
   const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'settle' | 'exit'>('enter');
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
@@ -598,12 +623,12 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapInstanceRef = useRef(mapInstance);
   mapInstanceRef.current = mapInstance;
   const noteEditorAnimationAnchor = useMemo(() => {
-    const coords = editingNote?.coords;
-    if (!coords || !mapInstance) return undefined;
+    const coords = editingNote?.coords ?? selectedNoteRaw?.coords;
+    if (!coords || !mapInstance) return null;
     const mapRect = mapInstance.getContainer().getBoundingClientRect();
     const point = mapInstance.latLngToContainerPoint([coords.lat, coords.lng]);
     return { x: mapRect.left + point.x, y: mapRect.top + point.y };
-  }, [editingNote?.coords?.lat, editingNote?.coords?.lng, mapInstance]);
+  }, [editingNote?.coords?.lat, editingNote?.coords?.lng, selectedNoteRaw?.coords?.lat, selectedNoteRaw?.coords?.lng, mapInstance]);
   const navigateToCoordsRef = useRef(navigateToCoords);
   navigateToCoordsRef.current = navigateToCoords;
   const mapViewMountedRef = useRef(true);
@@ -756,6 +781,7 @@ export const MapView: React.FC<MapViewProps> = ({
   // Settings panel
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const mapToolbarRef = useRef<HTMLDivElement>(null);
   const [showLocateMenu, setShowLocateMenu] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
 
@@ -996,6 +1022,10 @@ export const MapView: React.FC<MapViewProps> = ({
     setShowFrameLayerPanel((v) => !v);
   }, [closeMapChromeExcept, setShowFrameLayerPanel]);
 
+  const handleCloseLayerPanel = useCallback(() => {
+    setShowFrameLayerPanel(false);
+  }, [setShowFrameLayerPanel]);
+
   const handleToggleBorderPanel = useCallback(() => {
     closeMapChromeExcept('search');
     setShowBorderPanel?.(!showBorderPanel);
@@ -1015,6 +1045,28 @@ export const MapView: React.FC<MapViewProps> = ({
     setShowLocateMenu(false);
     setShowCreateMenu(false);
   }, []);
+
+  const mapToolbarKind: MapChromeId | null = showSettingsPanel
+    ? 'settings'
+    : showFrameLayerPanel
+      ? 'layer'
+      : showBorderPanel
+        ? 'search'
+        : showLocateMenu
+          ? 'locate'
+          : showCreateMenu
+            ? 'create'
+            : null;
+  const mapNoteKind: 'preview' | 'editor' | null = isEditorOpen
+    ? 'editor'
+    : !isMapToolbarEditMode && isUIVisible && selectedNoteId
+      ? 'preview'
+      : null;
+  const mapToolbarMenuTop = useChromeMenuTop(
+    mapToolbarKind != null || mapNoteKind != null,
+    mapToolbarRef,
+    8
+  );
 
   /** 打开详情预览时收起其它地图浮层，保证单一工作焦点。 */
   const closePanelsForPreview = useCallback(() => {
@@ -1059,6 +1111,16 @@ export const MapView: React.FC<MapViewProps> = ({
   );
   const mapRenderedNotes = useNotesWithResolvedMedia(mapRenderedNotesRaw);
 
+  /**
+   * intro 占位图钉与项目内正式图钉交接期间：隐藏同 id 的正式 marker，
+   * 避免双影，并保证 intro 清掉前画面上始终有一枚针。
+   */
+  const mapMarkerNotes = useMemo(() => {
+    const id = introNote?.id;
+    if (!id) return mapRenderedNotes;
+    return mapRenderedNotes.filter((n) => n.id !== id);
+  }, [mapRenderedNotes, introNote?.id]);
+
   /** 详情卡优先用已解析像素的 note，避免再次卡在「加载中」 */
   const selectedNote = useMemo(() => {
     if (!selectedNoteId) return null;
@@ -1068,6 +1130,7 @@ export const MapView: React.FC<MapViewProps> = ({
       null
     );
   }, [selectedNoteId, mapRenderedNotes, selectedNoteRaw]);
+  const stickySelectedNote = useStickyValue(selectedNote);
 
   const hoveredNote = useMemo(() => {
     if (!hoveredNoteId) return null;
@@ -1079,11 +1142,11 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [hoveredNoteId, mapRenderedNotes, hoveredNoteRaw]);
 
   const mapNoteStackRank = useMemo(() => {
-    const sorted = sortNotesByLayerStack(mapRenderedNotes);
+    const sorted = sortNotesByLayerStack(mapMarkerNotes);
     const m = new Map<string, number>();
     sorted.forEach((n, i) => m.set(n.id, i));
     return m;
-  }, [mapRenderedNotes]);
+  }, [mapMarkerNotes]);
 
   const handleMapGraphLayersChange = useCallback(
     (next: GraphLayerState) => {
@@ -1128,7 +1191,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const { clusteredMarkers, sortNotes } = useMapClustering({
     mapInstance,
-    getFilteredNotes: () => mapRenderedNotes,
+    getFilteredNotes: () => mapMarkerNotes,
     clusterThreshold,
     forceSingleNoteIds
   });
@@ -1413,6 +1476,7 @@ export const MapView: React.FC<MapViewProps> = ({
       onUpdateNote(fullNote);
       // Update editingNote to reflect the saved changes
       setEditingNote(fullNote);
+      setIntroNote((current) => (current?.id === fullNote.id ? fullNote : current));
     } else {
       // 新Note必须指定variant
       const fullNote: Note = {
@@ -1423,6 +1487,7 @@ export const MapView: React.FC<MapViewProps> = ({
       onAddNote(fullNote);
       // For new notes, update editingNote as well
       setEditingNote(fullNote);
+      setIntroNote((current) => (current?.id === fullNote.id ? fullNote : current));
     }
   };
 
@@ -1434,8 +1499,8 @@ export const MapView: React.FC<MapViewProps> = ({
     if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
     if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
     if (reason === 'saved') {
-      // 已保存的新便签直接切换到项目中的正式图钉，不播放取消/删除退场。
-      setIntroNote(null);
+      // 保留 intro 占位针，等 notes 写入同 id 后再无缝交接（见下方 effect）。
+      // 若此处立刻 setIntroNote(null)，会在异步 onAddNote 落地前出现空窗闪烁。
       return;
     }
     const introNoteId = introNote.id;
@@ -1448,6 +1513,28 @@ export const MapView: React.FC<MapViewProps> = ({
       }, MAP_NOTE_EXIT_MS);
     }, MAP_NOTE_INTRO_DISMISS_DELAY_MS);
   }, [introNote, onToggleEditor]);
+
+  /** 保存关闭后：正式图钉已进项目时卸下 intro，完成无缝交接 */
+  useEffect(() => {
+    if (!introNote?.id || isEditorOpen) return;
+    if (!notes.some((n) => n.id === introNote.id)) return;
+    setIntroNote(null);
+  }, [notes, introNote?.id, isEditorOpen]);
+
+  const closeMapNoteSlot = useCallback(() => {
+    if (isEditorOpen) {
+      const save = mapNoteSaveRef.current;
+      if (save) {
+        void save().then(() => closeEditor('saved'));
+        return;
+      }
+      closeEditor('saved');
+      return;
+    }
+    setSelectedNoteId(null);
+    setSelectedNoteIds(new Set());
+    setPreSelectedNotes(null);
+  }, [closeEditor, isEditorOpen]);
 
   const handleDeleteNoteWithExit = useCallback(
     async (noteId: string) => {
@@ -1489,7 +1576,8 @@ export const MapView: React.FC<MapViewProps> = ({
     setEditingNote(note);
     setIsEditorOpen(true);
     onToggleEditor(true);
-  }, [isUIVisible, notes, onToggleEditor]);
+    closeMapChromeExcept();
+  }, [closeMapChromeExcept, isUIVisible, notes, onToggleEditor]);
 
   const handleMapShiftBoxSelectClaimed = useCallback(() => {
     ignoreNextMapClickRef.current = true;
@@ -1726,8 +1814,7 @@ export const MapView: React.FC<MapViewProps> = ({
         style={{
           height: '100%',
           width: '100%',
-          // When using blank map style, show a clean white background.
-          backgroundColor: effectiveMapStyle === 'blank' ? '#ffffff' : undefined
+          backgroundColor: effectiveMapStyle === 'blank' ? '#ffffff' : '#dddddd'
         }}
         zoomControl={false}
         ref={mapRefCallback}
@@ -1735,6 +1822,7 @@ export const MapView: React.FC<MapViewProps> = ({
         boxZoom={false}
       >
         <MapAttributionPrefix />
+        <MapCanvasBackground color={effectiveMapStyle === 'blank' ? '#ffffff' : '#dddddd'} />
         <MapSmoothZoom
           sensitivity={1.5}
           trackpadPinchSensitivity={3.25}
@@ -1751,7 +1839,7 @@ export const MapView: React.FC<MapViewProps> = ({
         {isUIVisible && (
           <MapShiftBoxSelect
             enabled={isUIVisible}
-            notes={mapRenderedNotes}
+            notes={mapMarkerNotes}
             noteCoordOverrides={noteCoordOverrides}
             onBoxCommit={handleMapBoxSelectCommit}
             onInteractionClaimed={handleMapShiftBoxSelectClaimed}
@@ -1883,7 +1971,7 @@ export const MapView: React.FC<MapViewProps> = ({
         />
         
         <TextLabelsLayer
-          notes={mapRenderedNotes}
+          notes={mapMarkerNotes}
           showTextLabels={showTextLabels}
           pinSize={pinSize}
           labelSize={labelSize}
@@ -1991,7 +2079,7 @@ export const MapView: React.FC<MapViewProps> = ({
         
         <ClusterMarkerLayer
           clusteredMarkers={clusteredMarkers}
-          fallbackNotes={mapRenderedNotes}
+          fallbackNotes={mapMarkerNotes}
           noteStackRank={mapNoteStackRank}
           showTextLabels={showTextLabels}
           pinSize={pinSize}
@@ -2057,14 +2145,17 @@ export const MapView: React.FC<MapViewProps> = ({
           <div
             data-allow-context-menu
             className={`fixed top-2 sm:top-4 ui-workspace-left z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 sm:gap-3 pointer-events-none ${
-              showLocateMenu || showCreateMenu ? 'map-toolbar--sheet-open' : ''
+              mapToolbarKind ? 'map-toolbar--sheet-open' : ''
             } ${
               isMapToolbarEditMode
                 ? 'right-2 sm:right-4 lg:right-[calc(20rem+0.75rem)]'
                 : 'right-2 sm:right-4'
             }`}
           >
-              <div className="flex justify-between items-center w-full pointer-events-none gap-2">
+              <div
+                  ref={mapToolbarRef}
+                  className="flex justify-between items-center w-full pointer-events-none gap-2"
+              >
                 <div
                   className="flex flex-row flex-nowrap gap-1.5 sm:gap-2 pointer-events-auto items-center min-h-10 sm:min-h-12"
                   onPointerDown={(e) => e.stopPropagation()}
@@ -2090,10 +2181,12 @@ export const MapView: React.FC<MapViewProps> = ({
                     onToggleLocateMenu={handleToggleLocateMenu}
                     onToggleCreateMenu={handleToggleCreateMenu}
                     onCloseMenus={handleCloseLocateAndCreateMenus}
+                    hostedWindow
                   />
                   <MapLayerControl
                     showPanel={showFrameLayerPanel}
                     onTogglePanel={handleToggleLayerPanel}
+                    onClosePanel={handleCloseLayerPanel}
                     themeColor={themeColor}
                     chromeSurfaceStyle={mapChromeControlSurface}
                     menuChromeSurfaceStyle={mapChromeContentSurface}
@@ -2106,35 +2199,8 @@ export const MapView: React.FC<MapViewProps> = ({
                     setShowAllFrames={setShowAllFrames}
                     frameLayerRef={frameLayerRef}
                     layerGroupStandard={graphLayerStandard}
-                    dropdownAlign="start"
-                    unifiedNotesLayerSlot={
-                      onUpdateProject ? (
-                        <ProjectNotesLayerPanel
-                          themeColor={themeColor}
-                          panelChromeStyle={mapChromeContentSurface}
-                          chromeAppearance={mapChromeTone}
-                          variant="dock"
-                          flow
-                          dockAlign="start"
-                          projectId={project.id}
-                          merged={mergedMapProjectLayers}
-                          layerGroupStandard={graphLayerStandard}
-                          onLayerGroupStandardChange={handleMapLayerStandardChange}
-                          onStateChange={handleMapGraphLayersChange}
-                          notes={notes}
-                          onUpdateNote={onUpdateNote}
-                          onBatchUpdateNotes={handleMapBatchNotes}
-                          frames={project.frames ?? []}
-                          onUpdateFrame={onUpdateProject ? handleMapUpdateFrame : undefined}
-                          onActivateNote={(note) => {
-                            if (!mapInstance || !noteHasRenderableMapPosition(note)) return;
-                            mapInstance.flyTo([note.coords.lat, note.coords.lng], Math.max(mapInstance.getZoom(), 15), {
-                              duration: 0.85
-                            });
-                          }}
-                        />
-                      ) : null
-                    }
+                    hostedWindow
+                    unifiedNotesLayerSlot={null}
                   />
                 </div>
                 <div
@@ -2155,6 +2221,7 @@ export const MapView: React.FC<MapViewProps> = ({
                     borderGeoJSON={borderGeoJSON}
                     onClearBorder={() => setBorderGeoJSON?.(null)}
                     onClose={() => setShowBorderPanel?.(false)}
+                    hostedWindow
                   />
                   <MapTopRightEditToggle
                     isEditMode={isMapToolbarEditMode}
@@ -2171,19 +2238,142 @@ export const MapView: React.FC<MapViewProps> = ({
                 </div>
               </div>
 
-              {/* 与按钮行共用定位容器：按钮在窄屏重排或高度变化时，详情卡自然跟随其下。 */}
-              {!isMapToolbarEditMode && !isEditorOpen && selectedNote ? (
-                <NotePreviewCard
-                  embedded
-                  note={selectedNote}
-                  currentImageIndex={currentPreviewImageIndex}
-                  onImageIndexChange={setCurrentPreviewImageIndex}
-                  chromeSurfaceStyle={mapChromeContentSurface}
-                  chromeAppearance={mapChromeTone}
-                  themeColor={themeColor}
-                  onOpenEditor={handleEditNoteFromLabel}
-                />
-              ) : null}
+              <ChromeToolbarSlot
+                kind={mapToolbarKind}
+                onClose={() => closeMapChromeExcept()}
+                appearance={mapChromeTone}
+                top={mapToolbarMenuTop}
+                dismissIgnoreRefs={[mapToolbarRef]}
+                resolve={(kind) => {
+                  const menuStyle = mapChromeContentSurface;
+                  if (kind === 'settings') {
+                    return {
+                      align: 'start' as const,
+                      surface: 'window' as const,
+                      backdropLabel: '关闭设置',
+                      className: CHROME_TOOLBAR_WINDOW_CLASS,
+                      style: menuStyle,
+                      role: 'dialog',
+                      'aria-label': '设置',
+                      children: (
+                        <SettingsPanel
+                          shell={false}
+                          isOpen={showSettingsPanel}
+                          onClose={() => setShowSettingsPanel(false)}
+                          anchorRef={settingsButtonRef}
+                          settingsContextView="map"
+                          themeColor={themeColor}
+                          onThemeColorChange={(color) => {
+                            onThemeColorChange?.(color);
+                          }}
+                          uiDarkMode={uiDarkMode}
+                          onUiDarkModeChange={onUiDarkModeChange}
+                          mapUiChromeOpacity={mapUiChromeOpacity}
+                          onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
+                          mapUiChromeBlurPx={mapUiChromeBlurPx}
+                          onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
+                          currentMapStyle={mapStyleId || 'carto-light-nolabels'}
+                          onMapStyleChange={handleMapStyleChange}
+                          pinSize={pinSize}
+                          onPinSizeChange={setPinSize}
+                          clusterThreshold={clusterThreshold}
+                          onClusterThresholdChange={setClusterThreshold}
+                          labelSize={labelSize}
+                          onLabelSizeChange={setLabelSize}
+                          showTextLabels={showTextLabels}
+                          onShowTextLabelsChange={setShowTextLabels}
+                          graphProject={project}
+                          onGraphProjectPatch={
+                            onUpdateProject
+                              ? (patch) => void onUpdateProject({ ...project, ...patch })
+                              : undefined
+                          }
+                        />
+                      )
+                    };
+                  }
+                  if (kind === 'layer') {
+                    return {
+                      align: 'start' as const,
+                      surface: 'window' as const,
+                      backdropLabel: '关闭筛选',
+                      className: CHROME_TOOLBAR_WINDOW_CLASS,
+                      style: menuStyle,
+                      role: 'dialog',
+                      'aria-label': '筛选',
+                      children: onUpdateProject ? (
+                        <ProjectNotesLayerPanel
+                          themeColor={themeColor}
+                          chromeAppearance={mapChromeTone}
+                          variant="dock"
+                          flow
+                          hosted
+                          dockAlign="start"
+                          projectId={project.id}
+                          merged={mergedMapProjectLayers}
+                          layerGroupStandard={graphLayerStandard}
+                          onLayerGroupStandardChange={handleMapLayerStandardChange}
+                          onStateChange={handleMapGraphLayersChange}
+                          notes={notes}
+                          onUpdateNote={onUpdateNote}
+                          onBatchUpdateNotes={handleMapBatchNotes}
+                          frames={project.frames ?? []}
+                          onUpdateFrame={onUpdateProject ? handleMapUpdateFrame : undefined}
+                          onActivateNote={(note) => {
+                            if (!mapInstance || !noteHasRenderableMapPosition(note)) return;
+                            mapInstance.flyTo(
+                              [note.coords.lat, note.coords.lng],
+                              Math.max(mapInstance.getZoom(), 15),
+                              { duration: 0.85 }
+                            );
+                          }}
+                        />
+                      ) : null
+                    };
+                  }
+                  if (kind === 'search') {
+                    return {
+                      align: 'end' as const,
+                      surface: 'window' as const,
+                      backdropLabel: '关闭检索',
+                      className: `${CHROME_TOOLBAR_WINDOW_CLASS} overflow-y-auto p-3`,
+                      style: menuStyle,
+                      role: 'dialog',
+                      'aria-label': '检索',
+                      children: (
+                        <MapSearchPanelBody
+                          themeColor={themeColor}
+                          borderSearch={borderSearchState}
+                          borderGeoJSON={borderGeoJSON}
+                          onClearBorder={() => setBorderGeoJSON?.(null)}
+                        />
+                      )
+                    };
+                  }
+                  return {
+                    align: 'start' as const,
+                    surface: 'menu' as const,
+                    backdropLabel: '关闭操作菜单',
+                    className: `w-52 ${menuStyle ? '' : 'bg-white'}`,
+                    style: menuStyle,
+                    children: (
+                      <MapLocateCreateMenu
+                        kind={kind === 'create' ? 'create' : 'locate'}
+                        isLocating={locatingActive}
+                        isCreatingAtLocation={isCreatingAtLocation}
+                        chromeHoverBackground={mapChromeHoverBg}
+                        onLocateCurrentPosition={handleLocateCurrentPosition}
+                        onCreateAtCurrentLocation={handleCreateAtCurrentLocation}
+                        onImportFromPhotos={handleImportFromPhotos}
+                        onCloseMenus={handleCloseLocateAndCreateMenus}
+                        mapNotes={mapRenderedNotes}
+                      />
+                    )
+                  };
+                }}
+              />
+
+              {/* 预览卡已迁入 ChromeNoteSlot */}
             </div>
         )}
 
@@ -2248,23 +2438,86 @@ export const MapView: React.FC<MapViewProps> = ({
         />
       )}
       
-      {
-        <NoteEditor 
-          isOpen={isEditorOpen}
-          onClose={closeEditor}
-          onSaveClose={() => closeEditor('saved')}
-          onSave={handleSaveNote}
-          onDelete={handleDeleteNoteWithExit}
-          initialNote={editingNote || {}}
-          animationAnchor={noteEditorAnimationAnchor}
-          isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
-          onSwitchToBoardView={(coords) => onSwitchToBoardView(coords, mapInstance)}
-          themeColor={themeColor}
-          mapUiChromeOpacity={mapUiChromeOpacity}
-          mapUiChromeBlurPx={mapUiChromeBlurPx}
-          chromeAppearance={mapChromeTone}
+      {isUIVisible ? (
+        <ChromeNoteSlot
+          kind={mapNoteKind}
+          onClose={closeMapNoteSlot}
+          appearance={mapChromeTone}
+          motionAnchor={noteEditorAnimationAnchor}
+          dismissIgnoreRefs={[mapToolbarRef]}
+          resolve={(kind) => {
+            const pagePad = compactViewport ? '0.5rem' : '1rem';
+            const previewLeft = `calc(var(--workspace-ui-left-inset, 0px) + ${pagePad})`;
+            if (kind === 'editor') {
+              return {
+                backdropLabel: '关闭编辑器',
+                'aria-label': '便签编辑器',
+                className: compactViewport
+                  ? 'chrome-note-slot--editor flex min-h-0 flex-col'
+                  : 'flex min-h-[300px] min-w-0 flex-col',
+                style: compactViewport
+                  ? {
+                      top: 0,
+                      left: 0,
+                      width: '100vw',
+                      height: '100dvh',
+                      maxHeight: '100dvh',
+                      borderRadius: 0,
+                      ...mapChromeContentSurface
+                    }
+                  : {
+                      top: '5dvh',
+                      left: `calc(var(--workspace-ui-left-inset, 0px) + (100vw - var(--workspace-ui-left-inset, 0px) - min(500px, calc(100vw - 2rem))) / 2)`,
+                      width: 'min(500px, calc(100vw - 2rem))',
+                      maxHeight: '90dvh',
+                      ...mapChromeContentSurface
+                    },
+                children: (
+                  <NoteEditor
+                    shell={false}
+                    isOpen
+                    saveDraftRef={mapNoteSaveRef}
+                    onClose={closeEditor}
+                    onSaveClose={() => closeEditor('saved')}
+                    onSave={handleSaveNote}
+                    onDelete={handleDeleteNoteWithExit}
+                    initialNote={editingNote || {}}
+                    isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
+                    onSwitchToBoardView={(coords) => onSwitchToBoardView(coords, mapInstance)}
+                    themeColor={themeColor}
+                    mapUiChromeOpacity={mapUiChromeOpacity}
+                    mapUiChromeBlurPx={mapUiChromeBlurPx}
+                    chromeAppearance={mapChromeTone}
+                  />
+                )
+              };
+            }
+            return {
+              backdropLabel: '关闭预览',
+              'aria-label': '便签预览',
+              className: 'flex min-h-0 flex-col',
+              style: {
+                top: mapToolbarMenuTop ?? 56,
+                left: previewLeft,
+                width: 'min(20rem, calc(100vw - 1rem))',
+                maxHeight: 'min(52dvh, 28rem)',
+                ...mapChromeContentSurface
+              },
+              children: stickySelectedNote ? (
+                <NotePreviewCard
+                  hosted
+                  note={stickySelectedNote}
+                  currentImageIndex={currentPreviewImageIndex}
+                  onImageIndexChange={setCurrentPreviewImageIndex}
+                  chromeAppearance={mapChromeTone}
+                  themeColor={themeColor}
+                  onOpenEditor={handleEditNoteFromLabel}
+                />
+              ) : null
+            };
+          }}
         />
-      }
+      ) : null}
 
       {/* Tab 预览没有左上按钮组，继续使用独立 fixed 详情卡。 */}
       {!isUIVisible && (hoveredNote ?? selectedNote) && (
@@ -2321,35 +2574,7 @@ export const MapView: React.FC<MapViewProps> = ({
         showCoordinates={true}
       />
 
-      {/* Settings Panel */}
-      <SettingsPanel
-        isOpen={showSettingsPanel}
-        onClose={() => setShowSettingsPanel(false)}
-        anchorRef={settingsButtonRef}
-        settingsContextView="map"
-        themeColor={themeColor}
-        onThemeColorChange={(color) => {
-          onThemeColorChange?.(color);
-        }}
-        mapUiChromeOpacity={mapUiChromeOpacity}
-        onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
-        mapUiChromeBlurPx={mapUiChromeBlurPx}
-        onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
-        currentMapStyle={mapStyleId || 'carto-light-nolabels'}
-        onMapStyleChange={handleMapStyleChange}
-        pinSize={pinSize}
-        onPinSizeChange={setPinSize}
-        clusterThreshold={clusterThreshold}
-        onClusterThresholdChange={setClusterThreshold}
-        labelSize={labelSize}
-        onLabelSizeChange={setLabelSize}
-        showTextLabels={showTextLabels}
-        onShowTextLabelsChange={setShowTextLabels}
-        graphProject={project}
-        onGraphProjectPatch={
-          onUpdateProject ? (patch) => void onUpdateProject({ ...project, ...patch }) : undefined
-        }
-      />
+      {/* Settings hosted by ChromeToolbarSlot */}
 
       <MapImportMenuModal
         open={!!showImportMenu}

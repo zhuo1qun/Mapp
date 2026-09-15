@@ -25,7 +25,7 @@ export function useChromeMenuTop(
 
   useLayoutEffect(() => {
     if (!open) {
-      setTop(null);
+      // 关闭后保留上次 top，供 ChromePresence 退出动画继续锚定。
       return;
     }
     const update = () => {

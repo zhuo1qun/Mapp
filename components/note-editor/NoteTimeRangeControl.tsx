@@ -9,6 +9,7 @@ import {
   NoteEditorAddPillLabel
 } from './addPillStyles';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 
 export interface NoteTimeRangeChange {
   startYear?: number;
@@ -42,11 +43,12 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
   onChange,
   themeColor = '#6366f1',
   panelChromeStyle,
-  chromeAppearance = 'light',
+  chromeAppearance: chromeAppearanceProp,
   active = true,
   onProvideDismiss,
   onBeforeOpen
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [editingStartYear, setEditingStartYear] = useState('');
   const [editingEndYear, setEditingEndYear] = useState('');

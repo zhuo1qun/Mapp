@@ -4,6 +4,7 @@ import { Core, EdgeSingular, NodeSingular } from 'cytoscape';
 import { NotePreviewCard } from './map/overlays/NotePreviewCard';
 import { NoteEditor } from './NoteEditor';
 import { SettingsPanel } from './SettingsPanel';
+import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import type { Connection, Frame, GraphLayerState, Note, Project } from '../types';
 import { DEFAULT_THEME_COLOR } from '../constants';
 import {
@@ -101,6 +102,8 @@ interface GraphViewProps {
   panelChromeStyle?: React.CSSProperties;
   chromeHoverBackground?: string;
   onThemeColorChange?: (color: string) => void;
+  uiDarkMode?: boolean;
+  onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
   mapUiChromeBlurPx?: number;
@@ -129,6 +132,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
   panelChromeStyle,
   chromeHoverBackground,
   onThemeColorChange,
+  uiDarkMode,
+  onUiDarkModeChange,
   mapUiChromeOpacity = 0.9,
   onMapUiChromeOpacityChange,
   mapUiChromeBlurPx = 8,
@@ -139,6 +144,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
   workspaceEditMode,
   onWorkspaceEditModeChange
 }) => {
+  const chromeAppearance = useChromeAppearance();
   const ch = panelChromeStyle;
   const chHover = chromeHoverBackground;
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -1910,13 +1916,16 @@ export const GraphView: React.FC<GraphViewProps> = ({
   return (
     <div
       id="graph-view-container"
-      className="relative flex h-full min-h-0 w-full flex-col bg-gray-50 overflow-hidden"
+      className={`workspace-canvas relative flex h-full min-h-0 w-full flex-col overflow-hidden ${
+        chromeAppearance === 'dark' ? 'workspace-canvas--dark' : ''
+      }`}
     >
       {/* 用 flex-1 参与文档流高度，避免仅 absolute 子节点导致父级高度塌成 0（导出页用 100vh 无此问题） */}
       <div
         ref={graphStageRef}
-        className="relative min-h-0 min-w-0 flex-1 w-full"
-        style={{ backgroundImage: 'radial-gradient(#e5e7eb 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+        className={`workspace-canvas workspace-canvas--graph relative min-h-0 min-w-0 flex-1 w-full ${
+          chromeAppearance === 'dark' ? 'workspace-canvas--dark' : ''
+        }`}
       >
         {/* cy 容器保持文档流高度（flex-1 祖先），避免 absolute 在部分布局下量到 0 */}
         <div ref={containerRef} className="h-full w-full min-h-0 min-w-0" />
@@ -1998,6 +2007,29 @@ export const GraphView: React.FC<GraphViewProps> = ({
         onUpdateFrame={handleUpdateFrame}
         projectId={projectId}
         onActivateNoteFromLayer={(n) => focusNoteOnGraphFromPanel(n.id)}
+        settingsPanel={
+          <SettingsPanel
+            shell={false}
+            isOpen={showSettingsPanel}
+            onClose={() => setShowSettingsPanel(false)}
+            anchorRef={settingsButtonRef}
+            settingsContextView="graph"
+            themeColor={themeColor}
+            onThemeColorChange={onThemeColorChange ?? (() => {})}
+            uiDarkMode={uiDarkMode}
+            onUiDarkModeChange={onUiDarkModeChange}
+            mapUiChromeOpacity={mapUiChromeOpacity}
+            onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
+            mapUiChromeBlurPx={mapUiChromeBlurPx}
+            onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
+            currentMapStyle={mapStyleId}
+            onMapStyleChange={onMapStyleChange ?? (() => {})}
+            graphProject={project}
+            onGraphProjectPatch={
+              onUpdateProject ? (patch) => void onUpdateProject(projectId, patch) : undefined
+            }
+          />
+        }
         belowToolbar={
           isUIVisible && previewNote && !selectedConn && !isGraphToolbarEditMode && !graphEditorOpen ? (
             <div className="flex flex-col gap-2 sm:gap-3 pointer-events-none">
@@ -2187,24 +2219,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
         }
       />
 
-      <SettingsPanel
-        isOpen={showSettingsPanel}
-        onClose={() => setShowSettingsPanel(false)}
-        anchorRef={settingsButtonRef}
-        settingsContextView="graph"
-        themeColor={themeColor}
-        onThemeColorChange={onThemeColorChange ?? (() => {})}
-        mapUiChromeOpacity={mapUiChromeOpacity}
-        onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
-        mapUiChromeBlurPx={mapUiChromeBlurPx}
-        onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
-        currentMapStyle={mapStyleId}
-        onMapStyleChange={onMapStyleChange ?? (() => {})}
-        graphProject={project}
-        onGraphProjectPatch={
-          onUpdateProject ? (patch) => void onUpdateProject(projectId, patch) : undefined
-        }
-      />
+      {/* Settings hosted by GraphTopLeftToolbar slot */}
     </div>
   );
 };

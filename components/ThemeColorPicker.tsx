@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
 import { get, set } from 'idb-keyval';
 import { getThemeChromeForegroundHex } from '../utils/theme/themeChrome';
 import {
   DEFAULT_MAP_UI_CHROME_BLUR_PX,
   DEFAULT_MAP_UI_CHROME_OPACITY,
-  mapChromeModalBackdropFromSurfaceStyle,
   mapChromeSurfaceStyle
 } from '../utils/map/mapChromeStyle';
 import { ChromePresence } from './ui/ChromeSheetPresence';
+import { ChromeWindow } from './ui/ChromeWindow';
+import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 
 interface ThemeColorPickerProps {
   isOpen: boolean;
@@ -249,19 +248,8 @@ export const ThemeColorPicker: React.FC<ThemeColorPickerProps> = ({
   const cardChrome =
     panelChromeStyle ??
     mapChromeSurfaceStyle(DEFAULT_MAP_UI_CHROME_OPACITY, DEFAULT_MAP_UI_CHROME_BLUR_PX);
-  const modalBackdropStyle = mapChromeModalBackdropFromSurfaceStyle(cardChrome);
-
-  const content = (
-    <ChromePresence open={isOpen} kind="dialog">
-      {(phase) => (
-    <div
-      className={`km-theme-color-picker ${
-        isInline
-          ? 'w-full'
-          : `fixed inset-0 z-[9000] min-h-[100dvh] min-h-screen w-full flex items-center justify-center p-4 chrome-dialog-backdrop-${phase}`
-      }`}
-      style={isInline ? undefined : modalBackdropStyle}
-    >
+  const pickerBody = (
+    <>
       <style>{`
         .km-theme-color-picker input[type="range"] {
           -webkit-appearance: none;
@@ -316,20 +304,14 @@ export const ThemeColorPicker: React.FC<ThemeColorPickerProps> = ({
         }
       `}</style>
       <div
-        className={`rounded-xl shadow-2xl w-full ${
-          isInline ? 'max-w-none' : `max-w-md chrome-dialog-${phase}`
-        } p-4 border border-gray-100/80`}
-        style={cardChrome}
+        className={`w-full ${isInline ? 'max-w-none' : 'max-w-md'} ${
+          isInline ? 'overflow-hidden rounded-xl border border-gray-100/80 shadow-2xl' : ''
+        }`}
+        style={isInline ? cardChrome : undefined}
       >
-        <div className="relative mb-2">
-          <button
-            onClick={onClose}
-            className="absolute -top-1 -right-1 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-            aria-label="关闭"
-          >
-            <X size={18} className="text-gray-600" />
-          </button>
-        </div>
+        <ChromeWindowHeader title="主题色" onClose={onClose} />
+
+        <div className="px-3 pb-3">
 
         {/* 预览 + 内联 Hex 编辑 */}
         <div className="mb-4">
@@ -432,16 +414,35 @@ export const ThemeColorPicker: React.FC<ThemeColorPickerProps> = ({
             Apply
           </button>
         </div>
+        </div>
       </div>
-    </div>
-      )}
-    </ChromePresence>
+    </>
   );
 
-  // modal 模式强制挂到 body，避免父级 transform/stacking context 影响 z-index
-  if (!isInline && typeof document !== 'undefined') {
-    return createPortal(content, document.body);
+  if (isInline) {
+    return (
+      <ChromePresence open={isOpen} kind="dialog">
+        {() => <div className="km-theme-color-picker w-full">{pickerBody}</div>}
+      </ChromePresence>
+    );
   }
 
-  return content;
+  return (
+    <ChromeWindow
+      open={isOpen}
+      onClose={onClose}
+      backdropLabel="关闭主题颜色设置"
+      placement="center"
+      compactBehavior="none"
+      presenceKind="dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="主题颜色设置"
+      data-chrome-window-nested=""
+      className="km-theme-color-picker w-[min(28rem,calc(100vw-2rem))] max-w-md p-0"
+      style={cardChrome}
+    >
+      {pickerBody}
+    </ChromeWindow>
+  );
 };

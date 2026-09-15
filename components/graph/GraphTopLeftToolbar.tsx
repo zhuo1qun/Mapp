@@ -1,8 +1,13 @@
-import React, { useRef } from 'react';
+import React, { useRef, type ReactNode } from 'react';
 import { Settings, Tag as TagIcon, Frame as FrameIcon, Smile } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
+import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from '../ui/ChromeToolbarSlot';
+import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 import { ProjectNotesLayerPanel } from '../layer/ProjectNotesLayerPanel';
+import { useChromeMenuTop } from '../../utils/ui/chromeMenuPosition';
 import type { Frame, GraphLayerState, Note } from '../../types';
+
+type GraphLayerKind = 'tag' | 'emoji' | 'frame';
 
 type Props = {
   isUIVisible: boolean;
@@ -35,6 +40,7 @@ type Props = {
   onActivateNoteFromLayer?: (note: Note) => void;
   /** 与按钮行共用左上定位容器、自然排在按钮下方的内容（如节点详情卡）。 */
   belowToolbar?: React.ReactNode;
+  settingsPanel?: ReactNode;
 };
 
 export const GraphTopLeftToolbar: React.FC<Props> = ({
@@ -66,11 +72,25 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
   onUpdateFrame,
   projectId,
   onActivateNoteFromLayer,
-  belowToolbar
+  belowToolbar,
+  settingsPanel
 }) => {
+  const chromeAppearance = useChromeAppearance();
+  const toolbarRowRef = useRef<HTMLDivElement>(null);
   const tagBtnWrapRef = useRef<HTMLDivElement>(null);
   const emojiBtnWrapRef = useRef<HTMLDivElement>(null);
   const frameBtnWrapRef = useRef<HTMLDivElement>(null);
+
+  const layerPanelKind: GraphLayerKind | null = showTagLayerPanel
+    ? 'tag'
+    : showFrameLayerPanel
+      ? 'frame'
+      : showEmojiLayerPanel
+        ? 'emoji'
+        : null;
+  const toolbarKind =
+    showSettingsPanel ? 'settings' as const : layerPanelKind;
+  const layerMenuTop = useChromeMenuTop(toolbarKind != null, toolbarRowRef, 8);
 
   if (!isUIVisible) return null;
 
@@ -80,6 +100,24 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
     setShowFrameLayerPanel(false);
   };
 
+  const layerPanelShared = {
+    themeColor,
+    panelChromeStyle,
+    variant: 'graph' as const,
+    embed: false,
+    flow: true,
+    hosted: true,
+    dockAlign: 'start' as const,
+    hideStandardToggle: true,
+    onLayerGroupStandardChange: () => {},
+    notes,
+    onUpdateNote,
+    onBatchUpdateNotes,
+    frames,
+    projectId,
+    onActivateNote: onActivateNoteFromLayer
+  };
+
   return (
     <div
       data-allow-context-menu
@@ -87,7 +125,10 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
       className="fixed top-2 sm:top-4 ui-workspace-left z-[1000] pointer-events-none flex flex-col items-start gap-2 sm:gap-3"
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2">
+      <div
+        ref={toolbarRowRef}
+        className="pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2"
+      >
         <ChromeIconButton
           ref={settingsButtonRef}
           themeColor={themeColor}
@@ -175,76 +216,68 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
         ) : null}
       </div>
       {belowToolbar}
-      {showTagLayerPanel ? (
-        <div className="pointer-events-auto">
-          <ProjectNotesLayerPanel
-            themeColor={themeColor}
-            panelChromeStyle={panelChromeStyle}
-            variant="graph"
-            embed={false}
-            dockAlign="start"
-            menuAnchorRef={tagBtnWrapRef}
-            merged={mergedTagLayers}
-            layerGroupStandard="tag"
-            hideStandardToggle
-            onLayerGroupStandardChange={() => {}}
-            onStateChange={onTagLayersChange}
-            notes={notes}
-            onUpdateNote={onUpdateNote}
-            onBatchUpdateNotes={onBatchUpdateNotes}
-            frames={frames}
-            projectId={projectId}
-            onActivateNote={onActivateNoteFromLayer}
-          />
-        </div>
-      ) : null}
-      {showFrameLayerPanel ? (
-        <div className="pointer-events-auto">
-          <ProjectNotesLayerPanel
-            themeColor={themeColor}
-            panelChromeStyle={panelChromeStyle}
-            variant="graph"
-            embed={false}
-            dockAlign="start"
-            menuAnchorRef={frameBtnWrapRef}
-            merged={mergedFrameLayers}
-            layerGroupStandard="frame"
-            hideStandardToggle
-            onLayerGroupStandardChange={() => {}}
-            onStateChange={onFrameLayersChange}
-            notes={notes}
-            onUpdateNote={onUpdateNote}
-            onBatchUpdateNotes={onBatchUpdateNotes}
-            frames={frames}
-            onUpdateFrame={onUpdateFrame}
-            projectId={projectId}
-            onActivateNote={onActivateNoteFromLayer}
-          />
-        </div>
-      ) : null}
-      {showEmojiLayerPanel ? (
-        <div className="pointer-events-auto">
-          <ProjectNotesLayerPanel
-            themeColor={themeColor}
-            panelChromeStyle={panelChromeStyle}
-            variant="graph"
-            embed={false}
-            dockAlign="start"
-            menuAnchorRef={emojiBtnWrapRef}
-            merged={mergedEmojiLayers}
-            layerGroupStandard="emoji"
-            hideStandardToggle
-            onLayerGroupStandardChange={() => {}}
-            onStateChange={onEmojiLayersChange}
-            notes={notes}
-            onUpdateNote={onUpdateNote}
-            onBatchUpdateNotes={onBatchUpdateNotes}
-            frames={frames}
-            projectId={projectId}
-            onActivateNote={onActivateNoteFromLayer}
-          />
-        </div>
-      ) : null}
+      <ChromeToolbarSlot
+        kind={toolbarKind}
+        appearance={chromeAppearance}
+        onClose={() => {
+          closePanels();
+          setShowSettingsPanel(false);
+        }}
+        top={layerMenuTop}
+        dismissIgnoreRefs={[toolbarRowRef, tagBtnWrapRef, emojiBtnWrapRef, frameBtnWrapRef]}
+        resolve={(kind) => {
+          if (kind === 'settings') {
+            return {
+              align: 'start' as const,
+              surface: 'window' as const,
+              backdropLabel: '关闭设置',
+              className: CHROME_TOOLBAR_WINDOW_CLASS,
+              style: panelChromeStyle,
+              role: 'dialog',
+              'aria-label': '设置',
+              children: settingsPanel
+            };
+          }
+          return {
+            align: 'start' as const,
+            surface: 'window' as const,
+            backdropLabel: '关闭筛选',
+            className: CHROME_TOOLBAR_WINDOW_CLASS,
+            style: panelChromeStyle,
+            role: 'dialog',
+            'aria-label': '筛选',
+            children: (
+              <div className="pointer-events-auto flex min-h-0 min-w-0 flex-1 flex-col">
+                {kind === 'tag' ? (
+                  <ProjectNotesLayerPanel
+                    {...layerPanelShared}
+                    merged={mergedTagLayers}
+                    layerGroupStandard="tag"
+                    onStateChange={onTagLayersChange}
+                  />
+                ) : null}
+                {kind === 'frame' ? (
+                  <ProjectNotesLayerPanel
+                    {...layerPanelShared}
+                    merged={mergedFrameLayers}
+                    layerGroupStandard="frame"
+                    onStateChange={onFrameLayersChange}
+                    onUpdateFrame={onUpdateFrame}
+                  />
+                ) : null}
+                {kind === 'emoji' ? (
+                  <ProjectNotesLayerPanel
+                    {...layerPanelShared}
+                    merged={mergedEmojiLayers}
+                    layerGroupStandard="emoji"
+                    onStateChange={onEmojiLayersChange}
+                  />
+                ) : null}
+              </div>
+            )
+          };
+        }}
+      />
     </div>
   );
 };

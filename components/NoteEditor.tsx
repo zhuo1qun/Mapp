@@ -34,6 +34,7 @@ import {
 import { ExternalNavigationSheet } from './map/overlays/ExternalNavigationSheet';
 import { ChromePresence } from './ui/ChromeSheetPresence';
 import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from './ui/ChromeDialogSurface';
+import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { fitBoardMediaDimensions } from '../utils/board/boardPlacement';
 
 interface NoteEditorProps {
@@ -56,7 +57,7 @@ interface NoteEditorProps {
   /** 编辑器自行使用这组全局「界面外观」参数生成表面，不依赖调用方传入样式对象。 */
   mapUiChromeOpacity?: number;
   mapUiChromeBlurPx?: number;
-  /** 地图深色/卫星底图传入 dark；其它视图维持 regular 浅色编辑面。 */
+  /** 深色玻璃面板；不传则跟随主题设置的暗色模式（卫星底图在 Mapping 页强制暗色）。 */
   chromeAppearance?: MapChromeAppearance;
   /** 视口坐标中的点位锚点；存在时编辑器像从该点位展开、收回。 */
   animationAnchor?: { x: number; y: number };
@@ -64,6 +65,8 @@ interface NoteEditorProps {
   presentation?: 'modal' | 'canvas-window';
   /** 宽屏 Table 用它同步媒体详情窗口与横向导航的位置。 */
   onCanvasMediaDetailOpenChange?: (open: boolean) => void;
+  /** 为 false 时只渲染内容，由地图便签槽提供 ChromeWindow。 */
+  shell?: boolean;
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -81,11 +84,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   themeColor = THEME_COLOR,
   mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
   mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
-  chromeAppearance = 'light',
+  chromeAppearance: chromeAppearanceProp,
   animationAnchor,
   presentation = 'modal',
-  onCanvasMediaDetailOpenChange
+  onCanvasMediaDetailOpenChange,
+  shell = true
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const isCanvasWindow = presentation === 'canvas-window';
   // 关闭时父级可能已清掉选中便签，须保留打开瞬间的锚点以完成回收动画。
   const [activeAnimationAnchor, setActiveAnimationAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -100,7 +105,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       mapChromeContentStyle(
         mapUiChromeOpacity,
         mapUiChromeBlurPx,
-        chromeAppearance === 'dark' ? 'carto-dark' : undefined
+        chromeAppearance
       ),
     [chromeAppearance, mapUiChromeBlurPx, mapUiChromeOpacity]
   );
@@ -644,181 +649,122 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     />
   ) : null;
 
-  return (
-    <ChromePresence open={isOpen} kind="dialog" exitDurationMs={280}>
-      {(phase) => (
-    <div
-      data-workspace-modal
-      className={isCanvasWindow
-        ? `note-editor-canvas-window relative z-10 flex w-max shrink-0 items-start gap-3 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`
-        : `note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`}
-      onPointerDown={(e) => e.stopPropagation()}
-      onPointerMove={(e) => e.stopPropagation()}
-      onPointerUp={(e) => e.stopPropagation()}
-      onWheel={(e) => e.stopPropagation()}
-      onDragOver={(e) => e.stopPropagation()}
-      onDragEnter={(e) => e.stopPropagation()}
-      onDragLeave={(e) => e.stopPropagation()}
-      onDrop={(e) => e.stopPropagation()}
-    >
-      {!isCanvasWindow ? (
-        <div className="absolute inset-0" onClick={() => void handleSave()} style={{ zIndex: 1 }} />
+  const editorMain = (
+    <>
+      {isSketching ? (
+        <div className="absolute inset-0 z-50" onPointerDown={(e) => e.stopPropagation()}>
+          <DrawingCanvas
+            backgroundColor={color}
+            onSave={(data) => {
+              if (data && data !== '') appendSketch(data);
+              setIsSketching(false);
+            }}
+            onCancel={() => setIsSketching(false)}
+          />
+        </div>
       ) : null}
 
-      <div className={`note-editor-shell note-editor-canvas-main relative z-10 flex flex-col items-end ${isCanvasWindow ? 'w-[min(38rem,calc(100vw-2rem))] shrink-0' : ''}`}>
-        <div
-          className={`note-editor-panel chrome-dialog-${phase} ${
-            motionAnchor ? `note-editor-panel--anchored note-editor-panel--anchored-${phase}` : ''
-          } map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} ${
-            isCanvasWindow
-              ? 'w-full max-w-full max-h-[calc(100dvh-8rem)]'
-              : 'w-[500px] max-w-[min(95%,calc(100%-2rem))] max-h-[90vh] max-h-[90dvh]'
-          } flex flex-col relative transition-colors duration-300 min-h-[300px] ${isSketching ? 'min-h-[500px]' : ''}`}
-          style={{
-            ...editorChromeStyle,
-            overflow: 'hidden',
-            ...(motionAnchor
-              ? ({
-                  '--note-editor-anchor-x': `${motionAnchor.x}px`,
-                  '--note-editor-anchor-y': `${motionAnchor.y}px`
-                } as React.CSSProperties)
-              : {})
+      <div className={`flex flex-col flex-1 h-full min-h-0 ${isSketching ? 'invisible' : ''}`} style={{ zIndex: 10 }}>
+        <NoteHeader
+          themeColor={themeColor}
+          title={displayTitle}
+          isFavorite={isFavorite}
+          onToggleFavorite={() => {
+            dismissOverlays();
+            setIsFavorite(!isFavorite);
           }}
-          onDragOver={(e) => e.stopPropagation()}
-          onDragEnter={(e) => e.stopPropagation()}
-          onDragLeave={(e) => e.stopPropagation()}
-          onDrop={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {isSketching && (
-            <div className="absolute inset-0 z-50" onPointerDown={(e) => e.stopPropagation()}>
-              <DrawingCanvas
-                backgroundColor={color}
-                onSave={(data) => {
-                  if (data && data !== '') appendSketch(data);
-                  setIsSketching(false);
-                }}
-                onCancel={() => setIsSketching(false)}
-              />
-            </div>
-          )}
+          showUpgrade={false}
+          onUpgrade={() => {}}
+          showLocateBoard={
+            !!(
+              initialNote?.boardX !== undefined &&
+              initialNote?.boardY !== undefined &&
+              onSwitchToBoardView
+            )
+          }
+          onLocateBoard={() => {
+            dismissOverlays();
+            const noteWidth = initialNote!.variant === 'image' ? initialNote!.imageWidth || 256 : 256;
+            const noteHeight = initialNote!.variant === 'image' ? initialNote!.imageHeight || 256 : 256;
+            const centerX = initialNote!.boardX! + noteWidth / 2;
+            const centerY = initialNote!.boardY! + noteHeight / 2;
+            onSwitchToBoardView?.({ x: centerX, y: centerY });
+          }}
+          showLocateMap={
+            !!(initialNote?.coords && initialNote.coords.lat !== 0 && initialNote.coords.lng !== 0 && onSwitchToMapView)
+          }
+          onLocateMap={() => {
+            dismissOverlays();
+            onSwitchToMapView?.(initialNote!.coords);
+          }}
+          showNavigateGo={hasNavigableGpsCoords(initialNote?.coords)}
+          onNavigateGo={() => {
+            if (!hasNavigableGpsCoords(initialNote?.coords)) return;
+            setNavSheetOpen(true);
+          }}
+          showLocateGraph={!!(initialNote?.id && onSwitchToGraphView)}
+          onLocateGraph={() => {
+            if (!initialNote?.id) return;
+            dismissOverlays();
+            onSwitchToGraphView(initialNote.id);
+          }}
+          onSave={() => {
+            dismissOverlays();
+            void handleSave();
+          }}
+          discardDraft={isDiscardableNewDraft}
+          onDiscardDraft={() => {
+            dismissOverlays();
+            onClose();
+          }}
+        />
 
-          <div className={`flex flex-col flex-1 h-full min-h-0 ${isSketching ? 'invisible' : ''}`} style={{ zIndex: 10 }}>
-            <NoteHeader
-              themeColor={themeColor}
-              title={displayTitle}
-              isFavorite={isFavorite}
-              onToggleFavorite={() => {
-                dismissOverlays();
-                setIsFavorite(!isFavorite);
-              }}
-              showUpgrade={false}
-              onUpgrade={() => {}}
-              showLocateBoard={
-                !!(
-                  initialNote?.boardX !== undefined &&
-                  initialNote?.boardY !== undefined &&
-                  onSwitchToBoardView
-                )
-              }
-              onLocateBoard={() => {
-                dismissOverlays();
-                const noteWidth = initialNote!.variant === 'image' ? initialNote!.imageWidth || 256 : 256;
-                const noteHeight = initialNote!.variant === 'image' ? initialNote!.imageHeight || 256 : 256;
-                const centerX = initialNote!.boardX! + noteWidth / 2;
-                const centerY = initialNote!.boardY! + noteHeight / 2;
-                onSwitchToBoardView?.({ x: centerX, y: centerY });
-              }}
-              showLocateMap={
-                !!(initialNote?.coords && initialNote.coords.lat !== 0 && initialNote.coords.lng !== 0 && onSwitchToMapView)
-              }
-              onLocateMap={() => {
-                dismissOverlays();
-                onSwitchToMapView?.(initialNote!.coords);
-              }}
-              showNavigateGo={hasNavigableGpsCoords(initialNote?.coords)}
-              onNavigateGo={() => {
-                if (!hasNavigableGpsCoords(initialNote?.coords)) return;
-                setNavSheetOpen(true);
-              }}
-              showLocateGraph={!!(initialNote?.id && onSwitchToGraphView)}
-              onLocateGraph={() => {
-                if (!initialNote?.id) return;
-                dismissOverlays();
-                onSwitchToGraphView(initialNote.id);
-              }}
-              onSave={() => {
-                dismissOverlays();
-                void handleSave();
-              }}
-              discardDraft={isDiscardableNewDraft}
-              onDiscardDraft={() => {
-                dismissOverlays();
-                onClose();
-              }}
-            />
-
-            {isProcessingImages && (
-              <div className="px-4 py-2 text-sm text-blue-700 bg-blue-50/90 border border-blue-200/80 rounded-xl flex items-center gap-2 mx-4">
-                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                正在处理图片…
-              </div>
-            )}
-
-            <ContentSection
-              isPreviewMode={isPreviewMode}
-              text={text}
-              onTextChange={setText}
-              onPaste={handlePaste}
-              onDropImages={handleDropImages}
-              isProcessingImages={isProcessingImages}
-              textareaRef={textareaRef}
-              updateCursorPosition={updateCursorPosition}
-              editor={editor}
-              themeColor={themeColor}
-            />
-
-            {!isCanvasWindow ? propertySection : null}
-
-            {!isCanvasWindow ? mediaSection : null}
-
-            <MetadataSection
-              id={initialNote?.id}
-              createdAt={initialNote?.createdAt}
-              coords={initialNote?.coords}
-              mediaCount={mediaItems.length}
-              showDelete={!!(initialNote?.id && onDelete)}
-              onDeleteNote={
-                initialNote?.id && onDelete
-                  ? () => {
-                      dismissOverlays();
-                      openDeleteConfirm();
-                    }
-                  : undefined
-              }
-              onDismissOverlays={dismissOverlays}
-            />
+        {isProcessingImages && (
+          <div className="px-4 py-2 text-sm text-blue-700 bg-blue-50/90 border border-blue-200/80 rounded-xl flex items-center gap-2 mx-4">
+            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            正在处理图片…
           </div>
-        </div>
+        )}
+
+        <ContentSection
+          isPreviewMode={isPreviewMode}
+          text={text}
+          onTextChange={setText}
+          onPaste={handlePaste}
+          onDropImages={handleDropImages}
+          isProcessingImages={isProcessingImages}
+          textareaRef={textareaRef}
+          updateCursorPosition={updateCursorPosition}
+          editor={editor}
+          themeColor={themeColor}
+        />
+
+        {!isCanvasWindow ? propertySection : null}
+
+        {!isCanvasWindow ? mediaSection : null}
+
+        <MetadataSection
+          id={initialNote?.id}
+          createdAt={initialNote?.createdAt}
+          coords={initialNote?.coords}
+          mediaCount={mediaItems.length}
+          showDelete={!!(initialNote?.id && onDelete)}
+          onDeleteNote={
+            initialNote?.id && onDelete
+              ? () => {
+                  dismissOverlays();
+                  openDeleteConfirm();
+                }
+              : undefined
+          }
+          onDismissOverlays={dismissOverlays}
+        />
       </div>
+    </>
+  );
 
-      {isCanvasWindow && !isCompactMode ? (
-        <div className="note-editor-canvas-side flex w-80 shrink-0 flex-col gap-3">
-          <div
-            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
-            style={editorChromeStyle}
-          >
-            {propertySection}
-          </div>
-          <div
-            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
-            style={editorChromeStyle}
-          >
-            {mediaSection}
-          </div>
-        </div>
-      ) : null}
-
+  const editorOverlays = (
+    <>
       <MediaDetailWindow
         images={displaySrcs}
         previewIndex={previewImageIndex}
@@ -882,6 +828,97 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           chromeAppearance={chromeAppearance}
         />
       ) : null}
+    </>
+  );
+
+  if (!shell) {
+    return (
+      <>
+        <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">{editorMain}</div>
+        {editorOverlays}
+      </>
+    );
+  }
+
+  return (
+    <ChromePresence open={isOpen} kind="dialog" exitDurationMs={280}>
+      {(phase) => (
+    <div
+      data-workspace-modal
+      className={isCanvasWindow
+        ? `note-editor-canvas-window relative z-10 flex w-max shrink-0 items-start gap-3 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`
+        : `note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`}
+      // Table 宽屏将这里当作一组并列画布窗口：只有实际面板拦截拖拽，
+      // 列间和面板外的留白应继续落到画布，不能形成不可拖动的死区。
+      onPointerDown={(e) => {
+        if (!isCanvasWindow) e.stopPropagation();
+      }}
+      onPointerMove={(e) => {
+        if (!isCanvasWindow) e.stopPropagation();
+      }}
+      onPointerUp={(e) => {
+        if (!isCanvasWindow) e.stopPropagation();
+      }}
+      onWheel={(e) => e.stopPropagation()}
+      onDragOver={(e) => e.stopPropagation()}
+      onDragEnter={(e) => e.stopPropagation()}
+      onDragLeave={(e) => e.stopPropagation()}
+      onDrop={(e) => e.stopPropagation()}
+    >
+      {!isCanvasWindow ? (
+        <div className="absolute inset-0" onClick={() => void handleSave()} style={{ zIndex: 1 }} />
+      ) : null}
+
+      <div className={`note-editor-shell note-editor-canvas-main relative z-10 flex flex-col items-end ${isCanvasWindow ? 'w-[min(38rem,calc(100vw-2rem))] shrink-0' : ''}`}>
+        <div
+          data-table-canvas-window={isCanvasWindow ? 'editor' : undefined}
+          className={`note-editor-panel chrome-dialog-${phase} ${
+            motionAnchor ? `note-editor-panel--anchored note-editor-panel--anchored-${phase}` : ''
+          } map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} ${
+            isCanvasWindow
+              ? 'w-full max-w-full max-h-[calc(100dvh-8rem)]'
+              : 'w-[500px] max-w-[min(95%,calc(100%-2rem))] max-h-[90vh] max-h-[90dvh]'
+          } flex flex-col relative transition-colors duration-300 min-h-[300px] ${isSketching ? 'min-h-[500px]' : ''}`}
+          style={{
+            ...editorChromeStyle,
+            overflow: 'hidden',
+            ...(motionAnchor
+              ? ({
+                  '--note-editor-anchor-x': `${motionAnchor.x}px`,
+                  '--note-editor-anchor-y': `${motionAnchor.y}px`
+                } as React.CSSProperties)
+              : {})
+          }}
+          onDragOver={(e) => e.stopPropagation()}
+          onDragEnter={(e) => e.stopPropagation()}
+          onDragLeave={(e) => e.stopPropagation()}
+          onDrop={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {editorMain}
+        </div>
+      </div>
+
+      {isCanvasWindow && !isCompactMode ? (
+        <div className="note-editor-canvas-side flex w-80 shrink-0 flex-col gap-3">
+          <div
+            data-table-canvas-window="editor-properties"
+            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
+            style={editorChromeStyle}
+          >
+            {propertySection}
+          </div>
+          <div
+            data-table-canvas-window="editor-media"
+            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
+            style={editorChromeStyle}
+          >
+            {mediaSection}
+          </div>
+        </div>
+      ) : null}
+
+      {editorOverlays}
     </div>
       )}
     </ChromePresence>

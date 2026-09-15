@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { EMOJI_CATEGORIES, THEME_COLOR } from '../../constants';
 import { computeAnchoredPanelPlacement } from '../ui/anchoredPanelPlacement';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 
 export const EMOJI_PICKER_EST_W = 320;
 export const EMOJI_PICKER_EST_H = 400;
@@ -24,15 +25,18 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   onClose,
   onSelectEmoji,
   panelChromeStyle,
-  chromeAppearance = 'light'
+  chromeAppearance: chromeAppearanceProp
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const [selectedCategory, setSelectedCategory] =
     useState<keyof typeof EMOJI_CATEGORIES>('Recent');
   const categoryTabsRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const [position, setPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(
+    null
+  );
 
   const updatePlacement = useCallback(() => {
     const el = anchorRef.current;
@@ -42,10 +46,15 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
     const next = computeAnchoredPanelPlacement(el.getBoundingClientRect(), {
       panelWidth: panelRect?.width || EMOJI_PICKER_EST_W,
       panelHeight: panelRect?.height || EMOJI_PICKER_EST_H,
-      align: 'end'
+      align: 'end',
+      vertical: 'below'
     });
     setPosition((current) =>
-      current?.left === next.left && current.top === next.top ? current : next
+      current?.left === next.left &&
+      current.top === next.top &&
+      current.maxHeight === next.maxHeight
+        ? current
+        : next
     );
   }, [anchorRef]);
 
@@ -115,6 +124,17 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
     }
   }, [isOpen, selectedCategory]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopImmediatePropagation();
+      onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
+
   const emojis = useMemo(() => {
     return (EMOJI_CATEGORIES[selectedCategory] || EMOJI_CATEGORIES['Recent']) as string[];
   }, [selectedCategory]);
@@ -122,7 +142,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
   if (!isOpen || !position) return null;
 
   return createPortal(
-    <>
+    <div data-note-emoji-picker="" data-chrome-window-nested="">
       <div className="fixed inset-0" style={{ zIndex: 9999 }} onClick={onClose} />
       <div
         ref={panelRef}
@@ -133,7 +153,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
           ...(panelChromeStyle || {}),
           width: EMOJI_PICKER_EST_W,
           maxWidth: 'min(100vw - 16px, 320px)',
-          maxHeight: EMOJI_PICKER_EST_H,
+          maxHeight: position.maxHeight,
           display: 'flex',
           flexDirection: 'column',
           left: position.left,
@@ -201,7 +221,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
           </div>
         </div>
 
-        <div className="p-3 overflow-y-auto" style={{ maxHeight: 320 }}>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <div className="grid grid-cols-8 gap-1" key={selectedCategory}>
             {emojis.map((e, index) => (
               <button
@@ -228,7 +248,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
           </div>
         </div>
       </div>
-    </>,
+    </div>,
     document.body
   );
 };

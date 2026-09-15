@@ -1,89 +1,4 @@
 (() => {
-  var __getOwnPropNames = Object.getOwnPropertyNames;
-  var __esm = (fn, res) => function __init() {
-    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-  };
-
-  // node_modules/html-to-image/es/util.js
-  var init_util = __esm({
-    "node_modules/html-to-image/es/util.js"() {
-    }
-  });
-
-  // node_modules/html-to-image/es/clone-pseudos.js
-  var init_clone_pseudos = __esm({
-    "node_modules/html-to-image/es/clone-pseudos.js"() {
-      init_util();
-    }
-  });
-
-  // node_modules/html-to-image/es/mimes.js
-  var init_mimes = __esm({
-    "node_modules/html-to-image/es/mimes.js"() {
-    }
-  });
-
-  // node_modules/html-to-image/es/dataurl.js
-  var init_dataurl = __esm({
-    "node_modules/html-to-image/es/dataurl.js"() {
-    }
-  });
-
-  // node_modules/html-to-image/es/clone-node.js
-  var init_clone_node = __esm({
-    "node_modules/html-to-image/es/clone-node.js"() {
-      init_clone_pseudos();
-      init_util();
-      init_mimes();
-      init_dataurl();
-    }
-  });
-
-  // node_modules/html-to-image/es/embed-resources.js
-  var init_embed_resources = __esm({
-    "node_modules/html-to-image/es/embed-resources.js"() {
-      init_util();
-      init_mimes();
-      init_dataurl();
-    }
-  });
-
-  // node_modules/html-to-image/es/embed-images.js
-  var init_embed_images = __esm({
-    "node_modules/html-to-image/es/embed-images.js"() {
-      init_embed_resources();
-      init_util();
-      init_dataurl();
-      init_mimes();
-    }
-  });
-
-  // node_modules/html-to-image/es/apply-style.js
-  var init_apply_style = __esm({
-    "node_modules/html-to-image/es/apply-style.js"() {
-    }
-  });
-
-  // node_modules/html-to-image/es/embed-webfonts.js
-  var init_embed_webfonts = __esm({
-    "node_modules/html-to-image/es/embed-webfonts.js"() {
-      init_util();
-      init_dataurl();
-      init_embed_resources();
-    }
-  });
-
-  // node_modules/html-to-image/es/index.js
-  var init_es = __esm({
-    "node_modules/html-to-image/es/index.js"() {
-      init_clone_node();
-      init_embed_images();
-      init_apply_style();
-      init_embed_webfonts();
-      init_util();
-    }
-  });
-
   // constants.ts
   var EMOJI_CATEGORIES = {
     "Recent": ["\u{1F34B}", "\u{1F4CD}", "\u{1F3E0}", "\u{1F3E2}", "\u{1F333}", "\u2764\uFE0F", "\u2B50", "\u{1F374}", "\u2615", "\u{1F37A}", "\u{1F4F7}", "\u2708\uFE0F", "\u{1F6B4}", "\u{1F3C3}", "\u{1F3A8}", "\u{1F3B5}", "\u{1F6D2}", "\u{1F393}", "\u{1F4BC}", "\u{1F4A1}"],
@@ -118,9 +33,6 @@
   var PROJECT_OPEN_OVERLAY_FADE_S = 0.2;
   var PROJECT_OPEN_OVERLAY_FADE_MS = Math.round(PROJECT_OPEN_OVERLAY_FADE_S * 1e3);
 
-  // utils.ts
-  init_es();
-
   // utils/theme/themeChrome.ts
   var LAB_EPS = 216 / 24389;
   var LAB_KAPPA = 24389 / 27;
@@ -146,13 +58,19 @@
     DEFAULT_MAP_UI_CHROME_OPACITY,
     DEFAULT_MAP_UI_CHROME_BLUR_PX
   );
+  function chromeIsDark(appearance) {
+    return appearance === "dark";
+  }
   var MAP_CHROME_SURFACE_BORDER_CLASS = "border border-gray-100/80";
   var MAP_CHROME_SURFACE_SHELL_CLASS = `rounded-lg shadow-lg ${MAP_CHROME_SURFACE_BORDER_CLASS}`;
-  function mapChromeSurfaceStyle(opacity, blurPx) {
+  function mapChromeSurfaceStyle(opacity, blurPx, appearance = "light") {
     const o = Math.min(1, Math.max(0, opacity));
     const b = Math.min(48, Math.max(0, blurPx));
+    const dark = chromeIsDark(appearance);
     const style = {
-      backgroundColor: `rgba(255, 255, 255, ${o})`
+      backgroundColor: dark ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`,
+      color: dark ? "rgba(255, 255, 255, 0.92)" : void 0,
+      borderColor: dark ? "rgba(255, 255, 255, 0.16)" : void 0
     };
     if (b > 0) {
       const f = `blur(${b}px)`;
@@ -1921,15 +1839,21 @@
     };
     function renderSettings() {
       if (!panelSettings) return;
-      const slider = (id, label, value, min, max, step, fmt) => `
+      const slider = (id, label, value, min, max, step, fmt) => {
+        const span = max - min;
+        const pct = span <= 0 ? 0 : Math.max(0, Math.min(100, (value - min) / span * 100));
+        return `
       <label class="block min-w-0">
-        <div class="mb-1 flex items-center justify-between gap-2">
-          <span class="text-xs font-medium text-gray-600">${label}</span>
-          <span class="tabular-nums text-[10px] text-gray-400" data-val-for="${id}">${fmt(value)}</span>
+        <div class="mb-1 text-xs font-medium text-gray-600">${label}</div>
+        <div class="chrome-capsule-track relative h-9 overflow-hidden rounded-full">
+          <div data-fill-for="${id}" class="chrome-capsule-fill pointer-events-none absolute inset-y-0 left-0" style="width:${pct}%"></div>
+          <span class="pointer-events-none absolute inset-0 z-[1] flex items-center justify-end px-2.5 text-xs font-medium tabular-nums text-gray-700" data-val-for="${id}">${fmt(value)}</span>
+          <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"
+            aria-label="${label}"
+            class="absolute inset-0 z-[2] m-0 h-full w-full cursor-pointer opacity-0" />
         </div>
-        <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"
-          class="w-full" style="accent-color:${escapeHtml2(themeColor)}" />
       </label>`;
+      };
       panelSettings.innerHTML = `
       <h2 class="shrink-0 px-3 pt-2.5 text-xs font-medium text-gray-500">\u8BBE\u7F6E</h2>
       <div class="overflow-y-auto px-3 pt-2 pb-3 space-y-4" style="max-height:min(22rem,60dvh)">
@@ -1981,6 +1905,13 @@
             } else {
               label.textContent = String(Math.round(v));
             }
+          }
+          const fill = panelSettings.querySelector(`[data-fill-for="${id}"]`);
+          if (fill) {
+            const lo = Number(el.min);
+            const hi = Number(el.max);
+            const span = hi - lo;
+            fill.style.width = `${span <= 0 ? 0 : Math.max(0, Math.min(100, (v - lo) / span * 100))}%`;
           }
           applyStyles();
         });

@@ -4,6 +4,7 @@ import { ThemeColorSettingRow } from './ThemeColorSettingRow';
 import { HelpHint } from './ui/HelpHint';
 import { PortalTooltip } from './ui/PortalTooltip';
 import { SettingsCompactSlider } from './ui/SettingsCompactSlider';
+import { SettingsToggleSwitch } from './ui/SettingsToggleSwitch';
 
 /** 低于该不透明度时提示可能影响界面可读性（40%） */
 const PANEL_OPACITY_READABILITY_WARN_BELOW = 0.4;
@@ -11,6 +12,8 @@ const PANEL_OPACITY_READABILITY_WARN_BELOW = 0.4;
 export interface AppearanceSettingsBlockProps {
   themeColor: string;
   onRequestThemeEdit: () => void;
+  uiDarkMode: boolean;
+  onUiDarkModeChange: (dark: boolean) => void;
   mapUiChromeOpacity: number;
   onMapUiChromeOpacityChange: (opacity: number) => void;
   mapUiChromeBlurPx: number;
@@ -21,10 +24,12 @@ export interface AppearanceSettingsBlockProps {
   onEasterEggMouseConstraintStiffnessChange?: (v: number) => void;
 }
 
-/** 设置中与主页「设置」共用的「界面外观」表单（主题色、面板透明度、模糊） */
+/** 设置中与主页「设置」共用的「界面外观」表单（主题色、暗色模式、面板透明度、模糊） */
 export const AppearanceSettingsBlock: React.FC<AppearanceSettingsBlockProps> = ({
   themeColor,
   onRequestThemeEdit,
+  uiDarkMode,
+  onUiDarkModeChange,
   mapUiChromeOpacity,
   onMapUiChromeOpacityChange,
   mapUiChromeBlurPx,
@@ -38,13 +43,20 @@ export const AppearanceSettingsBlock: React.FC<AppearanceSettingsBlockProps> = (
     <div className="space-y-3 pl-0.5">
       <ThemeColorSettingRow themeColor={themeColor} onRequestEdit={onRequestThemeEdit} />
 
+      <SettingsToggleSwitch
+        label="暗色模式"
+        checked={uiDarkMode}
+        onChange={onUiDarkModeChange}
+        themeColor={themeColor}
+      />
+
       <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2">
         <div className="min-w-0">
           <SettingsCompactSlider
             label="面板背景透明度"
             hint={
               <HelpHint>
-                控制工具栏、滑块、搜索等「白底/浅色」浮层的不透明度；越低越能透出背后地图，但文字可读性会下降。
+                控制工具栏、设置、搜索等浮层的不透明度；越低越能透出背后画布，但文字可读性会下降。
               </HelpHint>
             }
             labelExtra={

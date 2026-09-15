@@ -41,6 +41,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
     <ChromePresence open={open} kind="dialog">
       {(phase) => (
         <div
+          data-chrome-window-nested=""
           className={`fixed inset-0 z-[var(--z-blocking-dialog)] flex items-center justify-center p-4 chrome-dialog-backdrop-${phase}`}
           role="dialog"
           aria-modal="true"

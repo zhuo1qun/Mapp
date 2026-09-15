@@ -11,6 +11,7 @@ import { TagChip } from '../../ui/TagChip';
 import { NoteIconButton } from '../../note-editor/NoteIconButton';
 import { ExternalNavigationSheet } from './ExternalNavigationSheet';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
+import { useChromeAppearance } from '../../ui/chromeAppearanceContext';
 
 interface NotePreviewCardProps {
   note: Note;
@@ -31,6 +32,8 @@ interface NotePreviewCardProps {
   themeColor?: string;
   /** 传入时显示右上角铅笔，打开全文编辑器 */
   onOpenEditor?: (noteId: string) => void;
+  /** 由便签槽提供外壳时只渲染内容。 */
+  hosted?: boolean;
 }
 
 export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
@@ -38,13 +41,15 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   currentImageIndex,
   onImageIndexChange,
   chromeSurfaceStyle,
-  chromeAppearance = 'light',
+  chromeAppearance: chromeAppearanceProp,
   passThrough = false,
   offsetTopPx,
   embedded = false,
   themeColor,
-  onOpenEditor
+  onOpenEditor,
+  hosted = false
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const [navSheetOpen, setNavSheetOpen] = useState(false);
   const [displayNote, setDisplayNote] = useState<Note>(note);
   const [mediaLoading, setMediaLoading] = useState(() => noteNeedsMediaResolve(note));
@@ -105,10 +110,9 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 用 mediaSig 跟踪媒体字段
   }, [mediaSig]);
 
-  const formatPreviewTitle = (rawText: string): string => {
-    const title = parseNoteContent(rawText || '').title || 'Untitled Note';
-    return title.replace(/,\s/, '\n');
-  };
+  const parsedContent = useMemo(() => parseNoteContent(note.text || ''), [note.text]);
+  const previewTitle = parsedContent.title || undefined;
+  const hasDetail = parsedContent.detail.trim().length > 0;
 
   const formatYearRange = (): string | null => {
     if (note.startYear == null) return null;
@@ -127,6 +131,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
     (note.images && note.images.length > 0) ||
     !!(note.sketch && note.sketch !== '') ||
     (note.imageRefs && note.imageRefs.length > 0);
+  const hasPreviewBody = hasDetail || hasMediaSlots || allImages.length > 0;
   const currentSrc = allImages[currentImageIndex];
   const currentOk = isDisplayableImageSrc(currentSrc);
 
@@ -136,37 +141,50 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
     noteHasRenderableMapPosition(note) &&
     hasNavigableGpsCoords(note.coords) &&
     !passThrough;
-
-  return (
-    <>
-    <div
-      data-allow-context-menu
-      className={`mapping-preview-selectable map-chrome-content-${chromeAppearance} ${
+  const cardClass = hosted
+    ? `mapping-preview-selectable flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+        passThrough ? 'pointer-events-none' : 'pointer-events-auto'
+      }`
+    : `mapping-preview-selectable map-chrome-content-${chromeAppearance} ${
         embedded
           ? 'relative w-72 sm:w-80 shrink-0'
           : 'fixed ui-workspace-left z-[1000] w-72 sm:w-80'
       } rounded-2xl shadow-2xl border border-gray-100/80 overflow-hidden animate-in slide-in-from-left-8 duration-500 ease-out flex flex-col ${
         passThrough ? 'pointer-events-none' : 'pointer-events-auto'
-      } ${chromeSurfaceStyle ? '' : 'bg-white'}`}
-      style={{
+      } ${chromeSurfaceStyle ? '' : 'bg-white'}`;
+  const cardStyle = hosted
+    ? undefined
+    : {
         ...(embedded
           ? { maxHeight: 'min(52dvh, 28rem)' }
           : { top: topPx, maxHeight: `calc(100dvh - ${topPx}px - 1rem)` }),
         ...chromeSurfaceStyle
-      }}
+      };
+
+  return (
+    <>
+    <div
+      data-allow-context-menu
+      className={cardClass}
+      style={cardStyle}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {/* 预览卡保持比完整编辑器更轻一档的标题与操作密度。 */}
-      <div className="relative flex items-start gap-2 px-3.5 py-3 pb-1.5 shrink-0 before:absolute before:bottom-0 before:left-3 before:right-3 before:border-b before:border-gray-400/50">
+      <div className="relative flex shrink-0 items-start gap-2 px-3.5 py-3 pb-2 before:absolute before:bottom-0 before:left-3 before:right-3 before:border-b before:border-gray-400/50">
         <div className="flex min-w-0 flex-1 items-start gap-2">
           {note.emoji && (
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-xl">{note.emoji}</span>
           )}
           <div className="flex min-h-8 min-w-0 flex-1 flex-col justify-center">
-            <h3 className="text-base font-semibold text-gray-700 leading-snug whitespace-pre-line break-words">
-              {formatPreviewTitle(note.text || '')}
-            </h3>
+            {previewTitle ? (
+              <h3
+                className="truncate whitespace-nowrap text-sm font-medium text-gray-400"
+                title={previewTitle}
+              >
+                {previewTitle}
+              </h3>
+            ) : null}
             {timeRangeText && (
               <div className="mt-0.5 text-[11px] text-gray-500 font-medium truncate">
                 {timeRangeText}
@@ -222,11 +240,8 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
         ) : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {note.text && (() => {
-          const { detail } = parseNoteContent(note.text);
-          if (!detail.trim()) return null;
-          return (
+      <div className={`flex-1 overflow-y-auto custom-scrollbar ${hasPreviewBody ? '' : 'min-h-3'}`}>
+        {hasDetail ? (
             <div className="px-4 py-3 text-gray-800 text-sm leading-snug break-words border-b border-gray-50 mapping-preview-markdown">
               <ReactMarkdown
                 components={{
@@ -242,7 +257,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                   )
                 }}
               >
-                {detail}
+                {parsedContent.detail}
               </ReactMarkdown>
               <style>{`
                 .mapping-preview-markdown p { margin-bottom: 0.6rem; line-height: 1.4; }
@@ -259,8 +274,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                 .mapping-preview-markdown a:hover { color: #1d4ed8; }
               `}</style>
             </div>
-          );
-        })()}
+        ) : null}
 
         {(hasMediaSlots || allImages.length > 0) && (
           <div className="relative group flex items-center justify-center shrink-0 px-4 py-3 bg-transparent">
@@ -323,7 +337,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
         open={navSheetOpen}
         lat={note.coords.lat}
         lng={note.coords.lng}
-        label={parseNoteContent(note.text || '').title || undefined}
+        label={previewTitle}
         onClose={() => setNavSheetOpen(false)}
         themeColor={themeColor}
         panelChromeStyle={chromeSurfaceStyle}

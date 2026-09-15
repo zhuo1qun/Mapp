@@ -8,6 +8,7 @@ import {
 } from '../../../utils/map/openExternalNavigation';
 import { MODAL_BACKDROP_MASK_STYLE, type MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 import { ChromePresence } from '../../ui/ChromeSheetPresence';
+import { useChromeAppearance } from '../../ui/chromeAppearanceContext';
 
 type Props = {
   open: boolean;
@@ -33,8 +34,9 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
   onClose,
   themeColor = '#3b82f6',
   panelChromeStyle,
-  chromeAppearance = 'light'
+  chromeAppearance: chromeAppearanceProp
 }) => {
+  const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   if (typeof document === 'undefined') return null;
 
   const apps = listExternalMapApps();

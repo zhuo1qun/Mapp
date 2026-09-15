@@ -12,10 +12,6 @@ export interface UseBoardNoteInteractionArgs {
   setSelectedNoteIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   setSelectedConnectionId: (id: string | null) => void;
   setSelectedFrameId: (id: string | null) => void;
-  setConnectingFrom: (v: null) => void;
-  setConnectingTo: (v: null) => void;
-  setHoveringConnectionPoint: (v: null) => void;
-  resetBlankClickCount: () => void;
   onOpenNoteEditor: (note: Note) => void;
 }
 
@@ -32,10 +28,6 @@ export function useBoardNoteInteraction({
   setSelectedNoteIds,
   setSelectedConnectionId,
   setSelectedFrameId,
-  setConnectingFrom,
-  setConnectingTo,
-  setHoveringConnectionPoint,
-  resetBlankClickCount,
   onOpenNoteEditor
 }: UseBoardNoteInteractionArgs) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,20 +63,12 @@ export function useBoardNoteInteraction({
         setSelectedConnectionId(null);
         setSelectedFrameId(null);
       }
-      setConnectingFrom(null);
-      setConnectingTo(null);
-      setHoveringConnectionPoint(null);
-      resetBlankClickCount();
     },
     [
       setSelectedNoteId,
       setSelectedNoteIds,
       setSelectedConnectionId,
-      setSelectedFrameId,
-      setConnectingFrom,
-      setConnectingTo,
-      setHoveringConnectionPoint,
-      resetBlankClickCount
+      setSelectedFrameId
     ]
   );
 
@@ -118,7 +102,6 @@ export function useBoardNoteInteraction({
             }
             return next;
           });
-          resetBlankClickCount();
           return;
         }
         onOpenNoteEditor(latestNote);
@@ -141,7 +124,6 @@ export function useBoardNoteInteraction({
       workspaceEditMode,
       setSelectedNoteIds,
       setSelectedNoteId,
-      resetBlankClickCount,
       onOpenNoteEditor,
       clearDeferredClick,
       applyEditModeSelection
