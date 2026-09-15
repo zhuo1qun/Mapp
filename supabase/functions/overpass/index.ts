@@ -131,8 +131,8 @@ Deno.serve(async (req) => {
       return json(geojson, {
         headers: {
           ...corsHeaders(origin),
-          // API 响应不使用不可变长缓存，避免边界数据或筛选结果过期。
-          'Cache-Control': 'public, max-age=0, must-revalidate'
+          // 同一 osmId 几何短期内可复用，减轻公共 Overpass 压力
+          'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400'
         }
       });
     } catch (e) {

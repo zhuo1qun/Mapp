@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
-import { ChromeCapsuleSlider } from './ui/ChromeCapsuleSlider';
 import { ChromeMenuItem } from './ui/ChromeMenuItem';
 import { ChromeMenuShell } from './ui/ChromeMenuShell';
 import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 import { chromePanelFieldClass } from './ui/chromePanelField';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
+import { SettingsCompactSlider } from './ui/SettingsCompactSlider';
 
 export type SnapshotExportOptions = {
   includeBackground: boolean;
@@ -155,22 +155,17 @@ export const ExportResolutionDialog: React.FC<ExportResolutionDialogProps> = ({
             </div>
           </div>
 
-          <div>
-            <ChromeCapsuleSlider
-              label="分辨率倍数"
-              value={selectedRatio}
-              min={1}
-              max={4}
-              step={1}
-              onChange={(value) => setSelectedRatio(Math.round(value))}
-              formatValue={(value) => ratioLabels[Math.round(value)] ?? `${Math.round(value)}x`}
-              aria-label="分辨率倍数"
-            />
-            <div className="mt-0.5 flex w-full min-w-0 justify-between text-[11px] leading-tight text-gray-400">
-              <span>1x</span>
-              <span>4x</span>
-            </div>
-          </div>
+          <SettingsCompactSlider
+            label="分辨率倍数"
+            value={selectedRatio}
+            min={1}
+            max={4}
+            step={1}
+            onChange={(value) => setSelectedRatio(Math.round(value))}
+            formatValue={(value) => ratioLabels[Math.round(value)] ?? `${Math.round(value)}x`}
+            minCaption="1x"
+            maxCaption="4x"
+          />
 
           <div className="chrome-inset rounded-lg px-2.5 py-2">
             <div className="mb-1 flex items-center justify-between">

@@ -1955,8 +1955,8 @@ export const MapView: React.FC<MapViewProps> = ({
               color: themeColor, 
               weight: 3, 
               opacity: 0.8,
-              fillColor: themeColor,
-              fillOpacity: 0.1,
+              fill: false,
+              fillOpacity: 0,
               dashArray: '5, 10'
             }} 
           />
@@ -2377,10 +2377,13 @@ export const MapView: React.FC<MapViewProps> = ({
             </div>
         )}
 
-        <div className="absolute top-24 left-0 right-0 z-[400] pointer-events-none flex justify-center">
+        <div
+          className="pointer-events-none absolute left-0 right-0 top-24 z-[400] flex justify-center"
+          data-mapp-export-ui=""
+        >
           <div className="relative">
             <div
-              className={`px-4 py-2 rounded-full shadow-lg text-sm animate-bounce whitespace-nowrap border border-gray-100/80 map-chrome-content-${mapChromeTone}`}
+              className={`animate-bounce whitespace-nowrap rounded-full border border-gray-100/80 px-4 py-2 text-sm shadow-lg map-chrome-content-${mapChromeTone}`}
               style={mapChromeControlSurface}
             >
               Long press anywhere to pin

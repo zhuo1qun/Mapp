@@ -254,7 +254,7 @@ export const parseNoteContent = (text: string) => {
 };
 
 // 等待视图内图片结束加载；失败或超时也要继续导出，不能让弹窗永久卡住。
-const checkImagesLoaded = async (element: HTMLElement): Promise<void> => {
+const waitForImagesLoaded = async (element: HTMLElement): Promise<void> => {
   const images = Array.from(element.querySelectorAll('img'));
   await Promise.all(
     images.map(
@@ -280,11 +280,43 @@ const checkImagesLoaded = async (element: HTMLElement): Promise<void> => {
     )
   );
 };
-// 处理跨域图片
-const handleCorsImages = (element: HTMLElement): void => {
+
+/**
+ * Leaflet 瓦片加载完后会有 opacity 淡入；导出前等齐 `leaflet-tile-loaded`，
+ * 避免截到半透明中间态。
+ */
+const waitForLeafletTilesReady = async (
+  root: HTMLElement,
+  timeoutMs = 10000
+): Promise<void> => {
+  const pane = root.querySelector('.leaflet-tile-pane');
+  if (!pane) return;
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const tiles = Array.from(pane.querySelectorAll<HTMLElement>('.leaflet-tile'));
+    const pending = tiles.filter((tile) => {
+      if (!tile.classList.contains('leaflet-tile-loaded')) return true;
+      if (tile instanceof HTMLImageElement) {
+        return !tile.complete || tile.naturalWidth === 0;
+      }
+      return false;
+    });
+    if (pending.length === 0) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      return;
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+  }
+};
+
+// 处理跨域图片（勿改已绘制的 Leaflet 瓦片：写 crossOrigin 会触发重载，导出时易截到半透明淡入）
+const prepareCorsImages = (element: HTMLElement): void => {
   const images = element.querySelectorAll('img');
   images.forEach((img) => {
-    // 如果图片是跨域的，尝试添加 crossOrigin 属性
+    if (img.classList.contains('leaflet-tile') || img.closest('.leaflet-tile-pane')) return;
+    // 已解码完成的图再改 crossOrigin 也会重载，跳过
+    if (img.complete && img.naturalWidth > 0) return;
     if (img.src && img.src.startsWith('http') && !img.crossOrigin) {
       try {
         img.crossOrigin = 'anonymous';
@@ -373,78 +405,91 @@ export const exportWorkspaceSnapshot = async (
       }
     }
 
-    handleCorsImages(node);
-    await checkImagesLoaded(node);
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const leafletContainer =
+      view === 'map' ? node.querySelector<HTMLElement>('.leaflet-container') : null;
+    if (leafletContainer) {
+      leafletContainer.classList.add('mapp-snapshot-exporting');
+    }
 
-    const filter = (candidate: HTMLElement) => {
-      if (!(candidate instanceof Element)) return true;
-      if (candidate.closest('[data-mapp-export-keep]')) return true;
-      if (candidate.closest('[data-mapp-export-ui]')) return false;
-      if (candidate.matches('button, input, select, textarea')) return false;
-      if (candidate.classList.contains('fixed')) return false;
-
-      if (view === 'map') {
-        if (candidate.closest('.leaflet-control-zoom')) return false;
-        if (
-          options.includeBackground === false &&
-          candidate.closest('.leaflet-tile-pane, .leaflet-shadow-pane')
-        ) {
-          return false;
-        }
-        if (options.includeBorder === false && candidate.closest('.leaflet-overlay-pane')) {
-          return false;
-        }
-        if (
-          options.includePins === false &&
-          candidate.closest('.leaflet-marker-pane, .custom-text-label')
-        ) {
-          return false;
-        }
+    try {
+      prepareCorsImages(node);
+      if (view === 'map' && options.includeBackground !== false) {
+        await waitForLeafletTilesReady(node);
       }
+      await waitForImagesLoaded(node);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      if (view === 'board') {
-        if (
-          options.includeBackground === false &&
-          candidate instanceof HTMLElement &&
-          candidate.style.backgroundImage.includes('radial-gradient')
-        ) {
-          return false;
+      const filter = (candidate: HTMLElement) => {
+        if (!(candidate instanceof Element)) return true;
+        if (candidate.closest('[data-mapp-export-keep]')) return true;
+        if (candidate.closest('[data-mapp-export-ui]')) return false;
+        if (candidate.matches('button, input, select, textarea')) return false;
+        if (candidate.classList.contains('fixed')) return false;
+
+        if (view === 'map') {
+          if (candidate.closest('.leaflet-control-zoom')) return false;
+          if (
+            options.includeBackground === false &&
+            candidate.closest('.leaflet-tile-pane, .leaflet-shadow-pane')
+          ) {
+            return false;
+          }
+          if (options.includeBorder === false && candidate.closest('.leaflet-overlay-pane')) {
+            return false;
+          }
+          if (
+            options.includePins === false &&
+            candidate.closest('.leaflet-marker-pane, .custom-text-label')
+          ) {
+            return false;
+          }
         }
-        if (options.includeBorder === false && candidate.closest('[data-board-export-frame]')) {
-          return false;
+
+        if (view === 'board') {
+          if (
+            options.includeBackground === false &&
+            candidate instanceof HTMLElement &&
+            candidate.style.backgroundImage.includes('radial-gradient')
+          ) {
+            return false;
+          }
+          if (options.includeBorder === false && candidate.closest('[data-board-export-frame]')) {
+            return false;
+          }
+          if (options.includePins === false && candidate.closest('[data-is-note="true"]')) {
+            return false;
+          }
         }
-        if (options.includePins === false && candidate.closest('[data-is-note="true"]')) {
-          return false;
-        }
-      }
 
-      return true;
-    };
+        return true;
+      };
 
-    const computedBackground = window.getComputedStyle(node).backgroundColor;
-    const opaqueFallback =
-      computedBackground && computedBackground !== 'rgba(0, 0, 0, 0)'
-        ? computedBackground
-        : '#f9fafb';
-    const render = exportAsPng ? toPng : toJpeg;
-    const dataUrl = await render(node, {
-      quality: 0.95,
-      pixelRatio: Math.min(4, Math.max(1, pixelRatio)),
-      backgroundColor: exportAsPng ? 'transparent' : opaqueFallback,
-      width: exportWidth,
-      height: exportHeight,
-      skipFonts: true,
-      includeQueryParams: true,
-      imagePlaceholder:
-        'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=',
-      filter
-    });
+      const computedBackground = window.getComputedStyle(node).backgroundColor;
+      const opaqueFallback =
+        computedBackground && computedBackground !== 'rgba(0, 0, 0, 0)'
+          ? computedBackground
+          : '#f9fafb';
+      const render = exportAsPng ? toPng : toJpeg;
+      const dataUrl = await render(node, {
+        quality: 0.95,
+        pixelRatio: Math.min(4, Math.max(1, pixelRatio)),
+        backgroundColor: exportAsPng ? 'transparent' : opaqueFallback,
+        width: exportWidth,
+        height: exportHeight,
+        skipFonts: true,
+        includeQueryParams: true,
+        imagePlaceholder:
+          'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=',
+        filter
+      });
 
-    const link = document.createElement('a');
-    link.download = `${fileName}.${exportAsPng ? 'png' : 'jpg'}`;
-    link.href = dataUrl;
-    link.click();
+      const link = document.createElement('a');
+      link.download = `${fileName}.${exportAsPng ? 'png' : 'jpg'}`;
+      link.href = dataUrl;
+      link.click();
+    } finally {
+      leafletContainer?.classList.remove('mapp-snapshot-exporting');
+    }
   } catch (error) {
     console.error('Export failed:', error);
     window.alert('导出失败，请重试');

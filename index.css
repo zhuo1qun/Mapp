@@ -1138,6 +1138,13 @@ body {
   will-change: transform;
 }
 
+/* 导出快照：冻结瓦片淡入，避免截到半透明加载态 */
+.leaflet-container.mapp-snapshot-exporting .leaflet-tile,
+.leaflet-container.mapp-snapshot-exporting .leaflet-tile-loaded {
+  opacity: 1 !important;
+  transition: none !important;
+}
+
 /* 点位的入场/离场仅作用于 DivIcon 内层，绝不动画 Leaflet 用来定位的外层 transform。 */
 .mapp-map-pin-motion {
   transform-origin: 50% 100%;

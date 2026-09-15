@@ -1,5 +1,5 @@
 
-import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Map as MapIcon, Grid, Menu, Loader2, Table2, GitBranch, Cloud, CloudOff, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from './components/ui/MotionDiv';
@@ -114,8 +114,6 @@ export default function App() {
   /** 从主页点进项目：先进入工作区壳层，左侧由全宽收束为侧栏（非从屏幕外滑入） */
   const [pendingEnterWorkspaceFromHome, setPendingEnterWorkspaceFromHome] = useState(false);
   const [sidebarDockedInline, setSidebarDockedInline] = useState(false);
-  /** 回主页：先让 overlay 在卸载前采用无位移 exit，避免与「项目切换收起」共用同一套滑出 */
-  const [homeOverlayExitInstant, setHomeOverlayExitInstant] = useState(false);
   /** 彩蛋模式：仅稳定主页生效 */
   const [homeEasterEggMode, setHomeEasterEggMode] = useState(false);
   const [homeEasterEggGravityY, setHomeEasterEggGravityY] = useState(1.35);
@@ -123,6 +121,16 @@ export default function App() {
   /** 仅开发者维护内置示例项目（增删/列表显示等）；默认对普通用户隐藏 */
   const [exampleDevMaintenanceMode, setExampleDevMaintenanceMode] = useState(false);
   const expandToHomeProjectIdRef = useRef<string | null>(null);
+  /**
+   * 窄屏主页→项目：进入/收束全程留在 docked，结束后再交接 overlay。
+   * 用 ref 避免额外 state；与 projectEnterCollapsing 同帧读取即可。
+   */
+  const enterFromHomeKeepDockedRef = useRef(false);
+  /**
+   * overlay↔docked 无缝交接：下一帧挂载/卸载的壳跳过 width:0 / x:-100% 入退场，
+   * 避免窄屏「先闪回收起再拉开」。
+   */
+  const sidebarShellHandoffRef = useRef(false);
 
   const viewState = useViewState();
   const appState = useAppState();
@@ -269,6 +277,8 @@ export default function App() {
     typeof window !== 'undefined' &&
       window.matchMedia(`(min-width: ${PROJECT_SIDEBAR_FIXED_WIDTH_MIN_VIEWPORT_PX}px)`).matches
   );
+  const projectSidebarLargeViewportRef = useRef(projectSidebarLargeViewport);
+  projectSidebarLargeViewportRef.current = projectSidebarLargeViewport;
   const [viewportWidthPx, setViewportWidthPx] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : PROJECT_LIST_MAX_WIDTH_PX
   );
@@ -326,6 +336,7 @@ export default function App() {
     }) => {
       setSidebarExpandingToHome(false);
       setProjectEnterCollapsing(false);
+      enterFromHomeKeepDockedRef.current = mode === 'from-home';
       setSidebarDockedInline(true);
       setIsSidebarOpen(true);
       setPendingEnterWorkspaceFromHome(mode === 'from-home');
@@ -351,6 +362,11 @@ export default function App() {
 
     await afterNextPaint();
     await waitForAnimation(projectEnterExpandMs);
+    // 窄屏：主页进入后的收束在 docked 上完成，结束后无缝交接 overlay（跳过 width:0 / 滑入）
+    if (enterFromHomeKeepDockedRef.current && !projectSidebarLargeViewportRef.current) {
+      sidebarShellHandoffRef.current = true;
+    }
+    enterFromHomeKeepDockedRef.current = false;
     setProjectEnterCollapsing(false);
   }, [projectEnterExpandMs, setIsSidebarOpen]);
 
@@ -391,9 +407,16 @@ export default function App() {
 
   const projectSidebarIsFullWidth =
     atSteadyProjectHome || isProjectEnterFullWidth || sidebarExpandingToHome;
-  /** 首页/过渡期保留全宽；稳定项目页才按屏幕宽度决定停靠或覆盖。 */
+  /**
+   * 宽屏始终 docked；窄屏稳定主页 docked，项目内 overlay。
+   * 过渡期不换壳：回主页/项目切换留在 overlay 上改 width；仅「主页进项目」全程 docked（含收束）。
+   */
   const projectSidebarIsDocked =
-    sidebarDockedInline && (projectSidebarIsFullWidth || projectSidebarLargeViewport);
+    sidebarDockedInline &&
+    (projectSidebarLargeViewport ||
+      atSteadyProjectHome ||
+      pendingEnterWorkspaceFromHome ||
+      (projectEnterCollapsing && enterFromHomeKeepDockedRef.current));
 
   const { handleDataImport: handleProjectDataImport } = useDataImport({
     project: activeProject as Project,
@@ -626,6 +649,7 @@ export default function App() {
       if (fromHome) {
         setCurrentProjectId(null);
         setPendingEnterWorkspaceFromHome(false);
+        enterFromHomeKeepDockedRef.current = false;
       } else {
         setCurrentProjectId(previousProjectId);
         setSidebarExpandForProjectSwitch(false);
@@ -651,23 +675,18 @@ export default function App() {
   ]);
 
   const handleBackToHome = useCallback(() => {
-    if (sidebarExpandingToHome || homeOverlayExitInstant) return;
-    // 始终走 docked：与当前项目列表共用一个 ProjectManager，全宽中间态仅收束列表；
-    // 定时结束后清空项目再展开主页其余 UI，避免先卸 dock 再走 overlay 滑出（像项目切换收尾）。
-    setHomeOverlayExitInstant(true);
-  }, [sidebarExpandingToHome, homeOverlayExitInstant]);
-
-  useLayoutEffect(() => {
-    if (!homeOverlayExitInstant) return;
+    if (sidebarExpandingToHome) return;
+    // 窄屏留在 overlay、宽屏留在 docked：只改 width 拉到全屏，不换壳（避免先收到 0 再展开）。
     setSidebarExpandForProjectSwitch(false);
     setPendingEnterWorkspaceFromHome(false);
     setProjectEnterCollapsing(false);
-    setSidebarDockedInline(true);
     setIsSidebarOpen(true);
+    if (projectSidebarLargeViewport) {
+      setSidebarDockedInline(true);
+    }
     expandToHomeProjectIdRef.current = currentProjectId;
     setSidebarExpandingToHome(true);
-    setHomeOverlayExitInstant(false);
-  }, [homeOverlayExitInstant, currentProjectId]);
+  }, [sidebarExpandingToHome, currentProjectId, projectSidebarLargeViewport, setIsSidebarOpen]);
 
   useEffect(() => {
     if (!sidebarExpandingToHome) return;
@@ -684,6 +703,10 @@ export default function App() {
       setActiveProject(null);
       setIsSidebarOpen(true);
       setSidebarDockedInline(true);
+      // 窄屏：overlay 已在全宽，交接 docked 时跳过 width:0 入场
+      if (!projectSidebarLargeViewportRef.current) {
+        sidebarShellHandoffRef.current = true;
+      }
       /** 先保留 sidebarExpandingToHome，下一帧再关 transitionListOnly：列表与主页共用 expand 壳与同一套 scroll 区，避免整块列表瞬切 */
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -785,6 +808,17 @@ export default function App() {
   /** 侧栏 docked：全宽启动页与项目内联共用同一壳，不再切换到单独「全屏 ProjectManager」 */
   const showDockedProjectSidebar =
     isUIVisible && isSidebarOpen && projectSidebarIsDocked;
+
+  /** handoff 消费后清掉，避免下次打开误跳过入场动画 */
+  useEffect(() => {
+    if (!sidebarShellHandoffRef.current) return;
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        sidebarShellHandoffRef.current = false;
+      });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [showDockedProjectSidebar, projectSidebarIsDocked]);
 
   /**
    * 进入项目时工作区占位：中间态内不再单独展示「加载项目」屏（进度并入侧栏顶条），
@@ -1573,15 +1607,23 @@ export default function App() {
                 // Docked sidebar only changes its occupied width. Combining a
                 // width animation with a second translate made its transparent
                 // outer shell expose the workspace behind it like a second panel.
-                initial={{ width: 0 }}
+                // 窄屏从全宽 overlay 交接时跳过 width:0，避免先闪收再展开。
+                initial={sidebarShellHandoffRef.current ? false : { width: 0 }}
                 animate={{ width: projectSidebarDrawerWidthPx }}
-                exit={{ width: 0 }}
+                exit={
+                  sidebarShellHandoffRef.current
+                    ? { opacity: 0, transition: { duration: 0 } }
+                    : { width: 0 }
+                }
                 transition={{
                   width: {
                     type: 'tween',
                     duration: PROJECT_OPEN_SLIDE_DURATION_S,
                     ease: PROJECT_OPEN_SLIDE_EASE
                   }
+                }}
+                onAnimationStart={() => {
+                  if (sidebarShellHandoffRef.current) sidebarShellHandoffRef.current = false;
                 }}
               >
                 <Suspense fallback={projectManagerLazyFallback}>
@@ -1671,13 +1713,17 @@ export default function App() {
              />
              <MotionDiv
                className="relative h-full z-[2001] overflow-hidden shrink-0 shadow-2xl"
-               initial={{ x: '-100%', width: projectSidebarDrawerWidthPx }}
+               initial={
+                 sidebarShellHandoffRef.current
+                   ? { x: 0, width: projectSidebarDrawerWidthPx }
+                   : { x: '-100%', width: projectSidebarDrawerWidthPx }
+               }
                animate={{
                  x: 0,
                  width: projectSidebarDrawerWidthPx
                }}
                exit={
-                 homeOverlayExitInstant
+                 sidebarShellHandoffRef.current
                    ? { opacity: 0, transition: { duration: 0 } }
                    : { x: '-100%' }
                }
@@ -1694,6 +1740,9 @@ export default function App() {
                  }
                }}
                style={{ willChange: 'transform, width' }}
+               onAnimationStart={() => {
+                 if (sidebarShellHandoffRef.current) sidebarShellHandoffRef.current = false;
+               }}
              >
               <Suspense fallback={projectManagerLazyFallback}>
                 <ProjectManager

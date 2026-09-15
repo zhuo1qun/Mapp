@@ -63,6 +63,12 @@ const NESTED_IGNORE_SELECTOR = [
   '[role="dialog"][aria-modal="true"]'
 ].join(',');
 
+function eventTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target;
+  if (target instanceof Node) return target.parentElement;
+  return null;
+}
+
 function cssLength(value: unknown, fallback: string): string {
   if (typeof value === 'number' && Number.isFinite(value)) return `${value}px`;
   if (typeof value === 'string' && value.trim()) return value;
@@ -114,10 +120,11 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (target instanceof Element) {
-        if (target.closest('[data-chrome-window-surface]') === surfaceRef.current) return;
-        if (target.closest('[data-compact-window-backdrop]')) return;
-        if (target.closest(NESTED_IGNORE_SELECTOR)) return;
+      const el = eventTargetElement(target);
+      if (el) {
+        if (el.closest('[data-chrome-window-surface]') === surfaceRef.current) return;
+        if (el.closest('[data-compact-window-backdrop]')) return;
+        if (el.closest(NESTED_IGNORE_SELECTOR)) return;
       }
       if (dismissIgnoreRefs?.some((ref) => ref.current?.contains(target))) return;
       onClose();

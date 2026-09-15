@@ -528,6 +528,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <div
             ref={mapBgMenuRef}
             data-chrome-window-nested=""
+            data-workspace-transient=""
             role="listbox"
             className={`map-chrome-content-${settingsAppearance} chrome-menu-${menuPhase} fixed overflow-hidden rounded-lg border border-gray-200 py-1 shadow-xl theme-surface-scrollbar`}
             style={{

@@ -1,7 +1,11 @@
 import { useState, useCallback } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
 import type { Note } from '../../types';
-import { fetchRelationGeometry } from '../../utils/map/overpass';
+import {
+  fetchBoundaryGeoJSON,
+  searchNominatim,
+  type NominatimResult
+} from '../../utils/map/overpass';
 import { generateId } from '../../utils';
 
 interface UseBorderSearchProps {
@@ -12,6 +16,17 @@ interface UseBorderSearchProps {
   setShowBorderPanel: ((show: boolean) => void) | undefined;
 }
 
+function mapViewbox(mapInstance: LeafletMap | null): string | undefined {
+  if (!mapInstance) return undefined;
+  try {
+    const b = mapInstance.getBounds();
+    // Nominatim: left,top,right,bottom = west,north,east,south
+    return `${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}`;
+  } catch {
+    return undefined;
+  }
+}
+
 export function useBorderSearch({
   mapInstance,
   notes,
@@ -20,7 +35,7 @@ export function useBorderSearch({
   setShowBorderPanel
 }: UseBorderSearchProps) {
   const [borderSearchQuery, setBorderSearchQuery] = useState('');
-  const [borderSearchResults, setBorderSearchResults] = useState<any[]>([]);
+  const [borderSearchResults, setBorderSearchResults] = useState<NominatimResult[]>([]);
   const [isSearchingBorder, setIsSearchingBorder] = useState(false);
   const [borderSearchError, setBorderSearchError] = useState<string | null>(null);
   const [borderSearchMode, setBorderSearchMode] = useState<'region' | 'place'>('region');
@@ -38,25 +53,19 @@ export function useBorderSearch({
     setBorderSearchResults([]);
 
     try {
-      const query = borderSearchQuery.trim();
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=15&addressdetails=1${borderSearchMode === 'region' ? '&featuretype=settlement,boundary,territory' : ''}`;
-
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Search failed');
-      const results = await response.json();
+      const results = await searchNominatim({
+        q: borderSearchQuery.trim(),
+        mode: borderSearchMode,
+        limit: 15,
+        viewbox: mapViewbox(mapInstance),
+        // 不强制 bounded：当前视野优先，仍允许全球结果
+        bounded: false
+      });
 
       if (results.length === 0) {
         setBorderSearchError('No matching results found');
       } else {
-        const sortedResults =
-          borderSearchMode === 'region'
-            ? [...results].sort((a: any, b: any) => {
-                const score = (item: any) =>
-                  item.osm_type === 'relation' ? 2 : item.osm_type === 'way' ? 1 : 0;
-                return score(b) - score(a);
-              })
-            : results;
-        setBorderSearchResults(sortedResults);
+        setBorderSearchResults(results);
       }
     } catch (err) {
       console.error('Search failed:', err);
@@ -64,11 +73,12 @@ export function useBorderSearch({
     } finally {
       setIsSearchingBorder(false);
     }
-  }, [borderSearchQuery, borderSearchMode]);
+  }, [borderSearchQuery, borderSearchMode, mapInstance]);
 
   const handleSelectBorder = useCallback(
-    async (result: any) => {
+    async (result: NominatimResult) => {
       setIsSearchingBorder(true);
+      setBorderSearchError(null);
       try {
         if (borderSearchMode === 'place' || result.osm_type === 'node') {
           const lat = parseFloat(result.lat);
@@ -88,14 +98,18 @@ export function useBorderSearch({
             setPendingPlaceNote({ lat, lng: lon, name: placeName });
           }
         } else {
-          const geojson = await fetchRelationGeometry(result.osm_id, result.osm_type);
+          const geojson = await fetchBoundaryGeoJSON(result.osm_id, result.osm_type);
+          if (!geojson) {
+            setBorderSearchError('Failed to fetch details');
+            return;
+          }
           if (setBorderGeoJSON) {
             setBorderGeoJSON(geojson);
           }
 
-          if (mapInstance && geojson) {
+          if (mapInstance) {
             const L = await import('leaflet');
-            const layer = L.default.geoJSON(geojson);
+            const layer = L.default.geoJSON(geojson as any);
             mapInstance.fitBounds(layer.getBounds(), { padding: [20, 20], duration: 1.5 });
           }
         }
@@ -134,19 +148,16 @@ export function useBorderSearch({
     setPendingPlaceNote(null);
   }, [pendingPlaceNote, onAddNote]);
 
-  const handleCopyBorder = useCallback(
-    async (borderGeoJSON: any) => {
-      if (!borderGeoJSON) return;
-      try {
-        await navigator.clipboard.writeText(JSON.stringify(borderGeoJSON));
-        alert('Border GeoJSON copied to clipboard!');
-      } catch (err) {
-        console.error('Failed to copy border:', err);
-        alert('Failed to copy border to clipboard');
-      }
-    },
-    []
-  );
+  const handleCopyBorder = useCallback(async (borderGeoJSON: any) => {
+    if (!borderGeoJSON) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(borderGeoJSON));
+      alert('Border GeoJSON copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy border:', err);
+      alert('Failed to copy border to clipboard');
+    }
+  }, []);
 
   return {
     borderSearchQuery,

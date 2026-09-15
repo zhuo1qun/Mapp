@@ -16,10 +16,17 @@
 
 ## 前端如何接入
 
-前端的 `utils/map/overpass.ts` 已改为：
+前端 `utils/map/overpass.ts`：
 
 - **优先**使用 Supabase Edge Functions（要求配置 `VITE_SUPABASE_URL` + 可公开密钥：`VITE_SUPABASE_PUBLISHABLE_KEY`（`sb_publishable_...`）或旧版 `VITE_SUPABASE_ANON_KEY`（`eyJ...`））
-- 若未配置上述环境变量，则**自动回退**到浏览器直连第三方（你现有的行为）
+- 若未配置或 Edge 失败，则**自动回退**到浏览器直连（Nominatim / 多节点 Overpass）
+- **画边界**：先走 Nominatim `lookup?polygon_geojson=1`（经 `geocode` Edge 或直连），失败再 Overpass
+- **搜索**：region 使用合法单一 `featuretype=settlement`；可带地图 `viewbox` 偏置
+
+### geocode 查询参数
+
+- 搜索：`GET /functions/v1/geocode?q=...&limit=15&mode=region|place&viewbox=west,north,east,south&bounded=0|1`
+- 详情/多边形：`GET /functions/v1/geocode?osmId=...&osmType=relation|way|node&polygon=1`
 
 ## 你需要准备什么
 

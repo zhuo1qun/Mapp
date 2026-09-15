@@ -199,8 +199,8 @@ export function runMapTabStandalone(L: any, marked: MarkedLike, payload: MapTabE
         color: payload.themeColor,
         weight: 3,
         opacity: 0.8,
-        fillColor: payload.themeColor,
-        fillOpacity: 0.1,
+        fill: false,
+        fillOpacity: 0,
         dashArray: '5, 10'
       }
     }).addTo(map);
