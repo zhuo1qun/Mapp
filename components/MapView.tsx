@@ -1209,6 +1209,78 @@ export const MapView: React.FC<MapViewProps> = ({
     onMapStyleChange
   });
 
+  /** 仅提示当前底图的首轮可见瓦片；完成后平移/缩放不再反复弹出。 */
+  const [initialTileProgress, setInitialTileProgress] = useState<number | null>(
+    effectiveMapStyle === 'blank' ? null : 8
+  );
+  const initialTilesCompleteRef = useRef(effectiveMapStyle === 'blank');
+  const initialTileTotalRef = useRef(0);
+  const initialTileSettledRef = useRef(0);
+  const initialTileHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (initialTileHideTimerRef.current) {
+      clearTimeout(initialTileHideTimerRef.current);
+      initialTileHideTimerRef.current = null;
+    }
+    initialTileTotalRef.current = 0;
+    initialTileSettledRef.current = 0;
+    initialTilesCompleteRef.current = effectiveMapStyle === 'blank';
+    setInitialTileProgress(effectiveMapStyle === 'blank' ? null : 8);
+
+    return () => {
+      if (initialTileHideTimerRef.current) clearTimeout(initialTileHideTimerRef.current);
+    };
+  }, [effectiveMapStyle, project.id]);
+
+  const handleInitialTilesLoading = useCallback(() => {
+    if (initialTilesCompleteRef.current) return;
+    setInitialTileProgress((current) => current ?? 8);
+  }, []);
+
+  const handleInitialTileStart = useCallback(() => {
+    if (initialTilesCompleteRef.current) return;
+    initialTileTotalRef.current += 1;
+    setInitialTileProgress((current) => Math.max(current ?? 8, 12));
+  }, []);
+
+  const handleInitialTileSettled = useCallback(() => {
+    if (initialTilesCompleteRef.current) return;
+    initialTileSettledRef.current += 1;
+    const total = Math.max(initialTileTotalRef.current, 1);
+    const ratio = initialTileSettledRef.current / total;
+    setInitialTileProgress((current) =>
+      Math.max(current ?? 12, Math.min(88, Math.round(16 + ratio * 72)))
+    );
+  }, []);
+
+  const handleInitialTilesLoaded = useCallback(() => {
+    if (initialTilesCompleteRef.current) return;
+    initialTilesCompleteRef.current = true;
+    setInitialTileProgress(100);
+    if (initialTileHideTimerRef.current) clearTimeout(initialTileHideTimerRef.current);
+    initialTileHideTimerRef.current = setTimeout(() => {
+      initialTileHideTimerRef.current = null;
+      setInitialTileProgress(null);
+    }, 360);
+  }, []);
+
+  const initialTileEventHandlers = useMemo(
+    () => ({
+      loading: handleInitialTilesLoading,
+      tileloadstart: handleInitialTileStart,
+      tileload: handleInitialTileSettled,
+      tileerror: handleInitialTileSettled,
+      load: handleInitialTilesLoaded
+    }),
+    [
+      handleInitialTileSettled,
+      handleInitialTileStart,
+      handleInitialTilesLoaded,
+      handleInitialTilesLoading
+    ]
+  );
+
   const beginNewNoteIntro = useCallback((note: Partial<Note>) => {
       if (introTimerRef.current) clearTimeout(introTimerRef.current);
       if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
@@ -1836,6 +1908,7 @@ export const MapView: React.FC<MapViewProps> = ({
         <TileLayer 
           key={effectiveMapStyle}
           {...tileLayerConfig}
+          eventHandlers={initialTileEventHandlers}
           // 回退层显式为 0；主图层也必须显式抬高，不能依赖 DOM 挂载顺序。
           // 否则回退层中心的大瓦片会偶尔盖在已到达的高精瓦片上，出现
           // “中间低清、周围高清”的反直觉画面。
@@ -2365,6 +2438,38 @@ export const MapView: React.FC<MapViewProps> = ({
         </div>
 
       </MapContainer>
+
+      {isUIVisible && initialTileProgress !== null ? (
+        <div
+          className="pointer-events-none absolute left-0 right-0 top-20 z-[900] flex justify-center px-4"
+          role="status"
+          aria-live="polite"
+          data-mapp-export-ui=""
+        >
+          <div
+            className={`w-full max-w-56 rounded-xl border border-gray-100/80 px-3 py-2 shadow-lg map-chrome-content-${mapChromeTone}`}
+            style={mapChromeControlSurface}
+          >
+            <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium">
+              <span>正在加载地图瓦片</span>
+              <span className="tabular-nums opacity-65">{initialTileProgress}%</span>
+            </div>
+            <div
+              className="h-1 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
+              role="progressbar"
+              aria-label="加载地图瓦片"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={initialTileProgress}
+            >
+              <div
+                className="h-full rounded-full transition-[width] duration-200 ease-out"
+                style={{ width: `${initialTileProgress}%`, backgroundColor: themeColor }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showMapConnectionPanel && onUpdateConnections && isUIVisible && (
         <GraphConnectionPanel

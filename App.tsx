@@ -69,6 +69,7 @@ import { useDataImport } from './components/hooks/useDataImport';
 import { useCsvImport } from './components/hooks/useCsvImport';
 import { useFileDrop } from './components/hooks/useFileDrop';
 import { ChromeDropOverlay } from './components/ui/ChromeDropOverlay';
+import { ModuleLoadProgress } from './components/ui/ModuleLoadProgress';
 import { EditInspectorProvider } from './components/editInspector/EditInspectorProvider';
 import { installBuiltinExamples } from './utils/builtinExamples/install';
 import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
@@ -843,14 +844,34 @@ export default function App() {
   );
 
   const projectManagerLazyFallback = (
-    <div
-      className="flex h-full min-h-0 w-full items-center justify-center"
-      style={{ backgroundColor: themeColor }}
-      aria-busy="true"
-      aria-label="加载项目列表"
-    >
-      <Loader2 size={28} className="animate-spin text-theme-chrome-fg" aria-hidden />
-    </div>
+    <ModuleLoadProgress
+      title="正在加载项目模块"
+      description="正在准备项目列表与工作区"
+      icon={<Grid size={22} aria-hidden />}
+      themeColor={themeColor}
+    />
+  );
+
+  const workspaceModuleMeta = useMemo(() => {
+    if (viewMode === 'map' && projectKind === 'mapping') {
+      return { title: '正在加载地图模块', icon: <MapIcon size={22} aria-hidden /> };
+    }
+    if (viewMode === 'board' && (projectKind === 'mapping' || projectKind === 'graph')) {
+      return { title: '正在加载画布模块', icon: <Grid size={22} aria-hidden /> };
+    }
+    if (viewMode === 'graph' && projectKind === 'graph') {
+      return { title: '正在加载图谱模块', icon: <GitBranch size={22} aria-hidden /> };
+    }
+    return { title: '正在加载表格模块', icon: <Table2 size={22} aria-hidden /> };
+  }, [projectKind, viewMode]);
+
+  const workspaceModuleLoadingFallback = (
+    <ModuleLoadProgress
+      key={`${projectKind ?? 'unknown'}-${viewMode}`}
+      title={workspaceModuleMeta.title}
+      icon={workspaceModuleMeta.icon}
+      themeColor={themeColor}
+    />
   );
 
   /** 进入/回主页中间态：列表收束与全屏壳动画（加载前后都保持，不把加载插在布局切换之间） */
@@ -1831,7 +1852,7 @@ export default function App() {
           title="拖入 JSON 或 CSV 以导入"
           description={viewMode === 'graph' ? '数据会导入当前图谱项目' : '数据会导入当前表格项目'}
         />
-        <Suspense fallback={workspaceProjectPendingPlaceholder}>
+        <Suspense fallback={workspaceModuleLoadingFallback}>
         {activeProject ? (
           <>
         {/* 同步状态指示器 - 只在侧边栏打开时显示（在侧边栏内） */}

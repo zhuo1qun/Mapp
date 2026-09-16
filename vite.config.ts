@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [
+        tailwindcss(),
         react(),
         VitePWA({
           // 由应用代码注册，以便新版就绪时明确提示当前用户刷新。

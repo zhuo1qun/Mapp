@@ -506,12 +506,39 @@ body {
   will-change: left;
 }
 
+/** 大型按需模块：进度只到 92%，实际完成由 Suspense 解析结果决定。 */
+.module-load-progress__fill {
+  transition: width 180ms ease-out;
+  will-change: width;
+}
+
+@keyframes module-load-progress-shine {
+  from {
+    transform: translateX(-4rem);
+  }
+  to {
+    transform: translateX(22rem);
+  }
+}
+
+.module-load-progress__shine {
+  animation: module-load-progress-shine 1.25s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .project-manager-load-bar-fill--indeterminate {
     animation: none;
     left: 10%;
     width: 40%;
     opacity: 0.85;
+  }
+
+  .module-load-progress__fill {
+    transition: none;
+  }
+
+  .module-load-progress__shine {
+    display: none;
   }
 }
 
