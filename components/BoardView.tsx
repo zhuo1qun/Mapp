@@ -2273,31 +2273,60 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     resetInteraction
   ]);
 
-  // Add wheel event listener with passive: false to allow preventDefault（与普通滚轮缩放一致，以指针为中心）
+  // Figma 式触控板规则：双指滑动平移画布；捏合（浏览器会标为 Ctrl+wheel）
+  // 或 Cmd/Ctrl+滚轮才缩放。平移合并到每帧，避免高频 wheel 逐条触发 React 更新。
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    let pendingPanX = 0;
+    let pendingPanY = 0;
+    let panFrame: number | null = null;
+
+    const wheelPixels = (e: WheelEvent) => {
+      if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) return 16;
+      if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) return container.clientHeight;
+      return 1;
+    };
+
+    const flushPan = () => {
+      panFrame = null;
+      if (pendingPanX === 0 && pendingPanY === 0) return;
+      const prev = transformRef.current;
+      // 与通常的两指滚动画布一致：手势向下，内容向上移动。
+      const next = { ...prev, x: prev.x - pendingPanX, y: prev.y - pendingPanY };
+      pendingPanX = 0;
+      pendingPanY = 0;
+      transformRef.current = next;
+      setTransform(next);
+      scheduleZoomTransformPersist(next.x, next.y, next.scale);
+    };
+
     const wheelHandler = (e: WheelEvent) => {
       e.preventDefault();
+      const isZoomGesture = e.ctrlKey || e.metaKey;
+      if (!isZoomGesture) {
+        const pixels = wheelPixels(e);
+        pendingPanX += e.deltaX * pixels;
+        pendingPanY += e.deltaY * pixels;
+        if (panFrame == null) panFrame = requestAnimationFrame(flushPan);
+        return;
+      }
+
       const rect = container.getBoundingClientRect();
       const viewPoint = clientToViewPoint(clientPoint(e.clientX, e.clientY), rect);
-      const zoomSensitivity = 0.001;
-      // Shift+滚轮时系统常把纵向增量映射到 deltaX，仅用 deltaY 会导致无法缩放
-      const scrollDelta = e.shiftKey
-        ? Math.abs(e.deltaX) > Math.abs(e.deltaY)
-          ? e.deltaX
-          : e.deltaY
-        : e.deltaY;
-      const delta = -scrollDelta * zoomSensitivity;
+      // 指数缩放使同样的手指开合在任意倍率下保持同样的相对变化。
+      const scrollDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      const zoomFactor = Math.exp(-scrollDelta * 0.004);
       let nextX = 0;
       let nextY = 0;
       let nextScale = 1;
       setTransform((prev) => {
-        nextScale = Math.min(Math.max(0.2, prev.scale + delta), 4);
+        nextScale = Math.min(Math.max(0.2, prev.scale * zoomFactor), 4);
         const next = transformAroundViewPoint(prev, viewPoint, nextScale);
         nextX = next.x;
         nextY = next.y;
+        transformRef.current = next;
         return next;
       });
       scheduleZoomTransformPersist(nextX, nextY, nextScale);
@@ -2307,6 +2336,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
     return () => {
       container.removeEventListener('wheel', wheelHandler);
+      if (panFrame != null) cancelAnimationFrame(panFrame);
     };
   }, [scheduleZoomTransformPersist]);
 

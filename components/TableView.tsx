@@ -149,6 +149,7 @@ export const TableView: React.FC<TableViewProps> = ({
   const [editorNoteId, setEditorNoteId] = useState<string | null>(null);
   const editorSaveDraftRef = useRef<(() => Promise<void>) | null>(null);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const canvasStageRef = useRef<HTMLDivElement>(null);
   const listWindowRef = useRef<HTMLDivElement>(null);
   const canvasDragRef = useRef<{
     pointerId: number;
@@ -167,6 +168,11 @@ export const TableView: React.FC<TableViewProps> = ({
   const [isCanvasDragging, setIsCanvasDragging] = useState(false);
   const [isCanvasAutoPanning, setIsCanvasAutoPanning] = useState(false);
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
+  const canvasPanRef = useRef(canvasPan);
+  canvasPanRef.current = canvasPan;
+  const [canvasScale, setCanvasScale] = useState(1);
+  const canvasScaleRef = useRef(canvasScale);
+  canvasScaleRef.current = canvasScale;
   const [listWindowWidth, setListWindowWidth] = useState(576);
   const [isCanvasMediaDetailOpen, setIsCanvasMediaDetailOpen] = useState(false);
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
@@ -214,7 +220,15 @@ export const TableView: React.FC<TableViewProps> = ({
 
   useEffect(() => {
     setCanvasPan({ x: 0, y: 0 });
+    setCanvasScale(1);
   }, [project.id, activeSubView]);
+
+  // 窄屏 Table 是常规可滚动表格，不保留桌面画布的缩放状态。
+  useEffect(() => {
+    if (isWideTableCanvas) return;
+    canvasScaleRef.current = 1;
+    setCanvasScale(1);
+  }, [isWideTableCanvas]);
 
   useEffect(() => {
     if (activeSubView !== 'points') setEditorNoteId(null);
@@ -343,6 +357,72 @@ export const TableView: React.FC<TableViewProps> = ({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }, []);
+
+  /** 宽屏 Table 也作为画布：双指滑动平移，捏合 / Cmd(Ctrl)+滚轮以光标为锚缩放。 */
+  useEffect(() => {
+    const viewport = canvasViewportRef.current;
+    if (!viewport || !isWideTableCanvas) return;
+
+    let pendingPanX = 0;
+    let pendingPanY = 0;
+    let panFrame: number | null = null;
+
+    const wheelPixels = (event: WheelEvent) => {
+      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return 16;
+      if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return viewport.clientHeight;
+      return 1;
+    };
+
+    const flushPan = () => {
+      panFrame = null;
+      if (pendingPanX === 0 && pendingPanY === 0) return;
+      const current = canvasPanRef.current;
+      const next = { x: current.x - pendingPanX, y: current.y - pendingPanY };
+      pendingPanX = 0;
+      pendingPanY = 0;
+      canvasPanRef.current = next;
+      setCanvasPan(next);
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      const target = event.target as Element;
+      // 表格/编辑器窗口本身仍保留原生滚动；画布背景接收导航手势。
+      if (target.closest('[data-table-canvas-window]')) return;
+      event.preventDefault();
+      if (!(event.ctrlKey || event.metaKey)) {
+        const pixels = wheelPixels(event);
+        pendingPanX += event.deltaX * pixels;
+        pendingPanY += event.deltaY * pixels;
+        if (panFrame == null) panFrame = requestAnimationFrame(flushPan);
+        return;
+      }
+
+      const stage = canvasStageRef.current;
+      if (!stage) return;
+      const currentScale = canvasScaleRef.current;
+      const scrollDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      const nextScale = Math.max(0.45, Math.min(2.5, currentScale * Math.exp(-scrollDelta * 0.004)));
+      if (Math.abs(nextScale - currentScale) < 0.0001) return;
+
+      const stageRect = stage.getBoundingClientRect();
+      const scaleRatio = nextScale / currentScale;
+      const currentPan = canvasPanRef.current;
+      const nextPan = {
+        x: currentPan.x + (event.clientX - stageRect.left) * (1 - scaleRatio),
+        y: currentPan.y + (event.clientY - stageRect.top) * (1 - scaleRatio)
+      };
+      canvasPanRef.current = nextPan;
+      canvasScaleRef.current = nextScale;
+      setCanvasPan(nextPan);
+      setCanvasScale(nextScale);
+    };
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener('wheel', handleWheel);
+      if (panFrame != null) cancelAnimationFrame(panFrame);
+    };
+  }, [isWideTableCanvas]);
 
   const editorCanvasSnapX = -(
     listWindowWidth / 2 + TABLE_CANVAS_WINDOW_GAP + TABLE_EDITOR_MAIN_WIDTH / 2
@@ -758,22 +838,27 @@ export const TableView: React.FC<TableViewProps> = ({
         onDoubleClick={(event) => {
           if (!isWideTableCanvas) return;
           const target = event.target as Element;
-          if (!target.closest('[data-table-canvas-window]')) setCanvasPan({ x: 0, y: 0 });
+          if (!target.closest('[data-table-canvas-window]')) {
+            setCanvasPan({ x: 0, y: 0 });
+            setCanvasScale(1);
+          }
         }}
       >
         <div
+          ref={canvasStageRef}
           className={isWideTableCanvas
             ? 'table-node-canvas-stage absolute flex w-max items-start gap-6 pb-24'
             : undefined}
           style={isWideTableCanvas
             ? {
                 top: tableScrollTopPad,
-                left: `calc(50% + ${canvasPan.x - listWindowWidth / 2}px)`,
-                marginTop: canvasPan.y,
+                left: `calc(50% - ${listWindowWidth / 2}px)`,
+                transform: `translate3d(${canvasPan.x}px, ${canvasPan.y}px, 0) scale(${canvasScale})`,
+                transformOrigin: 'top left',
                 transition: isCanvasAutoPanning && !isCanvasDragging
-                  ? 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 380ms cubic-bezier(0.22, 1, 0.36, 1)'
+                  ? 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)'
                   : undefined,
-                willChange: isCanvasDragging ? 'left, margin-top' : undefined
+                willChange: isCanvasDragging ? 'transform' : undefined
               }
             : undefined}
         >

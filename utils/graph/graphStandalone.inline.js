@@ -189,7 +189,7 @@
       });
     });
   }
-  var GRAPH_WHEEL_ZOOM_SENSITIVITY = 1e-3;
+  var GRAPH_WHEEL_ZOOM_SENSITIVITY = 4e-3;
   function getCyRenderer(cy) {
     const r = cy.renderer?.();
     return r && typeof r.projectIntoViewport === "function" ? r : null;
@@ -206,16 +206,40 @@
     const container = cy.container();
     if (!container) return () => {
     };
+    let pendingPanX = 0;
+    let pendingPanY = 0;
+    let panFrame = null;
+    const wheelPixels = (e) => {
+      if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) return 16;
+      if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) return container.clientHeight;
+      return 1;
+    };
+    const flushPan = () => {
+      panFrame = null;
+      if (pendingPanX === 0 && pendingPanY === 0 || !isCyActive(cy)) return;
+      cy.panBy({ x: -pendingPanX, y: -pendingPanY });
+      pendingPanX = 0;
+      pendingPanY = 0;
+    };
     const handler = (e) => {
       if (!container.contains(e.target)) return;
       e.preventDefault();
-      const scrollDelta = e.shiftKey ? Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY : e.deltaY;
+      if (!(e.ctrlKey || e.metaKey)) {
+        const pixels = wheelPixels(e);
+        pendingPanX += e.deltaX * pixels;
+        pendingPanY += e.deltaY * pixels;
+        if (panFrame == null) panFrame = requestAnimationFrame(flushPan);
+        return;
+      }
+      const scrollDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
       if (scrollDelta === 0) return;
-      const delta = -scrollDelta * GRAPH_WHEEL_ZOOM_SENSITIVITY;
       const z = cy.zoom();
       const minZ = cy.minZoom();
       const maxZ = cy.maxZoom();
-      const newZoom = Math.min(Math.max(minZ, z + delta), maxZ);
+      const newZoom = Math.min(
+        Math.max(minZ, z * Math.exp(-scrollDelta * GRAPH_WHEEL_ZOOM_SENSITIVITY)),
+        maxZ
+      );
       if (Math.abs(newZoom - z) < 1e-9) return;
       const r = getCyRenderer(cy);
       if (!r) return;
@@ -234,6 +258,7 @@
     };
     cy.ready(attach);
     return () => {
+      if (panFrame != null) cancelAnimationFrame(panFrame);
       if (attached) {
         container.removeEventListener("wheel", handler);
         attached = false;

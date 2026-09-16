@@ -5,7 +5,7 @@ import '../../utils/map/smoothMapZoom';
 export type MapSmoothZoomProps = {
   /** Wheel / shared sensitivity (default 1.5). */
   sensitivity?: number;
-  /** Desktop trackpad pinch sensitivity (`wheel + ctrlKey`); defaults to 3.25. */
+  /** Desktop trackpad pinch sensitivity (`wheel + ctrlKey`); defaults to 0.004. */
   trackpadPinchSensitivity?: number;
   /** Pinch sensitivity; defaults to `sensitivity`. */
   touchSensitivity?: number;
@@ -24,7 +24,7 @@ export type MapSmoothZoomProps = {
  */
 export function MapSmoothZoom({
   sensitivity = 1.5,
-  trackpadPinchSensitivity = 3.25,
+  trackpadPinchSensitivity = 0.004,
   touchSensitivity,
   inertia = true,
   touchInertia = false,

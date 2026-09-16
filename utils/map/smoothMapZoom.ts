@@ -16,15 +16,18 @@ const IMPULSE_EMA = 0.45;
 const MAX_IMPULSE_DT_MS = 80;
 const MAX_COAST_VELOCITY = 0.02;
 const SMOOTH_ZOOM_CONTAINER_CLASS = 'mapp-smooth-zooming';
+const WHEEL_GESTURE_IDLE_MS = 80;
+const TRACKPAD_PINCH_GESTURE_IDLE_MS = 96;
 
 L.Map.mergeOptions({
   smoothMapZoom: false,
   /** @deprecated alias — prefer smoothMapZoom */
   smoothWheelZoom: false,
   smoothSensitivity: 1.5,
-  // Desktop trackpad pinch is exposed as a Ctrl+wheel stream. Its deltas are
-  // much smaller than a physical mouse wheel's, so it needs its own gain.
-  smoothTrackpadPinchSensitivity: 3.25,
+  // Desktop trackpad pinch is exposed as a Ctrl+wheel stream. It follows the
+  // same raw-delta exponential curve as Board / Graph so the three canvases
+  // have comparable physical pinch distance.
+  smoothTrackpadPinchSensitivity: 0.004,
   touchZoomSensitivity: undefined,
   // Touch devices use Leaflet's native handler by default. The custom handler
   // stays available for environments that need it (for example, touch laptops).
@@ -172,7 +175,7 @@ function wheelSens(map) {
 
 function trackpadPinchSens(map) {
   var s = map.options.smoothTrackpadPinchSensitivity;
-  return typeof s === 'number' && s > 0 ? s : wheelSens(map);
+  return typeof s === 'number' && s > 0 ? s : 0.004;
 }
 
 function pinchSens(map) {
@@ -247,10 +250,16 @@ L.Map.SmoothMapZoom = L.Handler.extend({
       cancelAnimationFrame(this._raf);
       this._raf = null;
     }
+    if (this._wheelPanRaf != null) {
+      cancelAnimationFrame(this._wheelPanRaf);
+      this._wheelPanRaf = null;
+    }
+    this._pendingWheelPan = null;
     this._unbindDocTouch();
     this._pinching = false;
     this._wheeling = false;
     this._trackpadPinching = false;
+    this._directWheelZooming = false;
     this._coasting = false;
     this._velocity = 0;
 
@@ -363,6 +372,28 @@ L.Map.SmoothMapZoom = L.Handler.extend({
 
   // —— wheel ——
 
+  _queueWheelPan: function (e) {
+    var map = this._map;
+    var multiplier =
+      e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? map.getSize().y : 1;
+    var pending = this._pendingWheelPan || new L.Point(0, 0);
+    pending.x += e.deltaX * multiplier;
+    pending.y += e.deltaY * multiplier;
+    this._pendingWheelPan = pending;
+
+    if (this._wheelPanRaf != null) return;
+    this._wheelPanRaf = requestAnimationFrame(
+      function () {
+        this._wheelPanRaf = null;
+        var offset = this._pendingWheelPan;
+        this._pendingWheelPan = null;
+        if (!offset || (offset.x === 0 && offset.y === 0)) return;
+        // 无修饰的两指滑动与画布拖拽相同：只移动视图，不触发缩放。
+        this._map.panBy(offset, { animate: false });
+      }.bind(this)
+    );
+  },
+
   _onWheel: function (e) {
     if (this._pinching) {
       L.DomEvent.preventDefault(e);
@@ -370,31 +401,50 @@ L.Map.SmoothMapZoom = L.Handler.extend({
       return;
     }
 
+    // 对齐 Figma：无修饰 wheel（包括触控板双指滑动）用于平移；
+    // pinch 在 Chromium / Safari 中表现为 Ctrl+wheel，Cmd/Ctrl+滚轮也作为缩放捷径。
+    var isZoomGesture = e.ctrlKey === true || e.metaKey === true;
+    if (!isZoomGesture) {
+      // 若用户在缩放刚落下时直接改为双指滑动，先将视觉缩放提交为真实视图；
+      // 否则 panBy 会与尚未结束的 zoomanim 同时改写地图 pane，造成一次跳动。
+      if (this._active) this._abort(true);
+      this._queueWheelPan(e);
+      L.DomEvent.preventDefault(e);
+      L.DomEvent.stopPropagation(e);
+      return;
+    }
+
+    if (this._wheelPanRaf != null) {
+      cancelAnimationFrame(this._wheelPanRaf);
+      this._wheelPanRaf = null;
+      this._pendingWheelPan = null;
+    }
+
     var now = performance.now();
     if (!this._active) this._begin();
     this._wheeling = true;
     this._coasting = false;
 
-    // Chromium and Safari report a desktop trackpad pinch as a Ctrl+wheel
-    // stream. Freeze its anchor for the gesture: tiny pointer-coordinate
-    // variations otherwise turn a pure scale gesture into visible map jitter.
+    // Cmd + 滚轮也必须像触控板捏合一样使用单一锚点。若每条滚轮消息都在
+    // 尚未追上目标 zoom 的视觉状态里重新取 anchor，会持续重算 center 而抖动。
+    // 增量公式仍沿用旧滚轮路径；仅借用捏合的稳定锚点与无惯性收束方式。
     var isTrackpadPinch = e.ctrlKey === true && e.deltaMode === 0;
-    if (isTrackpadPinch && !this._trackpadPinching) {
+    if (!this._directWheelZooming) {
+      this._directWheelZooming = true;
       this._trackpadPinching = true;
-      this._setAnchor(this._map.mouseEventToContainerPoint(e));
-    } else if (!isTrackpadPinch) {
-      this._trackpadPinching = false;
       this._setAnchor(this._map.mouseEventToContainerPoint(e));
     }
 
-    var dZoom =
-      L.DomEvent.getWheelDelta(e) *
-      0.003 *
-      (isTrackpadPinch ? trackpadPinchSens(this._map) : wheelSens(this._map));
+    var dZoom = isTrackpadPinch
+      ? -e.deltaY * trackpadPinchSens(this._map)
+      : L.DomEvent.getWheelDelta(e) * 0.003 * wheelSens(this._map);
     this._applyImpulse(dZoom, now);
 
     clearTimeout(this._wheelIdleTimer);
-    this._wheelIdleTimer = setTimeout(this._onWheelIdle.bind(this), 48);
+    this._wheelIdleTimer = setTimeout(
+      this._onWheelIdle.bind(this),
+      isTrackpadPinch ? TRACKPAD_PINCH_GESTURE_IDLE_MS : WHEEL_GESTURE_IDLE_MS
+    );
 
     L.DomEvent.preventDefault(e);
     L.DomEvent.stopPropagation(e);
@@ -404,9 +454,12 @@ L.Map.SmoothMapZoom = L.Handler.extend({
     this._wheeling = false;
     // Trackpad pinch is direct manipulation; a wheel-style inertial tail both
     // overshoots and makes the anchor correction look like a wobble.
-    if (this._trackpadPinching) {
+    if (this._directWheelZooming) {
       this._velocity = 0;
       this._coasting = true;
+      // 下一次分离的 Cmd 滚轮 / 捏合应重新取锚点；否则短间隔连续操作会围绕旧光标缩放。
+      this._trackpadPinching = false;
+      this._directWheelZooming = false;
       return;
     }
     this._beginCoast(false);

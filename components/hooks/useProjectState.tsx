@@ -11,6 +11,7 @@ import {
   ProjectSummary
 } from '../../utils/persistence/storage';
 import { syncNoteImageRefs } from '../../utils/persistence/imageAssetStore';
+import { buildCopyProjectName } from '../../utils/projectCopyName';
 
 interface UseProjectStateReturn {
   // Project state
@@ -223,7 +224,7 @@ export const useProjectState = (): UseProjectStateReturn => {
 
     const duplicatedProject: Project = {
       id: newProjectId,
-      name: `${project.name} (Copy)`,
+      name: buildCopyProjectName(project.name, projects.map((item) => item.name)),
       type: 'map',
       projectKind: project.projectKind,
       createdAt: Date.now(),
@@ -269,7 +270,7 @@ export const useProjectState = (): UseProjectStateReturn => {
       hasImages: duplicatedProject.notes.some(note => note.images && note.images.length > 0),
       hasSketches: duplicatedProject.notes.some(note => !!note.sketch)
     }]);
-  }, []);
+  }, [projects]);
 
   // Add note to project
   const addNoteToProject = useCallback(async (projectId: string, note: Note) => {
@@ -343,4 +344,3 @@ export const useProjectState = (): UseProjectStateReturn => {
     setLoadingProgress
   };
 };
-

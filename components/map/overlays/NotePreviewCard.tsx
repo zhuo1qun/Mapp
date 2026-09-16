@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Navigation, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Navigation, Pencil, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Note } from '../../../types';
 import { parseNoteContent } from '../../../utils';
@@ -32,6 +32,8 @@ interface NotePreviewCardProps {
   themeColor?: string;
   /** 传入时显示右上角铅笔，打开全文编辑器 */
   onOpenEditor?: (noteId: string) => void;
+  /** 编辑模式下传入，显示与其它便签操作一致的删除入口。 */
+  onDelete?: (noteId: string) => void;
   /** 由便签槽提供外壳时只渲染内容。 */
   hosted?: boolean;
 }
@@ -47,6 +49,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   embedded = false,
   themeColor,
   onOpenEditor,
+  onDelete,
   hosted = false
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
@@ -137,6 +140,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
 
   const topPx = offsetTopPx ?? 16;
   const showEdit = Boolean(onOpenEditor) && !passThrough;
+  const showDelete = Boolean(onDelete) && !passThrough;
   const showGo =
     noteHasRenderableMapPosition(note) &&
     hasNavigableGpsCoords(note.coords) &&
@@ -204,7 +208,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
             ) : null}
           </div>
         </div>
-        {showGo || showEdit ? (
+        {showGo || showEdit || showDelete ? (
           <div className="relative z-10 flex shrink-0 items-center gap-1.5">
             {showGo ? (
               <NoteIconButton
@@ -234,6 +238,21 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                 className="min-h-8 min-w-8 p-1.5 text-gray-500 hover:text-gray-700"
               >
                 <Pencil size={18} strokeWidth={2} aria-hidden />
+              </NoteIconButton>
+            ) : null}
+            {showDelete ? (
+              <NoteIconButton
+                label="删除"
+                title="删除"
+                aria-label="删除"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.(note.id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="min-h-8 min-w-8 p-1.5 text-red-500 hover:text-red-600"
+              >
+                <Trash2 size={18} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
           </div>

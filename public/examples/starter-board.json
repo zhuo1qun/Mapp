@@ -36,7 +36,7 @@
       {
         "id": "island-orange",
         "createdAt": 3,
-        "coords": { "lat": 28.1891, "lng": 112.9582 },
+        "coords": { "lat": 28.191809381869486, "lng": 112.95624122296637 },
         "emoji": "",
         "text": "橘子洲\n湘江江心的狭长沙洲，长沙代表性洲岛。",
         "fontSize": 3,
@@ -49,7 +49,7 @@
       {
         "id": "island-fujia",
         "createdAt": 4,
-        "coords": { "lat": 28.1754, "lng": 112.9541 },
+        "coords": { "lat": 28.21643825596385, "lng": 112.95912466989076 },
         "emoji": "",
         "text": "傅家洲\n橘子洲南段的历史分洲。",
         "fontSize": 3,
@@ -62,7 +62,7 @@
       {
         "id": "ferry-zhuzhang",
         "createdAt": 5,
-        "coords": { "lat": 28.1780, "lng": 112.9579 },
+        "coords": { "lat": 28.17792670038933, "lng": 112.9621345142776 },
         "emoji": "",
         "text": "朱张古渡\n岳麓书院与城南书院往来讲学的古渡口。",
         "fontSize": 3,
@@ -75,7 +75,7 @@
       {
         "id": "ferry-orange",
         "createdAt": 6,
-        "coords": { "lat": 28.1932, "lng": 112.9611 },
+        "coords": { "lat": 28.186174949053513, "lng": 112.95560469763372 },
         "emoji": "",
         "text": "橘子洲码头\n往来湘江两岸与橘子洲的水上登临点。",
         "fontSize": 3,
@@ -88,7 +88,7 @@
       {
         "id": "ferry-chaozong",
         "createdAt": 7,
-        "coords": { "lat": 28.2118, "lng": 112.9782 },
+        "coords": { "lat": 28.213043637732685, "lng": 112.96635890893428 },
         "emoji": "",
         "text": "潮宗门码头\n老城临江水运记忆的节点。",
         "fontSize": 3,
@@ -101,7 +101,7 @@
       {
         "id": "scenic-mao-sculpture",
         "createdAt": 8,
-        "coords": { "lat": 28.1792, "lng": 112.9556 },
+        "coords": { "lat": 28.170782382085495, "lng": 112.95462755857459 },
         "emoji": "",
         "text": "青年毛泽东艺术雕塑\n橘子洲头的标志性公共艺术作品。",
         "fontSize": 3,
@@ -110,19 +110,6 @@
         "variant": "standard",
         "boardX": 1020,
         "boardY": 300
-      },
-      {
-        "id": "scenic-poetry-stele",
-        "createdAt": 9,
-        "coords": { "lat": 28.1835, "lng": 112.9560 },
-        "emoji": "",
-        "text": "《沁园春·长沙》诗词碑\n橘子洲内展示《沁园春·长沙》的文化景点。",
-        "fontSize": 3,
-        "images": [],
-        "tags": [{ "id": "tag-scenic-2", "label": "景点", "color": "#F59E0B" }],
-        "variant": "standard",
-        "boardX": 120,
-        "boardY": 500
       },
       {
         "id": "scenic-orange-grove",
@@ -140,7 +127,7 @@
       {
         "id": "scenic-yuelu-mountain",
         "createdAt": 11,
-        "coords": { "lat": 28.1809, "lng": 112.9442 },
+        "coords": { "lat": 28.18391304494539, "lng": 112.92642143864504 },
         "emoji": "",
         "text": "岳麓山\n湘江西岸名山，与橘子洲隔江相望。",
         "fontSize": 3,
@@ -153,7 +140,7 @@
       {
         "id": "scenic-yuelu-academy",
         "createdAt": 12,
-        "coords": { "lat": 28.1818, "lng": 112.9441 },
+        "coords": { "lat": 28.18438606747383, "lng": 112.93500785487333 },
         "emoji": "",
         "text": "岳麓书院\n千年学府，湖湘文化的重要地标。",
         "fontSize": 3,
@@ -166,7 +153,7 @@
       {
         "id": "scenic-aiwan-pavilion",
         "createdAt": 13,
-        "coords": { "lat": 28.1831, "lng": 112.9430 },
+        "coords": { "lat": 28.18406204227617, "lng": 112.93199651842039 },
         "emoji": "",
         "text": "爱晚亭\n岳麓山清风峡中的古亭。",
         "fontSize": 3,
@@ -179,7 +166,7 @@
       {
         "id": "scenic-dufu-pavilion",
         "createdAt": 14,
-        "coords": { "lat": 28.1878, "lng": 112.9764 },
+        "coords": { "lat": 28.18840783194251, "lng": 112.9631254216662 },
         "emoji": "",
         "text": "杜甫江阁\n长沙湘江风光带上的仿唐纪念建筑。",
         "fontSize": 3,
@@ -192,7 +179,7 @@
       {
         "id": "scenic-riverside",
         "createdAt": 15,
-        "coords": { "lat": 28.2013, "lng": 112.9768 },
+        "coords": { "lat": 28.20182953492938, "lng": 112.96395986999346 },
         "emoji": "",
         "text": "湘江风光带\n长沙河东临江展开的公共滨水空间。",
         "fontSize": 3,
@@ -205,7 +192,7 @@
       {
         "id": "scenic-fishermans-wharf",
         "createdAt": 16,
-        "coords": { "lat": 28.2260, "lng": 112.9514 },
+        "coords": { "lat": 28.23508752160421, "lng": 112.95869691289417 },
         "emoji": "",
         "text": "渔人码头\n湘江西岸的滨水休闲地标。",
         "fontSize": 3,
@@ -218,7 +205,7 @@
       {
         "id": "event-zhuzhang-lecture",
         "createdAt": 17,
-        "coords": { "lat": 28.1787, "lng": 112.9588 },
+        "coords": { "lat": 28.176961281343033, "lng": 112.96208236125715 },
         "emoji": "",
         "text": "朱张会讲\n朱熹、张栻隔江往来讲学，留下湖湘学脉佳话。",
         "fontSize": 3,
@@ -244,7 +231,7 @@
       {
         "id": "event-port-opening",
         "createdAt": 19,
-        "coords": { "lat": 28.1953, "lng": 112.9618 },
+        "coords": { "lat": 28.215938891076078, "lng": 112.9686014888138 },
         "emoji": "",
         "text": "1904年长沙开埠\n长沙开辟为对外开放商埠，橘子洲曾设海关与领事机构。",
         "fontSize": 3,
@@ -257,7 +244,7 @@
       {
         "id": "event-xiangjiang-swim",
         "createdAt": 20,
-        "coords": { "lat": 28.1759, "lng": 112.9552 },
+        "coords": { "lat": 28.169249768957677, "lng": 112.95527188756415 },
         "emoji": "",
         "text": "毛泽东畅游湘江\n橘子洲设有与畅游湘江相关的纪念点。",
         "fontSize": 3,

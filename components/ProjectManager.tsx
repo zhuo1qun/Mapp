@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, Note, ProjectKind } from '../types';
-import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, GitBranch } from 'lucide-react';
+import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, GitBranch, RefreshCw } from 'lucide-react';
 import { generateId, formatDate, compressImageFromBase64 } from '../utils';
 import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
@@ -34,9 +34,13 @@ import { ChromeMenuShell } from './ui/ChromeMenuShell';
 import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
+import { fetchBuiltinExamplesManifest } from '../utils/builtinExamples/manifest';
+import { parseExportPayload } from '../utils/builtinExamples/projectFromExport';
 
 /** 项目「更多」菜单 portal：高于侧栏与覆盖层，低于删除项目阻断层 10000 */
 const PM_PROJECT_MORE_MENU_Z = 9901;
+const LEGACY_BUILTIN_EXAMPLE_NAME = '上海';
+const BUILTIN_EXAMPLE_SOURCE_ID = 'starter-board';
 
 function computeProjectMoreMenuFixedStyle(
   row: DOMRectReadOnly,
@@ -101,6 +105,7 @@ const MenuDropdown: React.FC<{
   onExportFullProject: (project: Project) => void;
   onExportMappViz: (project: Project) => void;
   onCompressImages: (project: Project) => void;
+  onUpdateBuiltinExample?: (project: Project) => void;
   onCheckData?: () => Promise<void>;
   onCleanupBrokenReferences?: (project: Project) => Promise<void>;
   onDelete: (id: string) => void;
@@ -110,6 +115,7 @@ const MenuDropdown: React.FC<{
   motionOriginClass: 'origin-top' | 'origin-top-right';
   hoverBackground: string;
   canDelete?: boolean;
+  canUpdateBuiltinExample?: boolean;
 }> = ({
   project,
   onRename,
@@ -118,6 +124,7 @@ const MenuDropdown: React.FC<{
   onExportFullProject,
   onExportMappViz,
   onCompressImages,
+  onUpdateBuiltinExample,
   onCheckData,
   onCleanupBrokenReferences,
   onDelete,
@@ -126,7 +133,8 @@ const MenuDropdown: React.FC<{
   fixedPlacementStyle,
   motionOriginClass,
   hoverBackground,
-  canDelete = true
+  canDelete = true,
+  canUpdateBuiltinExample = false
 }) => {
   return (
     <ChromeMenuShell
@@ -150,6 +158,15 @@ const MenuDropdown: React.FC<{
       >
         Duplicate Project
       </ChromeMenuItem>
+      {canUpdateBuiltinExample && onUpdateBuiltinExample ? (
+        <ChromeMenuItem
+          icon={<RefreshCw size={16} />}
+          hoverBackground={hoverBackground}
+          onClick={() => { onUpdateBuiltinExample(project); onClose(); }}
+        >
+          更新示例
+        </ChromeMenuItem>
+      ) : null}
       <ChromeMenuItem
         icon={<Download size={16} />}
         hoverBackground={hoverBackground}
@@ -396,6 +413,40 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     row: DOMRectReadOnly;
     button: DOMRectReadOnly;
   } | null>(null);
+  const [pendingBuiltinExampleUpdate, setPendingBuiltinExampleUpdate] = useState<Project | null>(null);
+  const [isUpdatingBuiltinExample, setIsUpdatingBuiltinExample] = useState(false);
+
+  const canUpdateBuiltinExample = (project: Project) =>
+    builtinExampleIds.has(project.id) && project.name === LEGACY_BUILTIN_EXAMPLE_NAME;
+
+  const handleConfirmBuiltinExampleUpdate = async () => {
+    const target = pendingBuiltinExampleUpdate;
+    if (!target || !onUpdateProject) return;
+
+    setIsUpdatingBuiltinExample(true);
+    try {
+      const manifest = await fetchBuiltinExamplesManifest();
+      const example = manifest.find((item) => item.id === BUILTIN_EXAMPLE_SOURCE_ID);
+      if (!example) throw new Error('未找到最新示例');
+
+      const response = await fetch(`/examples/${example.file}`, { cache: 'no-cache' });
+      if (!response.ok) throw new Error('无法下载最新示例');
+
+      const { project: latestExample } = parseExportPayload(await response.text());
+      await onUpdateProject({
+        ...latestExample,
+        id: target.id,
+        createdAt: target.createdAt,
+        builtinExampleId: BUILTIN_EXAMPLE_SOURCE_ID
+      });
+      setPendingBuiltinExampleUpdate(null);
+    } catch (error) {
+      console.error('Failed to update builtin example:', error);
+      alert('更新示例失败，请检查网络后重试。');
+    } finally {
+      setIsUpdatingBuiltinExample(false);
+    }
+  };
 
   const handleCreate = () => {
     if (!newProjectName.trim()) return;
@@ -498,7 +549,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       // Create a copy with new ID and name
       const duplicatedProject: Project = {
         id: generateId(),
-        name: `${project.name} (Copy)`,
+        // 由项目状态层统一生成名称，避免此处与持久化层各加一次「(Copy)」。
+        name: project.name,
         type: 'map',
         projectKind: sanitizeProjectKind(fullProject.projectKind),
         createdAt: Date.now(),
@@ -530,7 +582,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       };
 
       onDuplicateProject(duplicatedProject);
-      alert(`项目 "${project.name}" 已复制为 "${duplicatedProject.name}"`);
+      alert(`项目「${project.name}」已复制`);
     } catch (error) {
       console.error('Duplicate project failed:', error);
       alert('复制项目失败，请重试');
@@ -2020,6 +2072,42 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         </div>
       )}
 
+      {pendingBuiltinExampleUpdate && (
+        <div className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="update-example-title">
+          <ChromeDialogSurface
+            appearance={chromeAppearance}
+            className="max-w-md p-6 animate-in zoom-in-95"
+            style={mapChromeSurface}
+          >
+            <h2 id="update-example-title" className="text-xl font-black text-gray-800 mb-3">
+              更新示例
+            </h2>
+            <p className="text-sm leading-relaxed text-gray-600">
+              将把示例「{pendingBuiltinExampleUpdate.name}」替换为最新的「湘江」内容。该示例中的便签、标签和关联修改将被覆盖，且无法撤回。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={isUpdatingBuiltinExample}
+                onClick={() => setPendingBuiltinExampleUpdate(null)}
+                className="rounded-xl px-4 py-2 font-bold text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={isUpdatingBuiltinExample}
+                onClick={() => void handleConfirmBuiltinExampleUpdate()}
+                className="rounded-xl px-4 py-2 font-bold text-theme-chrome-fg shadow-lg transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: themeColor }}
+              >
+                {isUpdatingBuiltinExample ? '更新中…' : '更新'}
+              </button>
+            </div>
+          </ChromeDialogSurface>
+        </div>
+      )}
+
       {/* Import error：带出错位置；允许选中复制 */}
       {importErrorMessage && (
         <div className="fixed inset-0 z-[3100] bg-black/50 flex items-center justify-center p-4">
@@ -2105,6 +2193,18 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   >
                     Duplicate Project
                   </ChromeMenuItem>
+                  {canUpdateBuiltinExample(pm) ? (
+                    <ChromeMenuItem
+                      icon={<RefreshCw size={16} />}
+                      hoverBackground={mapChromeHoverBg}
+                      onClick={() => {
+                        setPendingBuiltinExampleUpdate(pm);
+                        setOpenMenuId(null);
+                      }}
+                    >
+                      更新示例
+                    </ChromeMenuItem>
+                  ) : null}
                   <ChromeMenuItem
                     icon={<Download size={16} />}
                     hoverBackground={mapChromeHoverBg}
@@ -2172,6 +2272,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   onExportFullProject={handleExportFullProject}
                   onExportMappViz={handleExportMappViz}
                   onCompressImages={handleCompressImages}
+                  onUpdateBuiltinExample={(project) => setPendingBuiltinExampleUpdate(project)}
                   onCheckData={onCheckData}
                   onCleanupBrokenReferences={onCleanupBrokenReferences}
                   onDelete={onDeleteProject}
@@ -2187,6 +2288,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   motionOriginClass={compactProjectList ? 'origin-top' : 'origin-top-right'}
                   hoverBackground={mapChromeHoverBg}
                   canDelete={canDelete}
+                  canUpdateBuiltinExample={canUpdateBuiltinExample(pm)}
                 />
                   );
                 })()

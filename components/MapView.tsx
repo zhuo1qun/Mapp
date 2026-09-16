@@ -55,7 +55,6 @@ import { useRegisterEditInspector } from './editInspector/EditInspectorProvider'
 import { GraphConnectionPanel } from './graph/GraphConnectionPanel';
 import { useSimpleConnectionPanel } from './hooks/useSimpleConnectionPanel';
 import { ClusterMarkerLayer } from './map/layers/ClusterMarkerLayer';
-import { NoteMarker } from './map/markers/NoteMarker';
 import { MapClickHandler } from './map/MapClickHandler';
 import { MapShiftBoxSelect } from './map/MapShiftBoxSelect';
 import { MapConnectionLinesOverlay } from './map/MapConnectionLinesOverlay';
@@ -339,7 +338,6 @@ const emptyProjectLocateStarted = new Set<string>();
 // 长按期间只完成图钉的放大；松手后才进入回缩收稳，避免两段动画抢在一起。
 const MAP_NOTE_GROW_MS = 320;
 const MAP_NOTE_SETTLE_MS = 240;
-const MAP_NOTE_INTRO_DISMISS_DELAY_MS = 560;
 const MAP_NOTE_EXIT_MS = 220;
 
 interface MapViewProps {
@@ -459,10 +457,9 @@ export const MapView: React.FC<MapViewProps> = ({
   const compactViewport = useCompactViewport();
   const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
   const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'settle' | 'exit'>('enter');
+  // 所有退出路径（取消草稿、删除已有点）共用这一份状态，避免重复播放离场动画。
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const introTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const introDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const introExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const introStartedAtRef = useRef(0);
   const longPressPreviewNoteRef = useRef<Partial<Note> | null>(null);
   const deletingNoteIdsRef = useRef(new Set<string>());
@@ -482,8 +479,6 @@ export const MapView: React.FC<MapViewProps> = ({
   useEffect(
     () => () => {
       if (introTimerRef.current) clearTimeout(introTimerRef.current);
-      if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
-      if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
       longPressPreviewNoteRef.current = null;
     },
     []
@@ -492,6 +487,15 @@ export const MapView: React.FC<MapViewProps> = ({
   const selectedNoteRaw = useMemo(
     () => (selectedNoteId ? notes.find((n) => n.id === selectedNoteId) : null),
     [selectedNoteId, notes]
+  );
+  const noteMotionById = useMemo<Readonly<Record<string, 'enter' | 'settle' | 'exit'>> | undefined>(
+    () =>
+      introNote?.id
+        ? {
+            [introNote.id]: introNoteMotion
+          }
+        : undefined,
+    [introNote?.id, introNoteMotion]
   );
   const inspectorNoteId = useMemo(() => {
     if (selectedNoteIds.size > 1) return null;
@@ -585,6 +589,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const forceSingleNoteIds = useMemo(() => {
     const seeds = new Set<string>(selectedNoteIds);
     if (selectedNoteId) seeds.add(selectedNoteId);
+    // 临时点在确认前始终保持为单个图钉，不能被周围点合并成簇后“消失”。
+    if (introNote?.id) seeds.add(introNote.id);
     if (seeds.size === 0) return [] as string[];
     const ids = new Set<string>(seeds);
     seeds.forEach((id) => {
@@ -596,7 +602,7 @@ export const MapView: React.FC<MapViewProps> = ({
       });
     });
     return Array.from(ids);
-  }, [selectedNoteIds, selectedNoteId, connections]);
+  }, [selectedNoteIds, selectedNoteId, introNote?.id, connections]);
 
   // Clear selection and hover when exiting preview mode
   useEffect(() => {
@@ -622,6 +628,14 @@ export const MapView: React.FC<MapViewProps> = ({
   const { mapInstance, mapRefCallback } = useMapInitialization();
   const mapInstanceRef = useRef(mapInstance);
   mapInstanceRef.current = mapInstance;
+  /** 预览卡的 document-capture 外点监听需放行图钉；实际选中/关闭由地图事件统一决定。 */
+  const mapMarkerPaneDismissIgnoreRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    mapMarkerPaneDismissIgnoreRef.current = mapInstance?.getPanes().markerPane ?? null;
+    return () => {
+      mapMarkerPaneDismissIgnoreRef.current = null;
+    };
+  }, [mapInstance]);
   const noteEditorAnimationAnchor = useMemo(() => {
     const coords = editingNote?.coords ?? selectedNoteRaw?.coords;
     if (!coords || !mapInstance) return null;
@@ -1058,7 +1072,7 @@ export const MapView: React.FC<MapViewProps> = ({
             : null;
   const mapNoteKind: 'preview' | 'editor' | null = isEditorOpen
     ? 'editor'
-    : !isMapToolbarEditMode && isUIVisible && selectedNoteId
+    : isUIVisible && selectedNoteId
       ? 'preview'
       : null;
   const mapToolbarMenuTop = useChromeMenuTop(
@@ -1111,14 +1125,14 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapRenderedNotes = useNotesWithResolvedMedia(mapRenderedNotesRaw);
 
   /**
-   * intro 占位图钉与项目内正式图钉交接期间：隐藏同 id 的正式 marker，
-   * 避免双影，并保证 intro 清掉前画面上始终有一枚针。
+   * 临时点与保存后的正式点都交给同一个 marker 图层，以稳定的 note id 交接。
+   * 未保存时只是局部状态；保存后真实 note 替换同 id 的临时数据，不会卸载图钉。
    */
   const mapMarkerNotes = useMemo(() => {
-    const id = introNote?.id;
-    if (!id) return mapRenderedNotes;
-    return mapRenderedNotes.filter((n) => n.id !== id);
-  }, [mapRenderedNotes, introNote?.id]);
+    if (!introNote?.id || !introNote.coords) return mapRenderedNotes;
+    if (mapRenderedNotes.some((note) => note.id === introNote.id)) return mapRenderedNotes;
+    return [...mapRenderedNotes, introNote as Note];
+  }, [introNote, mapRenderedNotes]);
 
   /** 详情卡优先用已解析像素的 note，避免再次卡在「加载中」 */
   const selectedNote = useMemo(() => {
@@ -1283,8 +1297,6 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const beginNewNoteIntro = useCallback((note: Partial<Note>) => {
       if (introTimerRef.current) clearTimeout(introTimerRef.current);
-      if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
-      if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
       setEditingNote(note);
       setIntroNote(note);
       setIntroNoteMotion('enter');
@@ -1329,13 +1341,59 @@ export const MapView: React.FC<MapViewProps> = ({
     [computeBoardPosition]
   );
 
-  const handleLongPress = useCallback(
-    (coords: Coordinates) => {
-      const newNote = createNewMapNote(coords);
-      longPressPreviewNoteRef.current = newNote;
-      beginNewNoteIntro(newNote);
+  /**
+   * 临时图钉只存在于当前 MapView；保存时以相同 id 写入项目，图层直接接手而不闪断。
+   */
+  const stageNewMapNote = useCallback(
+    (coords: Coordinates): Partial<Note> => {
+      const note = createNewMapNote(coords);
+      setPreSelectedNotes(null);
+      setSelectedNoteIds(new Set([note.id]));
+      setSelectedNoteId(note.id);
+      beginNewNoteIntro(note);
+      return note;
     },
     [beginNewNoteIntro, createNewMapNote]
+  );
+
+  /**
+   * 地图点位唯一的离场路径：先让图钉完成一次 exit，再移除临时点或提交持久化删除。
+   * `deletingNoteIdsRef` 同时充当去重锁，避免取消、关闭面板、删除按钮重复启动动画。
+   */
+  const exitMapNote = useCallback(
+    async (noteId: string, persistDelete: boolean) => {
+      if (!noteId || deletingNoteIdsRef.current.has(noteId)) return;
+      deletingNoteIdsRef.current.add(noteId);
+      setDeletingNoteIds(new Set(deletingNoteIdsRef.current));
+      setSelectedNoteId((current) => (current === noteId ? null : current));
+      setSelectedNoteIds((current) => {
+        if (!current.has(noteId)) return current;
+        const next = new Set(current);
+        next.delete(noteId);
+        return next;
+      });
+      setHoveredNoteId((current) => (current === noteId ? null : current));
+      setPreSelectedNotes(null);
+      setConnectionHighlightNoteIds(null);
+
+      try {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, MAP_NOTE_EXIT_MS));
+        setIntroNote((current) => (current?.id === noteId ? null : current));
+        if (persistDelete) await Promise.resolve(onDeleteNote?.(noteId));
+      } finally {
+        deletingNoteIdsRef.current.delete(noteId);
+        setDeletingNoteIds(new Set(deletingNoteIdsRef.current));
+      }
+    },
+    [onDeleteNote]
+  );
+
+  const handleLongPress = useCallback(
+    (coords: Coordinates) => {
+      const newNote = stageNewMapNote(coords);
+      longPressPreviewNoteRef.current = newNote;
+    },
+    [stageNewMapNote]
   );
 
   const handleLongPressRelease = useCallback(() => {
@@ -1346,12 +1404,15 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [openNewNoteEditorAfterIntro]);
 
   const handleLongPressCancel = useCallback(() => {
+    const cancelledNoteId = longPressPreviewNoteRef.current?.id;
     longPressPreviewNoteRef.current = null;
     if (introTimerRef.current) clearTimeout(introTimerRef.current);
     introTimerRef.current = null;
-    setIntroNote(null);
     setEditingNote(null);
-  }, []);
+    if (cancelledNoteId) {
+      void exitMapNote(cancelledNoteId, false);
+    }
+  }, [exitMapNote]);
 
   const handleCreateAtCurrentLocation = useCallback(async () => {
     try {
@@ -1363,15 +1424,14 @@ export const MapView: React.FC<MapViewProps> = ({
       if (map) {
         map.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
       }
-      const newNote = createNewMapNote({ lat: loc.lat, lng: loc.lng });
-      beginNewNoteIntro(newNote);
+      const newNote = stageNewMapNote({ lat: loc.lat, lng: loc.lng });
       openNewNoteEditorAfterIntro(newNote);
     } catch (error) {
       console.error('Create at current location failed:', error);
     } finally {
       setIsCreatingAtLocation(false);
     }
-  }, [requestLocation, setLocationError, beginNewNoteIntro, createNewMapNote, openNewNoteEditorAfterIntro]);
+  }, [requestLocation, setLocationError, stageNewMapNote, openNewNoteEditorAfterIntro]);
 
   const handleImportFromPhotos = useCallback(() => {
     fileInputRef.current?.click();
@@ -1424,10 +1484,22 @@ export const MapView: React.FC<MapViewProps> = ({
       return;
     }
 
+    // 已经是稳定单选时，再点同一图钉不应先关闭预览再重新选中。
+    // Shift 仍保留原有“从多选集合中切换”的语义。
+    const additive = !!e?.originalEvent?.shiftKey;
+    if (
+      !additive &&
+      selectedNoteId === note.id &&
+      selectedNoteIds.size === 1 &&
+      selectedNoteIds.has(note.id) &&
+      preSelectedNotes == null
+    ) {
+      return;
+    }
+
     // 普通地图模式：单选会打开详情卡，故收起其它浮层；Shift 多选不打断当前工作流。
-    if (!e?.originalEvent?.shiftKey) closePanelsForPreview();
+    if (!additive) closePanelsForPreview();
     setPreSelectedNotes(null);
-    const additive = !!(e?.originalEvent?.shiftKey);
     let nextSet: Set<string>;
     if (additive) {
       nextSet = new Set(selectedNoteIds);
@@ -1533,6 +1605,47 @@ export const MapView: React.FC<MapViewProps> = ({
     });
   }, [onUpdateNote]);
 
+  const handleMarkerLongPressDragStart = useCallback(
+    (note: Note) => {
+      isMarkerDraggingRef.current = true;
+      setPreSelectedNotes(null);
+      setSelectedNoteIds((current) =>
+        current.has(note.id) ? current : new Set([note.id])
+      );
+      setSelectedNoteId(note.id);
+      closeMapChromeExcept();
+      onWorkspaceEditModeChange(true);
+    },
+    [closeMapChromeExcept, onWorkspaceEditModeChange]
+  );
+
+  const handleMarkerLongPressDrag = useCallback((note: Note, latLng: L.LatLng) => {
+    isMarkerDraggingRef.current = true;
+    setNoteCoordOverrides((prev) => ({
+      ...prev,
+      [note.id]: { lat: latLng.lat, lng: latLng.lng }
+    }));
+  }, []);
+
+  const handleMarkerLongPressDragEnd = useCallback(
+    (note: Note, latLng: L.LatLng) => {
+      setNoteCoordOverrides((prev) => ({
+        ...prev,
+        [note.id]: { lat: latLng.lat, lng: latLng.lng }
+      }));
+      isMarkerDraggingRef.current = false;
+      ignoreNextMarkerClickRef.current = true;
+      window.setTimeout(() => {
+        ignoreNextMarkerClickRef.current = false;
+      }, 0);
+      onUpdateNote({
+        ...note,
+        coords: { lat: latLng.lat, lng: latLng.lng }
+      });
+    },
+    [onUpdateNote]
+  );
+
   
   const handleSaveNote = (noteData: Partial<Note>) => {
     if (noteData.id && notes.some(n => n.id === noteData.id)) {
@@ -1562,28 +1675,18 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  const closeEditor = useCallback((reason: 'saved' | 'discarded' = 'discarded') => {
+  const closeEditor = useCallback((reason: 'saved' | 'discarded' | 'deleted' = 'discarded') => {
     setIsEditorOpen(false);
     onToggleEditor(false);
     if (!introNote) return;
 
-    if (introDismissTimerRef.current) clearTimeout(introDismissTimerRef.current);
-    if (introExitTimerRef.current) clearTimeout(introExitTimerRef.current);
     if (reason === 'saved') {
       // 保留 intro 占位针，等 notes 写入同 id 后再无缝交接（见下方 effect）。
       // 若此处立刻 setIntroNote(null)，会在异步 onAddNote 落地前出现空窗闪烁。
       return;
     }
-    const introNoteId = introNote.id;
-    introDismissTimerRef.current = setTimeout(() => {
-      introDismissTimerRef.current = null;
-      setIntroNoteMotion('exit');
-      introExitTimerRef.current = setTimeout(() => {
-        introExitTimerRef.current = null;
-        setIntroNote((current) => (current?.id === introNoteId ? null : current));
-      }, MAP_NOTE_EXIT_MS);
-    }, MAP_NOTE_INTRO_DISMISS_DELAY_MS);
-  }, [introNote, onToggleEditor]);
+    if (reason === 'discarded') void exitMapNote(introNote.id, false);
+  }, [exitMapNote, introNote, onToggleEditor]);
 
   /** 保存关闭后：正式图钉已进项目时卸下 intro，完成无缝交接 */
   useEffect(() => {
@@ -1610,29 +1713,12 @@ export const MapView: React.FC<MapViewProps> = ({
   const handleDeleteNoteWithExit = useCallback(
     async (noteId: string) => {
       if (!onDeleteNote || deletingNoteIdsRef.current.has(noteId)) return;
-      deletingNoteIdsRef.current.add(noteId);
-      setDeletingNoteIds(new Set(deletingNoteIdsRef.current));
-      setSelectedNoteId(null);
-      setSelectedNoteIds((current) => {
-        const next = new Set(current);
-        next.delete(noteId);
-        return next;
-      });
-      setHoveredNoteId((current) => (current === noteId ? null : current));
-      setPreSelectedNotes(null);
-      setConnectionHighlightNoteIds(null);
       setEditingNote(null);
-      closeEditor();
-
-      try {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, MAP_NOTE_EXIT_MS));
-        await Promise.resolve(onDeleteNote(noteId));
-      } finally {
-        deletingNoteIdsRef.current.delete(noteId);
-        setDeletingNoteIds(new Set(deletingNoteIdsRef.current));
-      }
+      setIsEditorOpen(false);
+      onToggleEditor(false);
+      await exitMapNote(noteId, true);
     },
-    [closeEditor, onDeleteNote]
+    [exitMapNote, onDeleteNote, onToggleEditor]
   );
 
   // 侧栏「编辑」按钮或地图 label 双击：打开完整便签编辑器
@@ -1870,7 +1956,7 @@ export const MapView: React.FC<MapViewProps> = ({
         <MapCanvasBackground color={effectiveMapStyle === 'blank' ? '#ffffff' : '#dddddd'} />
         <MapSmoothZoom
           sensitivity={1.5}
-          trackpadPinchSensitivity={3.25}
+          trackpadPinchSensitivity={0.004}
           // Touch-first devices use Leaflet's native pinch handler; wheel zoom
           // keeps its existing quicker, inertial desktop behaviour.
           touchSensitivity={1}
@@ -1930,19 +2016,6 @@ export const MapView: React.FC<MapViewProps> = ({
           onLongPressCancel={handleLongPressCancel}
           isPreviewMode={!isUIVisible}
         />
-
-        {introNote?.coords ? (
-          <NoteMarker
-            note={introNote as Note}
-            position={[introNote.coords.lat, introNote.coords.lng]}
-            pinSize={pinSize}
-            themeColor={themeColor}
-            zIndexOffset={10000}
-            motion={introNoteMotion}
-            interactive={false}
-            onClick={() => {}}
-          />
-        ) : null}
 
         {pendingPlaceNote && (
           <Marker
@@ -2138,9 +2211,14 @@ export const MapView: React.FC<MapViewProps> = ({
           selectedNoteId={selectedNoteId}
           selectedNoteIds={selectedNoteIds}
           isPreviewMode={!isUIVisible}
+          isEditMode={isMapToolbarEditMode}
           onMarkerDragEnd={handleMarkerDragEnd}
           onMarkerDrag={handleMarkerDrag}
+          onMarkerLongPressDragStart={handleMarkerLongPressDragStart}
+          onMarkerLongPressDrag={handleMarkerLongPressDrag}
+          onMarkerLongPressDragEnd={handleMarkerLongPressDragEnd}
           deletingNoteIds={deletingNoteIds}
+          noteMotionById={noteMotionById}
         />
 
         {/* Import preview markers */}
@@ -2525,7 +2603,11 @@ export const MapView: React.FC<MapViewProps> = ({
           onClose={closeMapNoteSlot}
           appearance={mapChromeTone}
           motionAnchor={noteEditorAnimationAnchor}
-          dismissIgnoreRefs={[mapToolbarRef]}
+          dismissIgnoreRefs={
+            mapNoteKind === 'preview'
+              ? [mapToolbarRef, mapMarkerPaneDismissIgnoreRef]
+              : [mapToolbarRef]
+          }
           resolve={(kind) => {
             const pagePad = compactViewport ? '0.5rem' : '1rem';
             const previewLeft = `calc(var(--workspace-ui-left-inset, 0px) + ${pagePad})`;
@@ -2578,6 +2660,7 @@ export const MapView: React.FC<MapViewProps> = ({
                   chromeAppearance={mapChromeTone}
                   themeColor={themeColor}
                   onOpenEditor={handleEditNoteFromLabel}
+                  onDelete={isMapToolbarEditMode ? handleDeleteNoteWithExit : undefined}
                 />
               ) : null
             };
