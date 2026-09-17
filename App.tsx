@@ -11,7 +11,7 @@ import {
   PROJECT_OPEN_OVERLAY_FADE_S,
   PROJECT_OPEN_SLIDE_DURATION_S,
   PROJECT_OPEN_SLIDE_EASE,
-  PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S,
+  PROJECT_RETURN_HOME_SELECTION_DURATION_S,
   PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S,
   PROJECT_SIDEBAR_DRAWER_WIDTH_PX,
   PROJECT_SIDEBAR_DOCKED_WIDTH_PX,
@@ -114,6 +114,8 @@ export default function App() {
   const projectState = useProjectState();
 
   const [sidebarExpandingToHome, setSidebarExpandingToHome] = useState(false);
+  /** 回主页：先取消选中当前项目卡，完成后再展开侧栏。 */
+  const [returnHomeClearingSelection, setReturnHomeClearingSelection] = useState(false);
   /** 在项目内切换到另一项目时：先全宽展开再给关闭动画，避免「直接收起」难以感知是否切换成功 */
   const [sidebarExpandForProjectSwitch, setSidebarExpandForProjectSwitch] = useState(false);
   /** 进入项目收束段：宽度先收到抽屉，全屏壳布局延后到宽度动画结束再卸，避免生硬同切 */
@@ -305,6 +307,7 @@ export default function App() {
 
   const inProjectHomeTransition =
     pendingEnterWorkspaceFromHome ||
+    returnHomeClearingSelection ||
     sidebarExpandingToHome ||
     sidebarExpandForProjectSwitch ||
     projectEnterCollapsing;
@@ -681,7 +684,7 @@ export default function App() {
   ]);
 
   const handleBackToHome = useCallback(() => {
-    if (sidebarExpandingToHome) return;
+    if (sidebarExpandingToHome || returnHomeClearingSelection) return;
     // 窄屏留在 overlay、宽屏留在 docked：只改 width 拉到全屏，不换壳（避免先收到 0 再展开）。
     setSidebarExpandForProjectSwitch(false);
     setPendingEnterWorkspaceFromHome(false);
@@ -691,16 +694,28 @@ export default function App() {
       setSidebarDockedInline(true);
     }
     expandToHomeProjectIdRef.current = currentProjectId;
-    setSidebarExpandingToHome(true);
-  }, [sidebarExpandingToHome, currentProjectId, projectSidebarLargeViewport, setIsSidebarOpen]);
+    setReturnHomeClearingSelection(true);
+  }, [
+    sidebarExpandingToHome,
+    returnHomeClearingSelection,
+    currentProjectId,
+    projectSidebarLargeViewport,
+    setIsSidebarOpen
+  ]);
+
+  useEffect(() => {
+    if (!returnHomeClearingSelection || sidebarExpandingToHome) return;
+    const id = window.setTimeout(() => {
+      setSidebarExpandingToHome(true);
+    }, Math.round(PROJECT_RETURN_HOME_SELECTION_DURATION_S * 1000));
+    return () => window.clearTimeout(id);
+  }, [returnHomeClearingSelection, sidebarExpandingToHome]);
 
   useEffect(() => {
     if (!sidebarExpandingToHome) return;
     const expandMs = Math.round(PROJECT_OPEN_SLIDE_DURATION_S * 1000);
-    const verticalMoveMs = Math.round(
-      (PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S + PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S) * 1000
-    );
-    // 选中态淡出与纵向落位走完后再切换主页数据，避免最后一段动画被状态收尾截断。
+    const verticalMoveMs = Math.round(PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S * 1000);
+    // 选中态已在展开前播完；这里等侧栏宽度与 Hero/列表落位走完再切主页数据。
     const ms = Math.max(expandMs * 2 + 80, verticalMoveMs + 80);
     const id = window.setTimeout(() => {
       const pid = expandToHomeProjectIdRef.current;
@@ -720,6 +735,7 @@ export default function App() {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setSidebarExpandingToHome(false);
+          setReturnHomeClearingSelection(false);
           setSidebarExpandForProjectSwitch(false);
           setPendingEnterWorkspaceFromHome(false);
           setProjectEnterCollapsing(false);
@@ -1682,7 +1698,9 @@ export default function App() {
                   transitionListOnly={projectManagerTransitionListOnly}
                   showHomeHeroInTransition={pendingEnterWorkspaceFromHome}
                   sidebarExpandingToHome={sidebarExpandingToHome}
-                  clearSelectionInTransition={sidebarExpandingToHome}
+                  clearSelectionInTransition={
+                    returnHomeClearingSelection || sidebarExpandingToHome
+                  }
                   easterEggMode={atSteadyProjectHome && homeEasterEggMode}
                   onToggleEasterEggMode={() => {
                     setHomeEasterEggMode((v) => !v);
@@ -1747,7 +1765,7 @@ export default function App() {
              <MotionDiv
                className="fixed inset-0 bg-black/20"
                onClick={() => {
-                 if (sidebarExpandingToHome || sidebarExpandForProjectSwitch) return;
+                 if (sidebarExpandingToHome || sidebarExpandForProjectSwitch || returnHomeClearingSelection) return;
                  closeProjectSidebar();
                }}
                initial={{ opacity: 0 }}
@@ -1802,7 +1820,9 @@ export default function App() {
                  transitionListOnly={projectManagerTransitionListOnly}
                  showHomeHeroInTransition={pendingEnterWorkspaceFromHome}
                  sidebarExpandingToHome={sidebarExpandingToHome}
-                clearSelectionInTransition={sidebarExpandingToHome}
+                clearSelectionInTransition={
+                  returnHomeClearingSelection || sidebarExpandingToHome
+                }
                  easterEggMode={atSteadyProjectHome && homeEasterEggMode}
                  onToggleEasterEggMode={() => {
                    setHomeEasterEggMode((v) => !v);

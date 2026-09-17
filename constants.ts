@@ -142,8 +142,8 @@ export const PROJECT_OPEN_OVERLAY_FADE_S = 0.2;
 /** 整屏左滑与左侧栏抽屉同节奏，见 App 内 ProjectManager 外层 MotionDiv */
 export const PROJECT_OPEN_SLIDE_DURATION_S = 0.3;
 export const PROJECT_OPEN_SLIDE_EASE: [number, number, number, number] = [0.4, 0, 0.2, 1];
-/** 回主页时先完成项目卡取消选中，再开始 Hero 展开所需的等待。 */
-export const PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S = 0.22;
+/** 回主页：取消选中当前项目卡，作为最早独立完成的动画；完成后再展开侧栏。 */
+export const PROJECT_RETURN_HOME_SELECTION_DURATION_S = 0.22;
 /** 回主页时 Hero 展开推动项目列表纵向落位的时长。 */
 export const PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S = 0.56;
 /** 比通用项目转场更均匀，避免长距离纵移在中段突然加速。 */

@@ -18,7 +18,6 @@ import {
   DEFAULT_THEME_COLOR,
   PROJECT_OPEN_SLIDE_DURATION_S,
   PROJECT_OPEN_SLIDE_EASE,
-  PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S,
   PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S,
   PROJECT_RETURN_HOME_LIST_MOVE_EASE,
   PROJECT_SIDEBAR_DRAWER_WIDTH_PX
@@ -1515,7 +1514,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             duration: sidebarExpandingToHome
               ? PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S
               : PROJECT_OPEN_SLIDE_DURATION_S,
-            delay: sidebarExpandingToHome ? PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S : 0,
             ease: sidebarExpandingToHome
               ? PROJECT_RETURN_HOME_LIST_MOVE_EASE
               : PROJECT_OPEN_SLIDE_EASE
@@ -1663,7 +1661,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             ? {
                 y: {
                   duration: PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S,
-                  delay: PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S,
                   ease: PROJECT_RETURN_HOME_LIST_MOVE_EASE
                 },
                 opacity: {

@@ -1250,7 +1250,7 @@ body {
 .chrome-toggle-track {
   --chrome-slider-track-bg: rgb(15 23 42 / 0.1);
   --chrome-slider-track-shadow: inset 0 1px 2px rgb(15 23 42 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.22);
-  --chrome-slider-fill-bg: rgb(15 23 42 / 0.24);
+  --chrome-slider-fill-bg: rgb(15 23 42 / 0.16);
   --chrome-slider-fill-shadow: 1px 0 2px rgb(15 23 42 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.16);
 }
 
@@ -1258,7 +1258,7 @@ body {
 .chrome-toggle-track--dark {
   --chrome-slider-track-bg: rgb(255 255 255 / 0.1);
   --chrome-slider-track-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35), inset 0 0 0 1px rgb(255 255 255 / 0.04);
-  --chrome-slider-fill-bg: rgb(255 255 255 / 0.32);
+  --chrome-slider-fill-bg: rgba(255, 255, 255, 0.2);
   --chrome-slider-fill-shadow: 1px 0 2px rgb(0 0 0 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.14);
 }
 
