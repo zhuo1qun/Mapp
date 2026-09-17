@@ -71,11 +71,36 @@
        .leaflet-top { z-index: 20; }
 
        /* Disable default touch actions for better app-like feel */
-       .leaflet-container {
+       .leaflet-container,
+       #board-view-container,
+       #graph-view-container,
+       .workspace-canvas--graph,
+       [data-mapp-canvas-pinch] {
          -webkit-touch-callout: none !important;
          -webkit-user-select: none !important;
          user-select: none !important;
-         touch-action: none; 
+         touch-action: none;
+       }
+
+       /*
+        * Chrome 窗口 / 浮层：禁止浏览器把双指当成整页缩放。
+        * 可滚动区域单独放开纵向平移，避免设置面板等无法滑动。
+        */
+       [data-chrome-window-surface],
+       [data-compact-window-backdrop],
+       [data-mapp-chrome-ui],
+       [data-mapp-export-ui],
+       .ui-workspace-bottom-bar {
+         touch-action: none;
+       }
+       [data-chrome-window-surface] .overflow-y-auto,
+       [data-chrome-window-surface] .overflow-auto,
+       [data-chrome-window-surface] .overflow-y-scroll,
+       [data-chrome-window-surface] [data-chrome-scroll],
+       [data-mapp-chrome-ui].overflow-y-auto,
+       [data-mapp-chrome-ui] .overflow-y-auto,
+       [data-mapp-chrome-ui] .overflow-auto {
+         touch-action: pan-y;
        }
 
        /* Global disable for mobile browser long-press interactions */

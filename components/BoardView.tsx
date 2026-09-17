@@ -19,6 +19,7 @@ import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
 import { isFileDragLeavingViewport } from '../utils/ui/fileDrag';
 import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
+import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
 import { saveImage, saveSketch, loadImage, loadNoteImages, getViewPositionCache } from '../utils/persistence/storage';
@@ -63,6 +64,17 @@ import {
   BoardFrameControls,
   type BoardFrameResizeCorner
 } from './board/BoardFrameControls';
+import { BoardSelectionScaleHandles } from './board/BoardSelectionScaleHandles';
+import {
+  applySelectionScaleToNotes,
+  computeSelectionContentBounds,
+  scaledSelectionPositions,
+  selectionFixedPoint,
+  selectionMovingCorner,
+  selectionScaleAxesFromPointer,
+  snapshotSelectionPoses,
+  type SelectionScaleCorner
+} from '../utils/board/boardSelectionScale';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { LayerToolbarIcon } from './ui/LayerToolbarIcon';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
@@ -333,6 +345,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     beginDraggingFrame,
     beginResizingFrame,
     beginResizingImage,
+    beginScalingSelection,
     updatePanning,
     movementFromOrigin,
     resetInteraction
@@ -591,10 +604,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const boardToolbarKind = showSettingsPanel ? 'settings' : showLayerPanel ? 'layer' : null;
   const boardLayerMenuTop = useChromeMenuTop(boardToolbarKind != null, boardToolbarRef, 8);
 
-  /** NoteEditor 打开即统一释放左上角工作窗口，避免不同打开入口遗漏收起逻辑。 */
+  /** 设置窗与编辑器叠在一起会挡操作；筛选窗保留，以便记录行连到右侧编辑器。 */
   useEffect(() => {
     if (!editingNote || isIntroPending) return;
-    setShowLayerPanel(false);
     setShowSettingsPanel(false);
   }, [editingNote, isIntroPending]);
 
@@ -864,6 +876,50 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   }, [frames]);
   const [localResizingImageSize, setLocalResizingImageSize] = useState<{ id: string; x: number; y: number; width: number; height: number } | null>(null);
+  /** 多选包围盒缩放预览：id → 新 board 坐标（松手后保留至 notes 对齐） */
+  const [selectionScalePreview, setSelectionScalePreview] = useState<Map<
+    string,
+    { boardX: number; boardY: number }
+  > | null>(null);
+  const selectionScaleStartPosesRef = useRef<ReturnType<typeof snapshotSelectionPoses> | null>(
+    null
+  );
+  const selectionScaleSettleExpectedRef = useRef<Map<string, { boardX: number; boardY: number }> | null>(
+    null
+  );
+  const selectionScaleSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSelectionScalePreview = useCallback(() => {
+    if (selectionScaleSettleTimerRef.current) {
+      clearTimeout(selectionScaleSettleTimerRef.current);
+      selectionScaleSettleTimerRef.current = null;
+    }
+    selectionScaleStartPosesRef.current = null;
+    selectionScaleSettleExpectedRef.current = null;
+    setSelectionScalePreview(null);
+  }, []);
+
+  useEffect(() => {
+    const expected = selectionScaleSettleExpectedRef.current;
+    if (!expected || !selectionScalePreview) return;
+    for (const [id, pos] of expected) {
+      const n = notes.find((x) => x.id === id);
+      if (!n || n.boardX !== pos.boardX || n.boardY !== pos.boardY) return;
+    }
+    clearSelectionScalePreview();
+  }, [notes, selectionScalePreview, clearSelectionScalePreview]);
+
+  useEffect(() => {
+    if (selectedNoteIds.size <= 1 && selectionScalePreview) {
+      clearSelectionScalePreview();
+    }
+  }, [selectedNoteIds.size, selectionScalePreview, clearSelectionScalePreview]);
+
+  useEffect(() => () => {
+    if (selectionScaleSettleTimerRef.current) {
+      clearTimeout(selectionScaleSettleTimerRef.current);
+    }
+  }, []);
   
   // Import state
   const [showImportMenu, setShowImportMenu] = useState(false);
@@ -2078,11 +2134,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       setLocalDraggingFramePos(null);
       setLocalResizingFrameSize(null);
       setLocalResizingImageSize(null);
+      clearSelectionScalePreview();
       dragRectRef.current = null;
     },
     [
       cancelBoardLongPressPreview,
       clearBoardLongPress,
+      clearSelectionScalePreview,
       interactionRef,
       releaseAllPointers,
       releasePointer,
@@ -2445,161 +2503,151 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       }
       
       const activeInteraction = interactionRef.current;
+      if (activeInteraction.kind === 'idle' || activeInteraction.pointerId !== e.pointerId) {
+        return;
+      }
 
-      // Frame 拖动、Frame/图片缩放与 Frame 绘制共用同一互斥手势状态。
-      if (
-        activeInteraction.kind === 'dragging-frame' &&
-        activeInteraction.pointerId === e.pointerId
-      ) {
-          const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
-          
+      const resolveBoardPoint = () => {
+        const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
+        if (!rect) return null;
+        return clientToBoardPoint(pointerClient, rect, transform);
+      };
+
+      // Frame / 图片 / 多选缩放 / 框选 / 平移：按 interaction kind 分支，避免长 if 链漏互斥
+      switch (activeInteraction.kind) {
+        case 'dragging-frame': {
+          const boardPoint = resolveBoardPoint();
+          if (!boardPoint) return;
           setLocalDraggingFramePos({
-              x: boardPoint.x - activeInteraction.offset.x,
-              y: boardPoint.y - activeInteraction.offset.y
+            x: boardPoint.x - activeInteraction.offset.x,
+            y: boardPoint.y - activeInteraction.offset.y
           });
           return;
-      }
-      
-      // 如果正在调整图片大小（等比例缩放）
-      if (
-        activeInteraction.kind === 'resizing-image' &&
-        activeInteraction.pointerId === e.pointerId
-      ) {
-          const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
+        }
+        case 'resizing-image': {
+          const boardPoint = resolveBoardPoint();
+          if (!boardPoint) return;
           const worldX = boardPoint.x;
           const worldY = boardPoint.y;
-          
-          // 计算距离中心点的距离变化（用于等比例缩放）
           const centerX = activeInteraction.startBoardX + activeInteraction.startWidth / 2;
           const centerY = activeInteraction.startBoardY + activeInteraction.startHeight / 2;
-          
-          let distanceX = 0, distanceY = 0;
+
+          let distanceX = 0;
+          let distanceY = 0;
           switch (activeInteraction.corner) {
-              case 'tl':
-                  distanceX = centerX - worldX;
-                  distanceY = centerY - worldY;
-                  break;
-              case 'tr':
-                  distanceX = worldX - centerX;
-                  distanceY = centerY - worldY;
-                  break;
-              case 'bl':
-                  distanceX = centerX - worldX;
-                  distanceY = worldY - centerY;
-                  break;
-              case 'br':
-                  distanceX = worldX - centerX;
-                  distanceY = worldY - centerY;
-                  break;
+            case 'tl':
+              distanceX = centerX - worldX;
+              distanceY = centerY - worldY;
+              break;
+            case 'tr':
+              distanceX = worldX - centerX;
+              distanceY = centerY - worldY;
+              break;
+            case 'bl':
+              distanceX = centerX - worldX;
+              distanceY = worldY - centerY;
+              break;
+            case 'br':
+              distanceX = worldX - centerX;
+              distanceY = worldY - centerY;
+              break;
           }
-          
-          // 使用较大的距离变化来保持等比例
+
           const distance = Math.max(Math.abs(distanceX), Math.abs(distanceY));
-          const scale = distance / (Math.min(activeInteraction.startWidth, activeInteraction.startHeight) / 2);
-          
-          // 保持宽高比
+          const scale =
+            distance / (Math.min(activeInteraction.startWidth, activeInteraction.startHeight) / 2);
           const newWidth = Math.max(50, activeInteraction.startWidth * scale);
           const newHeight = Math.max(50, activeInteraction.startHeight * scale);
-          
-          // 计算新的位置（保持中心点不变）
           const newBoardX = centerX - newWidth / 2;
           const newBoardY = centerY - newHeight / 2;
-          
-          const note = notes.find(n => n.id === activeInteraction.id);
-          if (note) {
-              setLocalResizingImageSize({
-                  id: activeInteraction.id,
-                  x: newBoardX,
-                  y: newBoardY,
-                  width: newWidth,
-                  height: newHeight
-              });
+
+          if (notes.some((n) => n.id === activeInteraction.id)) {
+            setLocalResizingImageSize({
+              id: activeInteraction.id,
+              x: newBoardX,
+              y: newBoardY,
+              width: newWidth,
+              height: newHeight
+            });
           }
           return;
-      }
-      
-      // 如果正在调整Frame大小
-      if (
-        activeInteraction.kind === 'resizing-frame' &&
-        activeInteraction.pointerId === e.pointerId
-      ) {
-          const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const { x: worldX, y: worldY } = clientToBoardPoint(pointerClient, rect, transform);
-          
+        }
+        case 'resizing-frame': {
+          const boardPoint = resolveBoardPoint();
+          if (!boardPoint) return;
+          const { x: worldX, y: worldY } = boardPoint;
           const fixedX = activeInteraction.fixedX;
           const fixedY = activeInteraction.fixedY;
-          
-          // 相当于以固定点为起点，当前鼠标位置为对角点重新计算矩形
-          const newX = Math.min(fixedX, worldX);
-          const newY = Math.min(fixedY, worldY);
-          const newWidth = Math.max(100, Math.abs(fixedX - worldX));
-          const newHeight = Math.max(100, Math.abs(fixedY - worldY));
-          
-          setLocalResizingFrameSize({ x: newX, y: newY, width: newWidth, height: newHeight });
+          setLocalResizingFrameSize({
+            x: Math.min(fixedX, worldX),
+            y: Math.min(fixedY, worldY),
+            width: Math.max(100, Math.abs(fixedX - worldX)),
+            height: Math.max(100, Math.abs(fixedY - worldY))
+          });
           return;
-      }
-      
-      // 如果正在绘制Frame
-      if (
-        activeInteraction.kind === 'drawing-frame' &&
-        activeInteraction.pointerId === e.pointerId
-      ) {
-          const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          setDrawingFrameEnd(clientToBoardPoint(pointerClient, rect, transform));
+        }
+        case 'scaling-selection': {
+          const boardPoint = resolveBoardPoint();
+          const startPoses = selectionScaleStartPosesRef.current;
+          if (!boardPoint || !startPoses) return;
+          const fixed = { x: activeInteraction.fixedX, y: activeInteraction.fixedY };
+          const axes = selectionScaleAxesFromPointer(
+            fixed,
+            { x: activeInteraction.startMovingX, y: activeInteraction.startMovingY },
+            boardPoint
+          );
+          setSelectionScalePreview(scaledSelectionPositions(startPoses, fixed, axes));
           return;
-      }
-      
-      // 如果正在框选（含按住 Shift 触发的临时框选）
-      if (
-        interactionRef.current.kind === 'box-selecting' &&
-        interactionRef.current.pointerId === e.pointerId &&
-        boxSelectStart
-      ) {
-          const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const { x: worldX, y: worldY } = clientToBoardPoint(pointerClient, rect, transform);
+        }
+        case 'drawing-frame': {
+          const boardPoint = resolveBoardPoint();
+          if (!boardPoint) return;
+          setDrawingFrameEnd(boardPoint);
+          return;
+        }
+        case 'box-selecting': {
+          if (!boxSelectStart) return;
+          const boardPoint = resolveBoardPoint();
+          if (!boardPoint) return;
+          const { x: worldX, y: worldY } = boardPoint;
           setBoxSelectEnd({ x: worldX, y: worldY });
-          
-          // 计算框选区域
+
           const minX = Math.min(boxSelectStart.x, worldX);
           const maxX = Math.max(boxSelectStart.x, worldX);
           const minY = Math.min(boxSelectStart.y, worldY);
           const maxY = Math.max(boxSelectStart.y, worldY);
-          
+
           const additive = isShiftPressed || e.shiftKey;
-          // Shift：在原有选中上增减；否则以当前框为准替换
           const selectedIds = new Set<string>(additive ? selectedNoteIds : new Set());
-          notes.forEach(note => {
-              const { width: noteWidth, height: noteHeight } = boardNoteDimensions(note);
-              const noteRight = note.boardX + noteWidth;
-              const noteBottom = note.boardY + noteHeight;
-              
-              if (note.boardX < maxX && noteRight > minX && note.boardY < maxY && noteBottom > minY) {
-                  selectedIds.add(note.id);
-              } else if (!additive) {
-                  selectedIds.delete(note.id);
-              }
+          notes.forEach((note) => {
+            const { width: noteWidth, height: noteHeight } = boardNoteDimensions(note);
+            const noteRight = note.boardX + noteWidth;
+            const noteBottom = note.boardY + noteHeight;
+
+            if (note.boardX < maxX && noteRight > minX && note.boardY < maxY && noteBottom > minY) {
+              selectedIds.add(note.id);
+            } else if (!additive) {
+              selectedIds.delete(note.id);
+            }
           });
           setSelectedNoteIds(selectedIds);
           return;
+        }
+        case 'panning': {
+          if (isZoomingRef.current) return;
+          e.preventDefault();
+          const delta = updatePanning(e.pointerId, pointerClient);
+          if (!delta) return;
+          setTransform((prev) => {
+            const next = { ...prev, x: prev.x + delta.x, y: prev.y + delta.y };
+            transformRef.current = next;
+            return next;
+          });
+          return;
+        }
+        default:
+          return;
       }
-      
-      if (interactionRef.current.kind !== 'panning') return;
-      if (isZoomingRef.current) return;
-      e.preventDefault(); // 阻止浏览器默认行为
-      const delta = updatePanning(e.pointerId, pointerClient);
-      if (!delta) return;
-      setTransform(prev => {
-        const next = { ...prev, x: prev.x + delta.x, y: prev.y + delta.y };
-        transformRef.current = next;
-        return next;
-      });
   };
 
   const handleBoardPointerUp = (e: React.PointerEvent) => {
@@ -2619,6 +2667,37 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       }
 
       // 所有对象手势都由画布层统一提交；子元素不再抢先清除状态。
+      if (activeInteraction.kind === 'scaling-selection') {
+          const preview = selectionScalePreview;
+          const startPoses = selectionScaleStartPosesRef.current;
+          if (preview && startPoses && preview.size > 0) {
+              const { notes: updated, changed } = applySelectionScaleToNotes(
+                notes,
+                preview,
+                frames
+              );
+              if (changed) {
+                  selectionScaleSettleExpectedRef.current = new Map(preview);
+                  if (selectionScaleSettleTimerRef.current) {
+                    clearTimeout(selectionScaleSettleTimerRef.current);
+                  }
+                  selectionScaleSettleTimerRef.current = setTimeout(() => {
+                    selectionScaleSettleTimerRef.current = null;
+                    clearSelectionScalePreview();
+                  }, 500);
+                  commitProjectNotes(updated);
+              } else {
+                  clearSelectionScalePreview();
+              }
+          } else {
+              clearSelectionScalePreview();
+          }
+          resetInteraction(e.pointerId);
+          dragRectRef.current = null;
+          releasePointer(e.pointerId);
+          return;
+      }
+
       if (activeInteraction.kind === 'resizing-frame') {
           if (localResizingFrameSize) {
               isWaitingForSyncRef.current = true;
@@ -2974,6 +3053,56 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       event.currentTarget.setPointerCapture(event.pointerId);
     },
     [beginResizingFrame, stopAnimations, transform.scale, transform.x, transform.y]
+  );
+
+  const handleSelectionScaleStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>, corner: SelectionScaleCorner) => {
+      event.stopPropagation();
+      event.preventDefault();
+      if (!workspaceEditMode || selectedNoteIds.size < 2 || isZoomingRef.current) return;
+      stopAnimations();
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      dragRectRef.current = rect;
+
+      const selected = notes.filter((n) => selectedNoteIds.has(n.id));
+      const bounds = computeSelectionContentBounds(selected);
+      if (!bounds) return;
+
+      const fixed = selectionFixedPoint(bounds, corner);
+      const moving = selectionMovingCorner(bounds, corner);
+      const startPoses = snapshotSelectionPoses(notes, selectedNoteIds);
+      if (startPoses.size < 2) return;
+
+      selectionScaleSettleExpectedRef.current = null;
+      if (selectionScaleSettleTimerRef.current) {
+        clearTimeout(selectionScaleSettleTimerRef.current);
+        selectionScaleSettleTimerRef.current = null;
+      }
+      selectionScaleStartPosesRef.current = startPoses;
+      setSelectionScalePreview(scaledSelectionPositions(startPoses, fixed, { scaleX: 1, scaleY: 1 }));
+      beginScalingSelection(event.pointerId, {
+        corner,
+        fixedX: fixed.x,
+        fixedY: fixed.y,
+        startMovingX: moving.x,
+        startMovingY: moving.y
+      });
+      capturePointer(event.pointerId);
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [
+      beginScalingSelection,
+      capturePointer,
+      notes,
+      selectedNoteIds,
+      stopAnimations,
+      workspaceEditMode
+    ]
   );
 
   const openInspectorNoteEditor = useCallback(
@@ -3490,8 +3619,17 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   : enteringNoteIds.has(note.id)
                     ? 'board-note-motion--enter'
                     : '';
-              const currentX = note.boardX + (isDragging ? dragOffset.x : 0) + (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.x : 0);
-              const currentY = note.boardY + (isDragging ? dragOffset.y : 0) + (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.y : 0);
+              const scalePreviewPos = selectionScalePreview?.get(note.id);
+              const currentX =
+                scalePreviewPos?.boardX ??
+                note.boardX +
+                  (isDragging ? dragOffset.x : 0) +
+                  (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.x : 0);
+              const currentY =
+                scalePreviewPos?.boardY ??
+                note.boardY +
+                  (isDragging ? dragOffset.y : 0) +
+                  (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.y : 0);
               
               // 检查Note是否在任何Frame内
               const containingFrame = frames.find(frame => isNoteInFrame(note, frame));
@@ -3553,8 +3691,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                       >
                         <X size={14} />
                       </button>
-                        {/* Resize handles for image notes - show when selected */}
-                        {(selectedNoteId === note.id || selectedNoteIds.has(note.id)) && (
+                        {/* Resize handles for image notes - 仅单选；多选改用包围盒聚散手柄 */}
+                        {(selectedNoteId === note.id || selectedNoteIds.has(note.id)) &&
+                          selectedNoteIds.size <= 1 && (
                           <>
                             {(['tl', 'tr', 'bl', 'br'] as const).map(corner => {
                               const width = noteWidth;
@@ -3804,8 +3943,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             selectedNotes.forEach(note => {
               const { width: noteWidth, height: noteHeight } = boardNoteDimensions(note);
-              const noteX = note.boardX + (isMultiSelectDragging ? multiSelectDragOffset.x : 0);
-              const noteY = note.boardY + (isMultiSelectDragging ? multiSelectDragOffset.y : 0);
+              const scalePreviewPos = selectionScalePreview?.get(note.id);
+              const noteX =
+                scalePreviewPos?.boardX ??
+                note.boardX + (isMultiSelectDragging ? multiSelectDragOffset.x : 0);
+              const noteY =
+                scalePreviewPos?.boardY ??
+                note.boardY + (isMultiSelectDragging ? multiSelectDragOffset.y : 0);
               
               minX = Math.min(minX, noteX);
               minY = Math.min(minY, noteY);
@@ -3960,6 +4104,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   pointerEvents: 'none',
                 }}
               >
+                {workspaceEditMode ? (
+                  <BoardSelectionScaleHandles
+                    themeColor={themeColor}
+                    canvasScale={transform.scale}
+                    onResizeStart={handleSelectionScaleStart}
+                  />
+                ) : null}
                 <BoardMultiSelectToolbar
                   themeColor={themeColor}
                   panelChromeStyle={panelChromeStyle}
@@ -4208,7 +4359,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                                 ? handleBoardUpdateFrame
                                 : undefined
                             }
-                            onActivateNote={panBoardToNoteCenter}
+                            onActivateNote={(n) => {
+                              panBoardToNoteCenter(n);
+                              openBoardNoteEditor(n);
+                            }}
+                            linkedNoteId={editingNote && !isIntroPending ? editingNote.id : null}
                           />
                         </div>
                       ) : null
@@ -4330,11 +4485,21 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             }}
         />
 
+        <WorkspaceWindowLinkOverlay
+          sourceNoteId={
+            showLayerPanel && editingNote && !isIntroPending ? editingNote.id : null
+          }
+          themeColor={themeColor ?? DEFAULT_THEME_COLOR}
+          portal
+          className="fixed inset-0 z-[var(--z-workspace-window-link)]"
+        />
+
         <ChromeNoteSlot
           kind={editingNote && !isIntroPending ? 'editor' : null}
           onClose={closeEditor}
           appearance={chromeAppearance}
           motionAnchor={noteEditorAnimationAnchor}
+          dismissIgnoreRefs={[boardToolbarRef]}
           resolve={() => {
             const editorSlot = chromeNoteEditorSlotLayout(compactViewport, boardNoteEditorSurface);
             return {

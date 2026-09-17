@@ -122,6 +122,7 @@ export const GraphTopLeftToolbar: React.FC<Props> = ({
     <div
       data-allow-context-menu
       data-graph-top-left-chrome
+      data-mapp-chrome-ui=""
       className="fixed top-2 sm:top-4 ui-workspace-left z-[1000] pointer-events-none flex flex-col items-start gap-2 sm:gap-3"
       onPointerDown={(e) => e.stopPropagation()}
     >

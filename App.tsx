@@ -1194,26 +1194,86 @@ export default function App() {
   }, []);
 
 
-  // Disable browser two-finger zoom and long-press interactions
+  // 禁止浏览器页面双指/捏合缩放；画布（地图/看板/图谱）自行处理 pinch。
   useEffect(() => {
-    const isInsideLeafletMap = (target: EventTarget | null): boolean => {
-      return target instanceof Element && !!target.closest('.leaflet-container');
+    const CANVAS_PINCH_SELECTOR = [
+      '.leaflet-container',
+      '#board-view-container',
+      '#graph-view-container',
+      '.workspace-canvas--graph',
+      '[data-mapp-canvas-pinch]'
+    ].join(',');
+
+    const CHROME_UI_SELECTOR = [
+      '[data-chrome-window-surface]',
+      '[data-compact-window-backdrop]',
+      '[data-mapp-chrome-ui]',
+      '[data-mapp-export-ui]',
+      '.ui-workspace-bottom-bar'
+    ].join(',');
+
+    const asElement = (target: EventTarget | null): Element | null => {
+      if (target instanceof Element) return target;
+      if (target instanceof Text) return target.parentElement;
+      return null;
     };
 
-    const isInsideBoardView = (target: EventTarget | null): boolean => {
-      return target instanceof Element && !!target.closest('#board-view-container');
+    const isChromeUi = (el: Element | null): boolean =>
+      !!el?.closest(CHROME_UI_SELECTOR);
+
+    const isCanvasPinchZone = (el: Element | null): boolean => {
+      if (!el) return false;
+      // 叠在画布上的 Chrome 窗口/工具条：手指落在 UI 上时一律拦页面缩放
+      if (isChromeUi(el)) return false;
+      return !!el.closest(CANVAS_PINCH_SELECTOR);
+    };
+
+    const touchHitsChromeUi = (touches: TouchList): boolean => {
+      for (let i = 0; i < touches.length; i++) {
+        const t = touches.item(i);
+        if (!t) continue;
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        if (isChromeUi(el)) return true;
+      }
+      return false;
+    };
+
+    const allTouchesOnCanvas = (touches: TouchList): boolean => {
+      if (touches.length < 2) return false;
+      for (let i = 0; i < touches.length; i++) {
+        const t = touches.item(i);
+        if (!t) return false;
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        if (!isCanvasPinchZone(el)) return false;
+      }
+      return true;
     };
 
     const preventZoom = (e: TouchEvent) => {
-      if (e.touches.length > 1) {
-        // Leaflet / Board 双指缩放依赖 touch 序列；全局 preventDefault 会废掉手势。
-        if (isInsideLeafletMap(e.target) || isInsideBoardView(e.target)) return;
-        e.preventDefault();
+      if (e.touches.length < 2) return;
+      const targetEl = asElement(e.target);
+      // 窗口 / 工具条上的双指：一律禁止浏览器整页缩放
+      if (isChromeUi(targetEl) || touchHitsChromeUi(e.touches)) {
+        if (e.cancelable) e.preventDefault();
+        return;
       }
+      // 画布内双指：交给 Leaflet / Board / Graph，不要在这里 preventDefault
+      if (isCanvasPinchZone(targetEl) || allTouchesOnCanvas(e.touches)) {
+        return;
+      }
+      if (e.cancelable) e.preventDefault();
     };
 
     const preventGesture = (e: Event) => {
-      e.preventDefault();
+      // Safari 页面捏合走 gesture*；即便落在画布上也不要浏览器缩放（画布自管）
+      if (e.cancelable) e.preventDefault();
+    };
+
+    const preventCtrlWheelPageZoom = (e: WheelEvent) => {
+      // 触控板捏合在桌面表现为 ctrl/meta + wheel，会缩放整页
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (isCanvasPinchZone(asElement(e.target))) return;
+      if (e.cancelable) e.preventDefault();
     };
 
     const preventContextMenu = (e: Event) => {
@@ -1231,14 +1291,6 @@ export default function App() {
       e.preventDefault();
     };
 
-    const preventLongPress = (e: TouchEvent) => {
-      // Prevent long-press context menu on mobile
-      if (e.touches.length === 1) {
-        // For single touch, we'll rely on CSS -webkit-touch-callout: none
-        // But we can still prevent other long-press behaviors
-      }
-    };
-
     // Tab key to toggle UI visibility
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -1251,22 +1303,17 @@ export default function App() {
       }
     };
 
-    // Prevent two-finger zoom
     document.addEventListener('touchstart', preventZoom, { passive: false });
     document.addEventListener('touchmove', preventZoom, { passive: false });
 
-    // Prevent gesture events
-    document.addEventListener('gesturestart', preventGesture);
-    document.addEventListener('gesturechange', preventGesture);
-    document.addEventListener('gestureend', preventGesture);
+    document.addEventListener('gesturestart', preventGesture, { passive: false } as AddEventListenerOptions);
+    document.addEventListener('gesturechange', preventGesture, { passive: false } as AddEventListenerOptions);
+    document.addEventListener('gestureend', preventGesture, { passive: false } as AddEventListenerOptions);
 
-    // Prevent context menu (right-click/long-press menu)
+    document.addEventListener('wheel', preventCtrlWheelPageZoom, { passive: false });
+
     document.addEventListener('contextmenu', preventContextMenu);
 
-    // Prevent long-press selection on iOS
-    document.addEventListener('touchstart', preventLongPress, { passive: true });
-
-    // Tab key handler
     document.addEventListener('keydown', handleKeyDown);
 
     return () => {
@@ -1275,8 +1322,8 @@ export default function App() {
       document.removeEventListener('gesturestart', preventGesture);
       document.removeEventListener('gesturechange', preventGesture);
       document.removeEventListener('gestureend', preventGesture);
+      document.removeEventListener('wheel', preventCtrlWheelPageZoom);
       document.removeEventListener('contextmenu', preventContextMenu);
-      document.removeEventListener('touchstart', preventLongPress);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -2292,6 +2339,7 @@ export default function App() {
           ref={mobileViewSwitcherRef}
           data-allow-context-menu
           data-mobile-expanded={isMobileViewSwitcherExpanded ? 'true' : 'false'}
+          data-mapp-chrome-ui=""
           className={`fixed bottom-4 ui-workspace-center-x ui-workspace-bottom-bar -translate-x-1/2 z-[var(--z-workspace-tabs)] p-1.5 rounded-2xl shadow-xl border flex flex-nowrap justify-center gap-1 animate-in slide-in-from-bottom-4 fade-in ${
             panelChromeStyle ? 'border-gray-100/80' : 'border-white/50 map-chrome-surface-fallback'
           }`}

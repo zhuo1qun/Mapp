@@ -2287,6 +2287,7 @@ export const MapView: React.FC<MapViewProps> = ({
         {isUIVisible && (
           <div
             data-allow-context-menu
+            data-mapp-chrome-ui=""
             className={`fixed top-2 sm:top-4 ui-workspace-left z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 sm:gap-3 pointer-events-none ${
               mapToolbarKind ? 'map-toolbar--sheet-open' : ''
             } ${

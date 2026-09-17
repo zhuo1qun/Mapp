@@ -872,6 +872,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       <div className={`note-editor-shell note-editor-canvas-main relative z-10 flex flex-col items-end ${isCanvasWindow ? 'w-[min(38rem,calc(100vw-2rem))] shrink-0' : ''}`}>
         <div
           data-table-canvas-window={isCanvasWindow ? 'editor' : undefined}
+          data-workspace-link-target={isCanvasWindow ? 'note-editor' : undefined}
           className={`note-editor-panel chrome-dialog-${phase} ${
             motionAnchor ? `note-editor-panel--anchored note-editor-panel--anchored-${phase}` : ''
           } map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} ${
@@ -903,6 +904,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         <div className="note-editor-canvas-side flex w-80 shrink-0 flex-col gap-3">
           <div
             data-table-canvas-window="editor-properties"
+            data-workspace-link-target="editor-properties"
             className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
             style={editorChromeStyle}
           >
@@ -910,6 +912,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           </div>
           <div
             data-table-canvas-window="editor-media"
+            data-workspace-link-target="editor-media"
             className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
             style={editorChromeStyle}
           >

@@ -133,6 +133,8 @@ export function ChromeNoteSlot<K extends string>({
       dismissIgnoreRefs={dismissIgnoreRefs}
       role="dialog"
       aria-label={spec['aria-label']}
+      data-workspace-link-keep=""
+      data-workspace-link-target={sticky === 'editor' ? 'note-editor' : undefined}
     >
       <div className="pointer-events-auto relative flex min-h-0 min-w-0 flex-1 flex-col">
         {outgoingChildren ? (

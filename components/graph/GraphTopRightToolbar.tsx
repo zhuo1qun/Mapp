@@ -247,6 +247,7 @@ export const GraphTopRightToolbar: React.FC<Props> = ({
   if (isUIVisible) {
     return (
       <div
+        data-mapp-chrome-ui=""
         data-allow-context-menu
         className={`fixed top-2 sm:top-4 z-[500] flex flex-col gap-2 items-end pointer-events-none ${
           reserveRightForInspector
@@ -313,6 +314,7 @@ export const GraphTopRightToolbar: React.FC<Props> = ({
 
   return (
     <div
+      data-mapp-chrome-ui=""
       data-allow-context-menu
       className={`fixed top-2 sm:top-4 z-[500] pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 ${
         reserveRightForInspector

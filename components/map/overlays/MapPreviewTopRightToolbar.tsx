@@ -36,6 +36,7 @@ export function MapPreviewTopRightToolbar({
   return (
     <div
       data-allow-context-menu
+      data-mapp-chrome-ui=""
       className="fixed top-2 sm:top-4 right-2 sm:right-4 z-[500] pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2"
       onPointerDown={(e) => e.stopPropagation()}
     >

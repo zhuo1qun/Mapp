@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react';
 import type { GraphLayerState, Note, TagVisibilityLogic } from '../../types';
 import { GRAPH_UNTAGGED_TAG_GROUP } from '../../utils/graph/graphRuntimeCore';
@@ -26,6 +26,8 @@ type Props = {
   notes: Note[];
   onUpdateNote: (note: Note) => void;
   onActivateNote?: (note: Note) => void;
+  /** 当前连出到右侧窗口的记录。 */
+  linkedNoteId?: string | null;
   tagColorsByKey: Map<string, string[]>;
   onOpenTagColor: (tagKey: string, fromColor: string, anchor: HTMLElement) => void;
   /** 表格视图只用于浏览/编辑分组，不提供显隐筛选。 */
@@ -46,6 +48,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   notes,
   onUpdateNote,
   onActivateNote,
+  linkedNoteId = null,
   tagColorsByKey,
   onOpenTagColor,
   onRenameTag,
@@ -69,6 +72,19 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   const [dragPrefixKeys, setDragPrefixKeys] = useState<string[] | null>(null);
   const [overTagKey, setOverTagKey] = useState<string | null>(null);
   const [dropPlace, setDropPlace] = useState<'before' | 'after'>('before');
+
+  useEffect(() => {
+    if (!linkedNoteId) return;
+    const note = notes.find((n) => n.id === linkedNoteId);
+    if (!note) return;
+    for (const { prefix, tags } of hierarchy) {
+      const hit = tags.find((t) => noteBelongsToLayerGroupKey(note, t, 'tag'));
+      if (!hit) continue;
+      setExpandedPrefix(`p:${prefix}`);
+      setExpandedTag(hit);
+      return;
+    }
+  }, [hierarchy, linkedNoteId, notes]);
   const [editingTagKey, setEditingTagKey] = useState<string | null>(null);
   const [editingTagDraft, setEditingTagDraft] = useState('');
   const cancelRenameRef = useRef(false);
@@ -169,7 +185,10 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
             return (
               <div
                 key={note.id}
-                className="map-layer-note-row flex items-center gap-1 rounded-md border border-transparent px-1 py-0.5"
+                data-workspace-link-source={note.id}
+                className={`map-layer-note-row flex items-center gap-1 rounded-md border border-transparent px-1 py-0.5 ${
+                  linkedNoteId === note.id ? 'map-layer-note-row--linked' : ''
+                }`}
               >
                 <div className="shrink-0 w-3.5" aria-hidden />
                 <button

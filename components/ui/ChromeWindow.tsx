@@ -58,6 +58,7 @@ const NESTED_IGNORE_SELECTOR = [
   '[data-tag-add-panel]',
   '[data-note-time-range-panel]',
   '[data-note-emoji-picker]',
+  '[data-workspace-link-keep]',
   '.km-theme-color-picker',
   '.note-editor-media-detail',
   '[role="dialog"][aria-modal="true"]'

@@ -867,6 +867,7 @@ function EditInspectorPanelInner({
       className={asideShellClass}
       style={panelChromeStyle}
       data-edit-inspector="body"
+      data-workspace-link-target="inspector"
       onPointerDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
     >

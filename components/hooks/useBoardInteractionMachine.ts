@@ -8,7 +8,8 @@ export type BoardInteractionKind =
   | 'drawing-frame'
   | 'dragging-frame'
   | 'resizing-frame'
-  | 'resizing-image';
+  | 'resizing-image'
+  | 'scaling-selection';
 
 type IdleInteraction = { kind: 'idle' };
 type PanningInteraction = {
@@ -50,6 +51,16 @@ type ResizingImageInteraction = {
   startBoardX: number;
   startBoardY: number;
 };
+/** 多选包围盒角点：长宽各自缩放选中卡中心聚散（尺寸不变） */
+type ScalingSelectionInteraction = {
+  kind: 'scaling-selection';
+  pointerId: number;
+  corner: 'tl' | 'tr' | 'bl' | 'br';
+  fixedX: number;
+  fixedY: number;
+  startMovingX: number;
+  startMovingY: number;
+};
 
 export type BoardInteractionState =
   | IdleInteraction
@@ -58,7 +69,8 @@ export type BoardInteractionState =
   | DrawingFrameInteraction
   | DraggingFrameInteraction
   | ResizingFrameInteraction
-  | ResizingImageInteraction;
+  | ResizingImageInteraction
+  | ScalingSelectionInteraction;
 
 const IDLE: IdleInteraction = { kind: 'idle' };
 
@@ -116,6 +128,16 @@ export function useBoardInteractionMachine() {
     [transition]
   );
 
+  const beginScalingSelection = useCallback(
+    (
+      pointerId: number,
+      payload: Omit<ScalingSelectionInteraction, 'kind' | 'pointerId'>
+    ) => {
+      transition({ kind: 'scaling-selection', pointerId, ...payload });
+    },
+    [transition]
+  );
+
   const updatePanning = useCallback((pointerId: number, point: BoardPoint) => {
     const current = stateRef.current;
     if (current.kind !== 'panning' || current.pointerId !== pointerId) return null;
@@ -155,6 +177,7 @@ export function useBoardInteractionMachine() {
     beginDraggingFrame,
     beginResizingFrame,
     beginResizingImage,
+    beginScalingSelection,
     updatePanning,
     movementFromOrigin,
     resetInteraction: reset

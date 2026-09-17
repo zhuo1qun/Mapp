@@ -11,6 +11,7 @@ import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/gra
 import { emojiLayerStateFromLegacyTagState, groupDisplayLabel, noteBelongsToLayerGroupKey } from '../utils/layer/unifiedNoteLayer';
 import { NoteEditor } from './NoteEditor';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
+import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
 import { SettingsPanel } from './SettingsPanel';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
@@ -871,8 +872,8 @@ export const TableView: React.FC<TableViewProps> = ({
           data-table-canvas-window={isWideTableCanvas ? 'list' : undefined}
           className={isWideTableCanvas
             ? activeSubView === 'points'
-              ? `${editorNoteId ? 'w-[28rem]' : 'w-[36rem]'} max-w-[calc(100vw-6rem)] shrink-0 cursor-auto`
-              : 'w-[min(60rem,calc(100vw-6rem))] shrink-0 cursor-auto'
+              ? `relative z-0 ${editorNoteId ? 'w-[28rem]' : 'w-[36rem]'} max-w-[calc(100vw-6rem)] shrink-0 cursor-auto`
+              : 'relative z-0 w-[min(60rem,calc(100vw-6rem))] shrink-0 cursor-auto'
             : undefined}
         >
         {activeSubView === 'points' ? (
@@ -895,6 +896,7 @@ export const TableView: React.FC<TableViewProps> = ({
                   onBatchUpdateNotes={handleTableBatchNotes}
                   frames={project.frames ?? []}
                   onActivateNote={(n) => void activateTableNote(n)}
+                  linkedNoteId={editorNoteId}
                   tableMode
                   onUpdateFrameTitle={handleUpdateFrameTitle}
                 />
@@ -991,6 +993,15 @@ export const TableView: React.FC<TableViewProps> = ({
         )}
 
         </div>
+
+        {isWideTableCanvas && activeSubView === 'points' ? (
+          <WorkspaceWindowLinkOverlay
+            sourceNoteId={editorNoteId}
+            themeColor={themeColor}
+            portal
+            className="fixed inset-0 z-[var(--z-workspace-window-link)]"
+          />
+        ) : null}
 
         <NoteEditor
           initialNote={project.notes.find(n => n.id === editorNoteId)}

@@ -64,6 +64,8 @@ export interface ProjectNotesLayerPanelProps {
   onBatchUpdateNotes?: (nextNotes: Note[]) => void | Promise<void>;
   frames: Frame[];
   onActivateNote?: (note: Note) => void;
+  /** 当前连出到右侧窗口的记录：高亮行并作为贝塞尔起点。 */
+  linkedNoteId?: string | null;
   boardVariantToggles?: {
     primary: boolean;
     image: boolean;
@@ -107,6 +109,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   onBatchUpdateNotes,
   frames,
   onActivateNote,
+  linkedNoteId = null,
   boardVariantToggles,
   embed = false,
   flow = false,
@@ -311,6 +314,19 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
     },
     [expandedGroupKey, persistExpanded]
   );
+
+  useEffect(() => {
+    if (!linkedNoteId) return;
+    const note = notes.find((n) => n.id === linkedNoteId);
+    if (!note) return;
+    const key = (merged.order ?? []).find((item) =>
+      noteBelongsToLayerGroupKey(note, String(item).trim(), layerGroupStandard)
+    );
+    if (key == null) return;
+    const trimmed = String(key).trim();
+    const rowKey = trimmed === '' && layerGroupStandard === 'frame' ? '__empty_frame__' : trimmed;
+    setExpandedGroupKey(rowKey);
+  }, [layerGroupStandard, linkedNoteId, merged.order, notes]);
 
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
@@ -675,6 +691,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
               notes={notes}
               onUpdateNote={onUpdateNote}
               onActivateNote={onActivateNote}
+              linkedNoteId={linkedNoteId}
               tagColorsByKey={tagColorsByKey}
               onOpenTagColor={openTagColorBatchEditor}
               onRenameTag={(oldKey, nextKey) => void applyRenameTagGroup(oldKey, nextKey)}
@@ -940,8 +957,9 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                                 applyReorderInGroup(k, reordered);
                               }}
                               className={`map-layer-note-row flex items-center gap-1 rounded-md border border-transparent px-1 py-0.5 ${
-                                isNOver && !isNDrag ? 'map-layer-note-row--drop-target' : ''
-                              }`}
+                                linkedNoteId === note.id ? 'map-layer-note-row--linked' : ''
+                              } ${isNOver && !isNDrag ? 'map-layer-note-row--drop-target' : ''}`}
+                              data-workspace-link-source={note.id}
                             >
                               <div
                                 draggable

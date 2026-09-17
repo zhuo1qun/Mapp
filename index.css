@@ -33,6 +33,8 @@
   --z-note-slot: 900;
   --z-map-toolbar: 1000;
   --z-map-anchored-panel: 2000;
+  /* 高于编辑器壳，端口才能完整落在窗口边缘，而不是被裁成偏左的半圆。 */
+  --z-workspace-window-link: 6200;
   --z-map-sheet-backdrop: 4000;
   --z-map-sheet: 4001;
   --z-map-modal: 6000;
@@ -1191,6 +1193,20 @@ body {
 /* 图层中的末级便签行不再固定使用浅灰底；深色地图上保持与玻璃容器同一明度层级。 */
 .map-layer-note-row {
   background-color: rgb(243 244 246 / 0.9);
+}
+
+.map-layer-note-row--linked {
+  position: relative;
+  background-color: color-mix(in srgb, var(--theme-color) 18%, rgb(243 244 246 / 0.9));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-color) 65%, transparent);
+}
+
+.map-chrome-content-dark .map-layer-note-row--linked {
+  background-color: color-mix(in srgb, var(--theme-color) 28%, rgb(255 255 255 / 0.1)) !important;
+}
+
+.workspace-window-link-path {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.18));
 }
 
 .map-layer-note-row--drop-target {
