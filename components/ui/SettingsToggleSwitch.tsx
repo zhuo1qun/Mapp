@@ -1,4 +1,5 @@
 import React from 'react';
+import { useChromeAppearance } from './chromeAppearanceContext';
 
 /** 设置面板共用：标签 + 胶囊开关（与地图「显示标签」同款） */
 export function SettingsToggleSwitch({
@@ -14,6 +15,7 @@ export function SettingsToggleSwitch({
   themeColor: string;
   className?: string;
 }) {
+  const appearance = useChromeAppearance();
   return (
     <div className={`flex items-center justify-between gap-3 ${className}`.trim()}>
       <span className="text-xs font-medium text-gray-800">{label}</span>
@@ -23,9 +25,7 @@ export function SettingsToggleSwitch({
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative h-5 w-9 shrink-0 rounded-full border-0 cursor-pointer transition-colors ${
-          checked ? '' : 'chrome-inset'
-        }`}
+        className={`chrome-toggle-track chrome-toggle-track--${appearance} relative h-5 w-9 shrink-0 rounded-full border-0 cursor-pointer transition-colors`}
         style={checked ? { backgroundColor: themeColor } : undefined}
       >
         <span

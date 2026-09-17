@@ -106,6 +106,8 @@ interface GraphViewProps {
   onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
+  mapUiChromeOpacityBottom?: number;
+  onMapUiChromeOpacityBottomChange?: (opacity: number) => void;
   mapUiChromeBlurPx?: number;
   onMapUiChromeBlurPxChange?: (blurPx: number) => void;
   mapStyleId?: string;
@@ -134,9 +136,11 @@ export const GraphView: React.FC<GraphViewProps> = ({
   onThemeColorChange,
   uiDarkMode,
   onUiDarkModeChange,
-  mapUiChromeOpacity = 0.9,
+  mapUiChromeOpacity = 0.6,
   onMapUiChromeOpacityChange,
-  mapUiChromeBlurPx = 8,
+  mapUiChromeOpacityBottom = 0.4,
+  onMapUiChromeOpacityBottomChange,
+  mapUiChromeBlurPx = 4,
   onMapUiChromeBlurPxChange,
   mapStyleId = 'carto-light-nolabels',
   onMapStyleChange,
@@ -2020,6 +2024,8 @@ export const GraphView: React.FC<GraphViewProps> = ({
             onUiDarkModeChange={onUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
+            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+            onMapUiChromeOpacityBottomChange={onMapUiChromeOpacityBottomChange ?? (() => {})}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
             onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
             currentMapStyle={mapStyleId}

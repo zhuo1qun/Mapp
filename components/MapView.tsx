@@ -83,6 +83,7 @@ import {
   mapChromeControlHoverBackground,
   mapChromeContentStyle,
   DEFAULT_MAP_UI_CHROME_OPACITY,
+  DEFAULT_MAP_UI_CHROME_OPACITY_BOTTOM,
   DEFAULT_MAP_UI_CHROME_BLUR_PX,
   type MapChromeAppearance
 } from '../utils/map/mapChromeStyle';
@@ -371,8 +372,10 @@ interface MapViewProps {
   uiDarkMode?: boolean;
   onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity?: number;
+  mapUiChromeOpacityBottom?: number;
   mapUiChromeBlurPx?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
+  onMapUiChromeOpacityBottomChange?: (opacity: number) => void;
   onMapUiChromeBlurPxChange?: (blurPx: number) => void;
   isRouteMode?: boolean;
   setIsRouteMode?: (v: boolean) => void;
@@ -418,8 +421,10 @@ export const MapView: React.FC<MapViewProps> = ({
   uiDarkMode,
   onUiDarkModeChange,
   mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
+  mapUiChromeOpacityBottom = DEFAULT_MAP_UI_CHROME_OPACITY_BOTTOM,
   mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
   onMapUiChromeOpacityChange,
+  onMapUiChromeOpacityBottomChange,
   onMapUiChromeBlurPxChange,
   isRouteMode: _isRouteMode,
   setIsRouteMode: _setIsRouteMode,
@@ -984,7 +989,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const { handleDataImport } = useDataImport({ project, onUpdateProject });
   const { handleCsvImport } = useCsvImport({ project, onUpdateProject });
   const { computeBoardPosition } = useNotePositioning(notes);
-  const { isDragging, rootProps } = useFileDrop({
+  const { isDragging, dismissDrag, rootProps } = useFileDrop({
     isEditorOpen,
     handleImageImport,
     handleDataImport,
@@ -1688,6 +1693,19 @@ export const MapView: React.FC<MapViewProps> = ({
     if (reason === 'discarded') void exitMapNote(introNote.id, false);
   }, [exitMapNote, introNote, onToggleEditor]);
 
+  /** 编辑器关闭是一个终态，不回退成仍被选中的预览卡。 */
+  const closeEditorAndDismissNoteSlot = useCallback(
+    (reason: 'saved' | 'discarded' | 'deleted' = 'discarded') => {
+      closeEditor(reason);
+      setSelectedNoteId(null);
+      setSelectedNoteIds(new Set());
+      setPreSelectedNotes(null);
+      setConnectionHighlightNoteIds(null);
+      setHoveredNoteId(null);
+    },
+    [closeEditor]
+  );
+
   /** 保存关闭后：正式图钉已进项目时卸下 intro，完成无缝交接 */
   useEffect(() => {
     if (!introNote?.id || isEditorOpen) return;
@@ -1699,16 +1717,16 @@ export const MapView: React.FC<MapViewProps> = ({
     if (isEditorOpen) {
       const save = mapNoteSaveRef.current;
       if (save) {
-        void save().then(() => closeEditor('saved'));
+        void save().then(() => closeEditorAndDismissNoteSlot('saved'));
         return;
       }
-      closeEditor('saved');
+      closeEditorAndDismissNoteSlot('saved');
       return;
     }
     setSelectedNoteId(null);
     setSelectedNoteIds(new Set());
     setPreSelectedNotes(null);
-  }, [closeEditor, isEditorOpen]);
+  }, [closeEditorAndDismissNoteSlot, isEditorOpen]);
 
   const handleDeleteNoteWithExit = useCallback(
     async (noteId: string) => {
@@ -1926,6 +1944,7 @@ export const MapView: React.FC<MapViewProps> = ({
         chromeBlurPx={mapUiChromeBlurPx}
         title={isEditorOpen ? '拖入图片添加到便签' : '拖入图片、JSON 或 CSV 以导入'}
         description={isEditorOpen ? '图片会加入当前便签' : '文件会导入当前项目'}
+        onDismiss={dismissDrag}
       />
       <MapContainer 
         key={project.id}
@@ -2394,6 +2413,8 @@ export const MapView: React.FC<MapViewProps> = ({
                           onUiDarkModeChange={onUiDarkModeChange}
                           mapUiChromeOpacity={mapUiChromeOpacity}
                           onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
+                          mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+                          onMapUiChromeOpacityBottomChange={onMapUiChromeOpacityBottomChange ?? (() => {})}
                           mapUiChromeBlurPx={mapUiChromeBlurPx}
                           onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
                           currentMapStyle={mapStyleId || 'carto-light-nolabels'}
@@ -2625,8 +2646,8 @@ export const MapView: React.FC<MapViewProps> = ({
                     shell={false}
                     isOpen
                     saveDraftRef={mapNoteSaveRef}
-                    onClose={closeEditor}
-                    onSaveClose={() => closeEditor('saved')}
+                    onClose={() => closeEditorAndDismissNoteSlot('discarded')}
+                    onSaveClose={() => closeEditorAndDismissNoteSlot('saved')}
                     onSave={handleSaveNote}
                     onDelete={handleDeleteNoteWithExit}
                     initialNote={editingNote || {}}
@@ -2648,6 +2669,8 @@ export const MapView: React.FC<MapViewProps> = ({
                 top: mapToolbarMenuTop ?? 56,
                 left: previewLeft,
                 width: 'min(20rem, calc(100vw - 1rem))',
+                // 为与固定编辑器工作区的形变提供明确的起点；内容仍由 maxHeight 截断。
+                height: 'auto',
                 maxHeight: 'min(52dvh, 28rem)',
                 ...mapChromeContentSurface
               },

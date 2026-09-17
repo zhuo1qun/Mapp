@@ -38,8 +38,15 @@
   var LAB_KAPPA = 24389 / 27;
 
   // utils/map/mapChromeStyle.ts
-  var DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
-  var DEFAULT_MAP_UI_CHROME_BLUR_PX = 8;
+  var DEFAULT_MAP_UI_CHROME_OPACITY = 0.6;
+  var DEFAULT_MAP_UI_CHROME_BLUR_PX = 4;
+  function chromeGradientBackground(dark, opacity) {
+    const o = Math.min(1, Math.max(0, opacity));
+    const rgb = dark ? "24 24 27" : "255 255 255";
+    const top = `var(--map-ui-chrome-opacity-top, var(--map-ui-chrome-opacity, ${o}))`;
+    const bottom = `var(--map-ui-chrome-opacity-bottom, var(--map-ui-chrome-opacity, ${o}))`;
+    return `linear-gradient(180deg, rgb(${rgb} / ${top}) 0%, rgb(${rgb} / ${bottom}) 100%)`;
+  }
   function mapChromeModalBackdropStyle(opacity, blurPx) {
     const o = Math.min(1, Math.max(0, opacity));
     const b = Math.min(48, Math.max(0, blurPx));
@@ -68,7 +75,9 @@
     const b = Math.min(48, Math.max(0, blurPx));
     const dark = chromeIsDark(appearance);
     const style = {
-      backgroundColor: dark ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`,
+      backgroundColor: "transparent",
+      backgroundImage: chromeGradientBackground(dark, o),
+      "--map-chrome-surface-opacity": o,
       color: dark ? "rgba(255, 255, 255, 0.92)" : void 0,
       borderColor: dark ? "rgba(255, 255, 255, 0.16)" : void 0
     };

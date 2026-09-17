@@ -92,7 +92,9 @@ export const GraphStyleSettingsBlock: React.FC<GraphStyleSettingsBlockProps> = (
   }, [edgeElasticity]);
 
   return (
-    <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2">
+    <div className="space-y-3">
+      <div className="settings-detail-heading">细节设置</div>
+      <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2">
       <SettingsCompactSlider
         label="节点最小尺寸"
         themeColor={themeColor}
@@ -224,6 +226,7 @@ export const GraphStyleSettingsBlock: React.FC<GraphStyleSettingsBlockProps> = (
         onChange={(next) => onPatch({ graphEdgeCurve: next })}
         themeColor={themeColor}
       />
+      </div>
     </div>
   );
 };

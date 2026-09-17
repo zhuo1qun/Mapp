@@ -17,6 +17,7 @@ import { DEFAULT_THEME_COLOR, TAG_COLORS } from '../constants';
 import { mapChromeContentStyle, mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
+import { isFileDragLeavingViewport } from '../utils/ui/fileDrag';
 import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
@@ -254,6 +255,8 @@ interface BoardViewProps {
   onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
+  mapUiChromeOpacityBottom?: number;
+  onMapUiChromeOpacityBottomChange?: (opacity: number) => void;
   mapUiChromeBlurPx?: number;
   onMapUiChromeBlurPxChange?: (blurPx: number) => void;
   mapStyleId?: string;
@@ -288,9 +291,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   onThemeColorChange,
   uiDarkMode,
   onUiDarkModeChange,
-  mapUiChromeOpacity = 0.9,
+  mapUiChromeOpacity = 0.6,
   onMapUiChromeOpacityChange,
-  mapUiChromeBlurPx = 8,
+  mapUiChromeOpacityBottom = 0.4,
+  onMapUiChromeOpacityBottomChange,
+  mapUiChromeBlurPx = 4,
   onMapUiChromeBlurPxChange,
   mapStyleId = 'carto-light-nolabels',
   onMapStyleChange,
@@ -1850,7 +1855,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     const y = e.clientY;
     
     // If the mouse is outside the container bounds, hide the drag overlay
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+    if (
+      isFileDragLeavingViewport(x, y) ||
+      x < rect.left ||
+      x > rect.right ||
+      y < rect.top ||
+      y > rect.bottom
+    ) {
       setIsDragging(false);
     }
   };
@@ -2965,10 +2976,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     [beginResizingFrame, stopAnimations, transform.scale, transform.x, transform.y]
   );
 
-  // Visuals
-  const gridSize = 40 * transform.scale;
-  const dotSize = 3 * transform.scale;
-
   const openInspectorNoteEditor = useCallback(
     (noteId: string) => {
       const n = notes.find((x) => x.id === noteId);
@@ -3060,7 +3067,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       `}</style>
       <div 
         ref={containerRef}
-        className={`workspace-canvas w-full h-full overflow-hidden relative touch-none select-none ${
+        className={`workspace-canvas workspace-canvas--dots w-full h-full overflow-hidden relative touch-none select-none ${
           chromeAppearance === 'dark' ? 'workspace-canvas--dark ' : ''
         }${
           isPanning 
@@ -3096,6 +3103,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           chromeBlurPx={mapUiChromeBlurPx}
           title="拖入图片、JSON 或 CSV 以导入"
           description="文件会添加到当前看板项目"
+          onDismiss={() => setIsDragging(false)}
         />
         <input
           type="file"
@@ -3104,17 +3112,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           className="hidden"
           onChange={handleImageInputChange}
         />
-        {/* Background */}
-        <div 
-          className="absolute inset-0 pointer-events-none z-0"
-          style={{
-              backgroundImage: `radial-gradient(${themeColor} ${dotSize}px, transparent ${dotSize + 0.5}px)`,
-              backgroundPosition: `${transform.x}px ${transform.y}px`,
-              backgroundSize: `${gridSize}px ${gridSize}px`,
-              opacity: 0.8
-          }}
-        />
-
         {/* Canvas Content */}
         <div 
           className="absolute top-0 left-0 w-full h-full origin-top-left pointer-events-none"
@@ -4147,6 +4144,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                             onUiDarkModeChange={onUiDarkModeChange}
                             mapUiChromeOpacity={mapUiChromeOpacity}
                             onMapUiChromeOpacityChange={onMapUiChromeOpacityChange ?? (() => {})}
+                            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+                            onMapUiChromeOpacityBottomChange={onMapUiChromeOpacityBottomChange ?? (() => {})}
                             mapUiChromeBlurPx={mapUiChromeBlurPx}
                             onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
                             currentMapStyle={mapStyleId}

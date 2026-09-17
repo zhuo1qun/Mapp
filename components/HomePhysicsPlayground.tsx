@@ -4,13 +4,17 @@ import type { Note } from '../types';
 import { loadAllProjects, loadImage, loadSketch } from '../utils/persistence/storage';
 import { parseNoteContent } from '../utils';
 import { getThemeChromeForegroundHex } from '../utils/theme/themeChrome';
+import {
+  HOME_HERO_CHARACTER_SELECTOR,
+  HOME_HERO_LINES
+} from '../utils/home/homeHeroTitle';
 
 type SpawnKind = 'emoji' | 'label' | 'project' | 'photo' | 'sketch';
 
 export type HomePhysicsPlaygroundProps = {
   /** 稳定主页才启用；false 时不挂载任何监听器 */
   enabled: boolean;
-  /** 彩蛋模式：生成 START/YOUR/MAPPING 3 个刚体并加重重力 */
+  /** 彩蛋模式：生成主页标题的逐字符刚体并加重重力 */
   easterEggMode?: boolean;
   /** 彩蛋重力（engine.gravity.y） */
   gravityY?: number;
@@ -26,7 +30,7 @@ type BodyMeta =
   | { kind: 'emoji'; text: string }
   | { kind: 'label'; text: string }
   | { kind: 'project'; text: string }
-  | { kind: 'hero'; text: string }
+  | { kind: 'hero'; text: string; font: string }
   | { kind: 'photo'; src: string | null }
   | { kind: 'sketch'; src: string | null };
 
@@ -77,6 +81,7 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
     const world = engine.world;
 
     let raf = 0;
+    let heroLaunchRaf = 0;
     let lastT = performance.now();
 
     const ctx = canvas.getContext('2d');
@@ -159,10 +164,6 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
 
     resize();
     window.addEventListener('resize', resize);
-
-    const isLarge = typeof window !== 'undefined' && window.innerWidth >= 768;
-    // Tailwind：text-6xl(60px) / md:text-8xl(96px)
-    const computedHeroFontPx = isLarge ? 96 : 60;
 
     const spawnAt = (x: number, y: number) => {
       const angle = (Math.random() - 0.5) * 0.8;
@@ -359,31 +360,80 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
     if (easterEggMode) {
       void ensureNotePool();
       clearNonBoundaryBodies();
-      const w = window.innerWidth;
-      const centerX = w * 0.5;
-      const startYBase = 112; // matches sidebar pt-24 + p-4 roughly
-      const firstCenterY = startYBase + computedHeroFontPx * 0.45;
-      const lineCenterDelta = computedHeroFontPx * 0.9;
-
-      const heroWords = ['START', 'YOUR', 'MAPPING'];
-      ctx.font = `900 ${computedHeroFontPx}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
-      for (let i = 0; i < heroWords.length; i++) {
-        const text = heroWords[i];
-        const baseW = Math.max(1, ctx.measureText(text).width);
-        const baseH = computedHeroFontPx;
-        const y = firstCenterY + i * lineCenterDelta;
-        const body = Bodies.rectangle(centerX, y, baseW, baseH, {
+      const heroBodies: Matter.Body[] = [];
+      const addHeroCharacter = (
+        text: string,
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+        font: string,
+        angle = 0
+      ) => {
+        const body = Bodies.rectangle(x, y, Math.max(8, width), Math.max(12, height), {
           restitution: 0.35,
           friction: 0.2,
           frictionAir: 0.01,
-          density: 0.0016
+          density: 0.0012
         });
-        Body.setAngle(body, (Math.random() - 0.5) * 0.25);
-        Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.03);
-        Body.setVelocity(body, { x: (Math.random() - 0.5) * 3, y: -1.5 });
-        metaByBodyIdRef.current.set(body.id, { kind: 'hero', text });
+        Body.setAngle(body, angle);
+        // First frame overlaps the DOM glyphs; physics releases on the following frame.
+        Body.setStatic(body, true);
+        metaByBodyIdRef.current.set(body.id, { kind: 'hero', text, font });
         World.add(world, body);
+        heroBodies.push(body);
+      };
+
+      const glyphElements = Array.from(
+        document.querySelectorAll<HTMLElement>(HOME_HERO_CHARACTER_SELECTOR)
+      );
+      if (glyphElements.length > 0) {
+        glyphElements.forEach((element) => {
+          const rect = element.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+          const style = getComputedStyle(element);
+          const matrix = style.transform === 'none' ? null : new DOMMatrixReadOnly(style.transform);
+          const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          addHeroCharacter(
+            element.textContent || '',
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2,
+            element.offsetWidth,
+            element.offsetHeight,
+            font,
+            matrix ? Math.atan2(matrix.b, matrix.a) : 0
+          );
+        });
+      } else {
+        // Only for a lazy-mount race; it still keeps the title as individual glyphs.
+        const fontPx = window.innerWidth >= 768 ? 96 : 60;
+        const font = `900 ${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
+        const letterSpacing = fontPx * -0.05;
+        ctx.font = font;
+        HOME_HERO_LINES.forEach((line, lineIndex) => {
+          const widths = Array.from(line, (letter) => ctx.measureText(letter).width);
+          const lineWidth =
+            widths.reduce((sum, width) => sum + width, 0) +
+            Math.max(0, widths.length - 1) * letterSpacing;
+          let cursor = window.innerWidth * 0.5 - lineWidth / 2;
+          const y = 112 + fontPx * 0.45 + lineIndex * fontPx * 0.9;
+          Array.from(line).forEach((letter, index) => {
+            const width = widths[index]!;
+            addHeroCharacter(letter, cursor + width / 2, y, width, fontPx, font);
+            cursor += width + letterSpacing;
+          });
+        });
       }
+
+      heroLaunchRaf = requestAnimationFrame(() => {
+        heroLaunchRaf = requestAnimationFrame(() => {
+          heroBodies.forEach((body) => {
+            Body.setStatic(body, false);
+            Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.065);
+            Body.setVelocity(body, { x: (Math.random() - 0.5) * 3.8, y: -1 - Math.random() * 1.2 });
+          });
+        });
+      });
     } else {
       // Initial sprinkle
       for (let i = 0; i < 10; i++) {
@@ -506,14 +556,20 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
             ctx.globalAlpha = isHero ? 0.92 : meta.kind === 'project' ? 0.9 : 0.88;
             ctx.fillStyle = chromeFg;
             ctx.font = isHero
-              ? `900 ${computedHeroFontPx}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`
+              ? meta.font
               : meta.kind === 'project'
                 ? '600 26px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'
                 : '600 24px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            const maxChars = meta.kind === 'project' ? 26 : isHero ? 12 : 18;
-            const text = meta.text.length > maxChars ? `${meta.text.slice(0, maxChars - 1)}…` : meta.text;
+            const maxChars = meta.kind === 'project' ? 26 : isHero ? 1 : 18;
+            // 📌 等 emoji 是 surrogate pair，`string.length` 为 2；按码点算才是一个字形。
+            const glyphs = Array.from(meta.text);
+            const text =
+              glyphs.length > maxChars ? `${glyphs.slice(0, Math.max(0, maxChars - 1)).join('')}…` : meta.text;
+            if (isHero && /\p{Extended_Pictographic}/u.test(text)) {
+              ctx.font = `${meta.font}, "Apple Color Emoji", "Segoe UI Emoji"`;
+            }
             ctx.fillText(text, 0, 0);
           }
         }
@@ -548,6 +604,7 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
 
     return () => {
       window.cancelAnimationFrame(raf);
+      window.cancelAnimationFrame(heroLaunchRaf);
       window.removeEventListener('resize', resize);
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
@@ -569,4 +626,3 @@ export const HomePhysicsPlayground: React.FC<HomePhysicsPlaygroundProps> = ({
     />
   );
 };
-

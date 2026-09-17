@@ -24,8 +24,15 @@
   }
 
   // utils/map/mapChromeStyle.ts
-  var DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
-  var DEFAULT_MAP_UI_CHROME_BLUR_PX = 8;
+  var DEFAULT_MAP_UI_CHROME_OPACITY = 0.6;
+  var DEFAULT_MAP_UI_CHROME_BLUR_PX = 4;
+  function chromeGradientBackground(dark, opacity) {
+    const o = Math.min(1, Math.max(0, opacity));
+    const rgb = dark ? "24 24 27" : "255 255 255";
+    const top = `var(--map-ui-chrome-opacity-top, var(--map-ui-chrome-opacity, ${o}))`;
+    const bottom = `var(--map-ui-chrome-opacity-bottom, var(--map-ui-chrome-opacity, ${o}))`;
+    return `linear-gradient(180deg, rgb(${rgb} / ${top}) 0%, rgb(${rgb} / ${bottom}) 100%)`;
+  }
   function mapChromeModalBackdropStyle(opacity, blurPx) {
     const o = Math.min(1, Math.max(0, opacity));
     const b = Math.min(48, Math.max(0, blurPx));
@@ -50,7 +57,8 @@
     const o = Math.min(1, Math.max(0, opacity));
     const b = Math.min(48, Math.max(0, blurPx));
     const parts = [
-      `background-color:rgba(255,255,255,${o})`,
+      "background-color:transparent",
+      `background-image:${chromeGradientBackground(false, o)}`,
       "border:1px solid rgba(243,244,246,0.8)",
       "border-radius:0.5rem",
       "box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1)"
@@ -69,7 +77,8 @@
     const borderOpacity = Math.min(0.72, o * 0.75);
     return [
       mapChromeSurfaceInlineCss(o, blurPx),
-      `background-color:rgba(${background},${o})`,
+      "background-color:transparent",
+      `background-image:linear-gradient(180deg,rgba(${background},var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(${background},var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
       `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${borderOpacity})`
     ].join(";");
   }

@@ -18,6 +18,9 @@ import {
   DEFAULT_THEME_COLOR,
   PROJECT_OPEN_SLIDE_DURATION_S,
   PROJECT_OPEN_SLIDE_EASE,
+  PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S,
+  PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S,
+  PROJECT_RETURN_HOME_LIST_MOVE_EASE,
   PROJECT_SIDEBAR_DRAWER_WIDTH_PX
 } from '../constants';
 import { ThemeColorPicker } from './ThemeColorPicker';
@@ -34,8 +37,20 @@ import { ChromeMenuShell } from './ui/ChromeMenuShell';
 import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
+import { ChromeSearchField } from './ui/ChromeSearchField';
+import { ChromeSegmentedControl } from './ui/ChromeSegmentedControl';
 import { fetchBuiltinExamplesManifest } from '../utils/builtinExamples/manifest';
 import { parseExportPayload } from '../utils/builtinExamples/projectFromExport';
+import {
+  getHomeHeroCharacterPose,
+  HOME_HERO_LINES,
+  isHomeHeroPinCharacter
+} from '../utils/home/homeHeroTitle';
+import {
+  isFileDragLeavingViewport,
+  isFileDragTypes,
+  pickJsonFile
+} from '../utils/ui/fileDrag';
 
 /** 项目「更多」菜单 portal：高于侧栏与覆盖层，低于删除项目阻断层 10000 */
 const PM_PROJECT_MORE_MENU_Z = 9901;
@@ -259,6 +274,8 @@ interface ProjectManagerProps {
   onThemeColorChange?: (color: string) => void;
   mapUiChromeOpacity?: number;
   onMapUiChromeOpacityChange?: (opacity: number) => void;
+  mapUiChromeOpacityBottom?: number;
+  onMapUiChromeOpacityBottomChange?: (opacity: number) => void;
   mapUiChromeBlurPx?: number;
   onMapUiChromeBlurPxChange?: (blurPx: number) => void;
   uiDarkMode?: boolean;
@@ -313,9 +330,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   onCleanupBrokenReferences,
   themeColor = DEFAULT_THEME_COLOR,
   onThemeColorChange,
-  mapUiChromeOpacity = 0.9,
+  mapUiChromeOpacity = 0.6,
   onMapUiChromeOpacityChange,
-  mapUiChromeBlurPx = 8,
+  mapUiChromeOpacityBottom = 0.4,
+  onMapUiChromeOpacityBottomChange,
+  mapUiChromeBlurPx = 4,
   onMapUiChromeBlurPxChange,
   uiDarkMode = false,
   onUiDarkModeChange,
@@ -367,23 +386,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       return (b.createdAt ?? 0) - (a.createdAt ?? 0);
     });
   }, [projects, builtinExampleIds, exampleDevMaintenanceMode]);
-  // Helper function to calculate darker version of theme color
-  const getDarkerColor = (color: string): string => {
-    // Remove # if present
-    const hex = color.replace('#', '');
-    // Convert to RGB
-    const r = parseInt(hex.substr(0, 2), 16);
-    const g = parseInt(hex.substr(2, 2), 16);
-    const b = parseInt(hex.substr(4, 2), 16);
-    // Darken by 10%
-    const darkerR = Math.max(0, Math.floor(r * 0.9));
-    const darkerG = Math.max(0, Math.floor(g * 0.9));
-    const darkerB = Math.max(0, Math.floor(b * 0.9));
-    // Convert back to hex
-    return `#${darkerR.toString(16).padStart(2, '0')}${darkerG.toString(16).padStart(2, '0')}${darkerB.toString(16).padStart(2, '0')}`;
-  };
-  
-  const themeColorDark = getDarkerColor(themeColor);
   const chromeAppearance = useChromeAppearance();
   const mapChromeSurface = mapChromeSurfaceStyle(
     mapUiChromeOpacity,
@@ -391,9 +393,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     chromeAppearance
   );
   const mapChromeHoverBg = mapChromeHoverBackground(mapUiChromeOpacity, chromeAppearance);
+  const themeChromeInteractiveClass = `theme-chrome-interactive theme-chrome-interactive--${chromeAppearance}`;
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectKind, setNewProjectKind] = useState<ProjectKind>('mapping');
+  const [newProjectNameShake, setNewProjectNameShake] = useState(false);
+  const newProjectNameInputRef = useRef<HTMLInputElement>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState('');
@@ -404,11 +409,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const importFileInputRef = React.useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCreateFileDragging, setIsCreateFileDragging] = useState(false);
   const [showThemeColorPicker, setShowThemeColorPicker] = useState(false);
   const [showHomeSettings, setShowHomeSettings] = useState(false);
   const [showAppearanceSettingsBlockInSettings, setShowAppearanceSettingsBlockInSettings] = useState(true);
-  const [newProjectHover, setNewProjectHover] = useState(false);
-  const [hoveredProjectRowId, setHoveredProjectRowId] = useState<string | null>(null);
   const [projectMoreAnchor, setProjectMoreAnchor] = useState<{
     row: DOMRectReadOnly;
     button: DOMRectReadOnly;
@@ -449,8 +453,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   };
 
   const handleCreate = () => {
-    if (!newProjectName.trim()) return;
-    
+    if (!newProjectName.trim()) {
+      setNewProjectNameShake(true);
+      window.setTimeout(() => setNewProjectNameShake(false), 360);
+      newProjectNameInputRef.current?.focus();
+      return;
+    }
+
     const newProject: Project = {
       id: generateId(),
       name: newProjectName,
@@ -464,7 +473,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     setIsCreating(false);
     setNewProjectName('');
     setNewProjectKind('mapping');
-    
+    setIsCreateFileDragging(false);
+
     // If in sidebar mode, close sidebar after creation
     if (isSidebar && onCloseSidebar) {
       onCloseSidebar();
@@ -1113,27 +1123,33 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     }
   };
 
-  // Drag and drop handlers for JSON import
+  // Drag and drop handlers for JSON import（新建项目对话框打开时由窗口自己收，不叠主页遮罩）
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDragging(true);
-    }
+    if (isCreating || !isFileDragTypes(e.dataTransfer.types)) return;
+    setIsDragging(true);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
-      e.dataTransfer.dropEffect = 'copy';
-    }
+    if (isCreating || !isFileDragTypes(e.dataTransfer.types)) return;
+    e.dataTransfer.dropEffect = 'copy';
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.currentTarget === e.target) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const { clientX: x, clientY: y } = e;
+    if (
+      isFileDragLeavingViewport(x, y) ||
+      x < rect.left ||
+      x > rect.right ||
+      y < rect.top ||
+      y > rect.bottom
+    ) {
       setIsDragging(false);
     }
   };
@@ -1142,20 +1158,64 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    if (isCreating) return;
 
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      const fileArray = Array.from(files);
-      const jsonFile = fileArray.find((file): file is File => 
-        file instanceof File && (file.type === 'application/json' || file.name.endsWith('.json'))
-      );
-      
-      if (jsonFile) {
-        const merge = !!activeProject;
-        handleImportProject(jsonFile, { merge });
-      }
+    const jsonFile = pickJsonFile(e.dataTransfer.files);
+    if (jsonFile) {
+      handleImportProject(jsonFile, { merge: !!activeProject });
     }
   };
+
+  const closeCreateDialog = () => {
+    setIsCreating(false);
+    setNewProjectName('');
+    setNewProjectKind('mapping');
+    setIsCreateFileDragging(false);
+  };
+
+  const handleCreateDialogDragEnter = (e: React.DragEvent) => {
+    if (!isFileDragTypes(e.dataTransfer.types)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsCreateFileDragging(true);
+  };
+
+  const handleCreateDialogDragOver = (e: React.DragEvent) => {
+    if (!isFileDragTypes(e.dataTransfer.types)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleCreateDialogDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const { clientX: x, clientY: y } = e;
+    if (
+      isFileDragLeavingViewport(x, y) ||
+      x < rect.left ||
+      x > rect.right ||
+      y < rect.top ||
+      y > rect.bottom
+    ) {
+      setIsCreateFileDragging(false);
+    }
+  };
+
+  const handleCreateDialogDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsCreateFileDragging(false);
+    const jsonFile = pickJsonFile(e.dataTransfer.files);
+    if (!jsonFile) return;
+    closeCreateDialog();
+    void handleImportProject(jsonFile, { merge: false });
+  };
+
+  useEffect(() => {
+    if (isCreating) setIsDragging(false);
+  }, [isCreating]);
 
   /** 回主页收尾：已无当前项目但仍在 expand 动画尾部 → 用主页壳与列表布局，只在之后一帧再关 transitionListOnly */
   const finishingReturnToHomeLayout =
@@ -1250,7 +1310,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         : 'w-full h-[100dvh] min-h-0 overflow-y-auto theme-surface-scrollbar flex flex-col items-center justify-start pt-40 pb-0 p-4 relative';
 
   const titleClass =
-    'text-6xl md:text-8xl font-black text-theme-chrome-fg tracking-tighter mb-12 text-center drop-shadow-sm leading-[0.9] flex flex-col';
+    'text-[clamp(4rem,21vw,6rem)] md:text-8xl font-black text-theme-chrome-fg tracking-tighter mb-4 text-center drop-shadow-sm leading-[0.9] flex flex-col';
 
   useLayoutEffect(() => {
     if (!openMenuId || homeLikeList) {
@@ -1300,6 +1360,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         !transitionListOnly &&
         onThemeColorChange &&
         onMapUiChromeOpacityChange &&
+        onMapUiChromeOpacityBottomChange &&
         onMapUiChromeBlurPxChange && (
         <>
           {!isSidebar || expandToHomeLayout ? (
@@ -1310,15 +1371,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   setShowAppearanceSettingsBlockInSettings(true);
                   setShowHomeSettings(true);
                 }}
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-theme-chrome-fg transition-colors"
+                className={`${themeChromeInteractiveClass} flex h-10 w-10 items-center justify-center rounded-xl`}
                 title="设置"
-                style={{ backgroundColor: themeColor }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = themeColorDark;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = themeColor;
-                }}
+                aria-expanded={showHomeSettings}
               >
                 <Palette size={22} strokeWidth={2} aria-hidden />
               </button>
@@ -1326,15 +1381,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => onToggleEasterEggMode()}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-theme-chrome-fg transition-colors"
+                  className={`${themeChromeInteractiveClass} flex h-10 w-10 items-center justify-center rounded-xl`}
                   title="彩蛋"
-                  style={{ backgroundColor: easterEggMode ? themeColorDark : themeColor }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = themeColorDark;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = easterEggMode ? themeColorDark : themeColor;
-                  }}
+                  aria-pressed={easterEggMode}
                 >
                   <Sparkles size={22} strokeWidth={2} aria-hidden />
                 </button>
@@ -1345,8 +1394,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => onExampleDevMaintenanceModeToggle()}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-theme-chrome-fg transition-colors"
-                  style={{ backgroundColor: exampleDevMaintenanceMode ? themeColorDark : themeColor }}
+                  className={`${themeChromeInteractiveClass} flex h-10 w-10 items-center justify-center rounded-xl`}
+                  aria-pressed={exampleDevMaintenanceMode}
                   title="dev"
                 >
                   <Code2 size={22} strokeWidth={2} aria-hidden />
@@ -1386,6 +1435,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                           onUiDarkModeChange={onUiDarkModeChange ?? (() => {})}
                           mapUiChromeOpacity={mapUiChromeOpacity}
                           onMapUiChromeOpacityChange={onMapUiChromeOpacityChange}
+                          mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+                          onMapUiChromeOpacityBottomChange={onMapUiChromeOpacityBottomChange}
                           mapUiChromeBlurPx={mapUiChromeBlurPx}
                           onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange}
                           {...(!isSidebar || expandToHomeLayout
@@ -1403,21 +1454,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         </>
       )}
 
-      {transitionListOnly && activeProject && onCloseSidebar && (
-        <button
-          type="button"
-          onClick={onCloseSidebar}
-          className="pointer-events-auto absolute top-3 right-10 z-[2010] flex h-10 w-10 items-center justify-center rounded-xl text-theme-chrome-fg transition-colors"
-          style={{ backgroundColor: themeColor }}
-          title="关闭"
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = themeColorDark)}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = themeColor)}
-          aria-label="关闭项目列表"
-        >
-          <X size={22} strokeWidth={2} aria-hidden />
-        </button>
-      )}
-
       {isSidebar && !expandToHomeLayout && !transitionListOnly && (
         <>
           <div className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex flex-nowrap items-center gap-2">
@@ -1425,15 +1461,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               onClick={() => {
                 if (onBackToHome) onBackToHome();
               }}
-              className="project-sidebar-action p-2 rounded-xl text-theme-chrome-fg transition-colors"
-              style={{ backgroundColor: themeColor }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
+              className={`${themeChromeInteractiveClass} project-sidebar-action p-2 rounded-xl`}
             >
               <Home size={24} />
             </button>
             {onThemeColorChange &&
               onMapUiChromeOpacityChange &&
+              onMapUiChromeOpacityBottomChange &&
               onMapUiChromeBlurPxChange && (
                 <button
                   type="button"
@@ -1441,11 +1475,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     setShowAppearanceSettingsBlockInSettings(true);
                     setShowHomeSettings(true);
                   }}
-                  className="project-sidebar-action p-2 rounded-xl text-theme-chrome-fg transition-colors"
-                  style={{ backgroundColor: themeColor }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = themeColorDark)}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = themeColor)}
+                  className={`${themeChromeInteractiveClass} project-sidebar-action p-2 rounded-xl`}
                   title="设置"
+                  aria-expanded={showHomeSettings}
                 >
                   <Palette size={22} strokeWidth={2} aria-hidden />
                 </button>
@@ -1454,10 +1486,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           <div className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-4 z-[2000] flex flex-nowrap items-center gap-2">
             {activeProject && syncStatus === 'idle' && getLastSyncTime() && (
               <div
-                className="project-sidebar-action project-sidebar-sync-status flex items-center justify-center w-10 h-10 rounded-xl text-theme-chrome-fg transition-colors cursor-help"
-                style={{ backgroundColor: themeColor }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
+                className={`${themeChromeInteractiveClass} project-sidebar-action project-sidebar-sync-status flex items-center justify-center w-10 h-10 rounded-xl cursor-help`}
                 title={`Synced: ${new Date(getLastSyncTime()!).toLocaleString('en-US')}`}
               >
                 <Cloud size={20} />
@@ -1465,10 +1494,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             )}
             <button 
               onClick={onCloseSidebar} 
-              className="project-sidebar-action w-10 h-10 p-2 rounded-xl text-theme-chrome-fg transition-colors flex items-center justify-center"
-              style={{ backgroundColor: themeColor }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
+              className={`${themeChromeInteractiveClass} project-sidebar-action w-10 h-10 p-2 rounded-xl flex items-center justify-center`}
             >
           <X size={24} />
         </button>
@@ -1486,8 +1512,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             opacity: collapseHomeHeroShell ? 0 : 1
           }}
           transition={{
-            duration: PROJECT_OPEN_SLIDE_DURATION_S,
-            ease: PROJECT_OPEN_SLIDE_EASE
+            duration: sidebarExpandingToHome
+              ? PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S
+              : PROJECT_OPEN_SLIDE_DURATION_S,
+            delay: sidebarExpandingToHome ? PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S : 0,
+            ease: sidebarExpandingToHome
+              ? PROJECT_RETURN_HOME_LIST_MOVE_EASE
+              : PROJECT_OPEN_SLIDE_EASE
           }}
           onAnimationComplete={() => {
             if (collapseHomeHeroShell) {
@@ -1520,9 +1551,31 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 className={titleClass}
                 style={easterEggMode ? { visibility: 'hidden' } : undefined}
               >
-                <span>START</span>
-                <span>YOUR</span>
-                <span>MAPPING</span>
+                {HOME_HERO_LINES.map((line, lineIndex) => (
+                  <span key={line} className="block whitespace-nowrap">
+                    {Array.from(line).map((character, characterIndex) => {
+                      const isPin = isHomeHeroPinCharacter(character);
+                      const pose = isPin
+                        ? { rotateDeg: 0, translateYPx: 0 }
+                        : getHomeHeroCharacterPose(lineIndex, characterIndex);
+                      return (
+                        <span
+                          key={`${line}-${characterIndex}`}
+                          data-home-hero-character="true"
+                          className={`title-character${isPin ? ' title-character--pin' : ''}`}
+                          style={
+                            {
+                              '--title-character-rotate': `${pose.rotateDeg}deg`,
+                              '--title-character-offset-y': `${pose.translateYPx}px`
+                            } as React.CSSProperties
+                          }
+                        >
+                          {character}
+                        </span>
+                      );
+                    })}
+                  </span>
+                ))}
               </h1>
             </MotionDiv>
 
@@ -1546,14 +1599,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               }}
             >
               {/* dev 维护模式：上传/拖拽区域替换 New Project；两者同尺寸同圆角 */}
-              <div className="mt-8 w-full max-w-md px-4">
+              <div className="mt-0 w-full max-w-md px-4">
                 {exampleDevMaintenanceMode ? (
                   <div
-                    className={`map-chrome-content-${chromeAppearance} flex h-16 w-full cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-gray-100/80 shadow-lg transition-colors`}
-                    style={{
-                      ...mapChromeSurface,
-                      ...(devImportDragOver ? { borderColor: themeColor } : {})
-                    }}
+                    className={`${themeChromeInteractiveClass} flex h-16 w-full cursor-pointer items-center justify-center rounded-xl border`}
+                    data-chrome-selected={devImportDragOver || undefined}
                     onClick={() => devImportInputRef.current?.click()}
                     onDragEnter={(e) => {
                       e.preventDefault();
@@ -1578,7 +1628,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     }}
                     title="拖拽 JSON 到此处导入为项目"
                   >
-                    <Upload size={22} strokeWidth={2} className="text-gray-800" aria-hidden />
+                    <Upload size={22} strokeWidth={2} aria-hidden />
                     <input
                       ref={devImportInputRef}
                       type="file"
@@ -1595,15 +1645,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsCreating(true)}
-                    className={`map-chrome-content-${chromeAppearance} flex h-16 w-full items-center justify-center rounded-xl border border-gray-100/80 shadow-lg transition-colors`}
-                    style={{
-                      ...mapChromeSurface,
-                      ...(newProjectHover ? { backgroundColor: mapChromeHoverBg } : {})
-                    }}
-                    onMouseEnter={() => setNewProjectHover(true)}
-                    onMouseLeave={() => setNewProjectHover(false)}
+                    className={`${themeChromeInteractiveClass} flex h-16 w-full items-center justify-center rounded-xl border`}
                   >
-                    <Plus size={22} strokeWidth={2} className="text-gray-800" aria-hidden />
+                    <Plus size={22} strokeWidth={2} aria-hidden />
                   </button>
                 )}
               </div>
@@ -1614,13 +1658,31 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
       <MotionDiv
         initial={false}
-        transition={{
-          duration: PROJECT_OPEN_SLIDE_DURATION_S,
-          ease: PROJECT_OPEN_SLIDE_EASE
-        }}
+        transition={
+          sidebarExpandingToHome
+            ? {
+                y: {
+                  duration: PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S,
+                  delay: PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S,
+                  ease: PROJECT_RETURN_HOME_LIST_MOVE_EASE
+                },
+                opacity: {
+                  duration: PROJECT_OPEN_SLIDE_DURATION_S,
+                  ease: PROJECT_OPEN_SLIDE_EASE
+                }
+              }
+            : {
+                duration: PROJECT_OPEN_SLIDE_DURATION_S,
+                ease: PROJECT_OPEN_SLIDE_EASE
+              }
+        }
         animate={
           easterEggMode
             ? { y: '200vh', opacity: 0 }
+            : sidebarExpandingToHome
+              // 布局从侧栏 pt-28 切到主页 pt-24 + mt-8 会先产生 16px 位移；
+              // 用起始反向偏移抵消它，再与 Hero 高度同步归零。
+              ? { y: [-16, 0], opacity: 1 }
             : // 不再对列表做 y 补偿：Hero 占位已有 maxHeight 收缩，且 compact 时 pt 与占位联动；
               // 叠加 y 会与布局变化同向/反向交错，出现「先下再上」的错觉。
               { y: 0, opacity: 1 }
@@ -1674,9 +1736,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               !clearSelectionInTransition &&
               currentProjectId != null &&
               p.id === currentProjectId;
-            const nonCurrentGlass =
-              !isCurrentOpen && hoveredProjectRowId === p.id && openMenuId !== p.id;
-            const onGlassPanel = isCurrentOpen || nonCurrentGlass;
+            const isInteractionSelected = isCurrentOpen || openMenuId === p.id;
             const hideOtherWhenTransition =
               transitionListOnly && currentProjectId != null && p.id !== currentProjectId;
             const rowOpacity = hideOtherWhenTransition ? 0 : 1;
@@ -1684,11 +1744,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             <MotionDiv
               key={p.id}
               data-pm-project-row={p.id}
-              className={`group relative flex items-center justify-between rounded-2xl border border-solid p-4 transition-[color,box-shadow] duration-150 ease-out motion-reduce:transition-none ${
-                onGlassPanel
-                  ? `map-chrome-content-${chromeAppearance} border-white/50 text-black shadow-lg`
-                  : 'project-list-row--theme chrome-surface-idle border-transparent shadow-none'
-              }`}
+              data-chrome-selected={isInteractionSelected || undefined}
+              className={`${themeChromeInteractiveClass} group relative flex items-center justify-between rounded-2xl border border-solid p-4`}
               animate={{ opacity: rowOpacity }}
               transition={{
                 opacity: {
@@ -1697,26 +1754,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 }
               }}
               style={{
-                pointerEvents: hideOtherWhenTransition ? 'none' : undefined,
-                ...(isCurrentOpen
-                  ? {
-                      ...mapChromeSurface,
-                      backgroundColor: mapChromeHoverBg,
-                      boxShadow: `0 0 0 2px ${themeColor}`
-                    }
-                  : nonCurrentGlass
-                    ? { ...mapChromeSurface }
-                    : {
-                        backgroundColor: 'transparent',
-                        backdropFilter: 'none',
-                        WebkitBackdropFilter: 'none'
-                      })
-              }}
-              onMouseEnter={() => setHoveredProjectRowId(p.id)}
-              onMouseLeave={(e) => {
-                const related = e.relatedTarget as Node | null;
-                if (related && (e.currentTarget as HTMLElement).contains(related)) return;
-                setHoveredProjectRowId((id) => (id === p.id ? null : id));
+                pointerEvents: hideOtherWhenTransition ? 'none' : undefined
               }}
             >
               <div 
@@ -1746,8 +1784,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         }
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="flex-1 px-2 py-1 bg-white border-2 rounded-lg outline-none text-lg font-bold text-gray-900"
-                      style={{ borderColor: themeColor }}
+                      className={`chrome-input-well chrome-input-well--${chromeAppearance} flex-1 rounded-lg px-2 py-1 text-lg font-bold outline-none`}
                     />
                     <button
                       onClick={(e) => {
@@ -1771,16 +1808,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 ) : (
                   <>
                     <div className="flex items-center gap-2">
-                      <div className={`text-lg font-bold leading-tight ${onGlassPanel ? 'text-gray-900' : ''}`}>
+                      <div className="project-list-title text-lg font-bold leading-tight">
                         {p.name}
                       </div>
                       {isProjectKind(p.projectKind) ? (
                         <span
-                          className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold ${
-                            onGlassPanel
-                              ? 'chrome-raised border-gray-200/80 text-gray-700'
-                              : 'project-list-kind-badge border-transparent'
-                          }`}
+                          className="project-list-kind-badge shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold"
                           title={p.projectKind === 'graph' ? 'Graph 项目' : 'Mapping 项目'}
                         >
                           {projectKindLabel(p.projectKind)}
@@ -1788,22 +1821,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       ) : null}
                       {builtinExampleIds.has(p.id) ? (
                         <span
-                          className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold ${
-                            onGlassPanel
-                              ? 'chrome-raised border-gray-200/80 text-gray-800'
-                              : 'project-list-kind-badge border-transparent'
-                          }`}
+                          className="project-list-kind-badge shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold"
                           title="示例项目"
                         >
                           示例
                         </span>
                       ) : null}
                     </div>
-                    <div
-                      className={`text-xs flex items-center gap-1 mt-1 ${
-                        onGlassPanel ? 'text-black/40' : 'opacity-40'
-                      }`}
-                    >
+                    <div className="project-list-meta mt-1 flex items-center gap-1 text-xs">
                       {p.projectKind === 'graph' ? (
                         <GitBranch size={12} />
                       ) : (
@@ -1823,11 +1848,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     e.stopPropagation();
                     setOpenMenuId(openMenuId === p.id ? null : p.id);
                   }}
-                  className={`p-2 rounded-full transition-colors ${
-                    onGlassPanel
-                      ? 'project-list-more-button--glass'
-                      : 'opacity-80 hover:opacity-100 hover:bg-white/10'
-                  }`}
+                  className="project-list-more-button rounded-full p-2"
+                  aria-expanded={openMenuId === p.id}
                 >
                   <MoreHorizontal size={20} />
                 </button>
@@ -1889,141 +1911,140 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         </div>
       ) : null}
       <ChromeDropOverlay
-        open={isDragging}
+        open={isDragging && !isCreating}
         themeColor={themeColor}
         chromeOpacity={mapUiChromeOpacity}
         chromeBlurPx={mapUiChromeBlurPx}
         title="拖入项目 JSON 文件以合并"
         description="重复数据会自动跳过"
+        onDismiss={() => setIsDragging(false)}
       />
       {mainHomeChrome}
 
-      {isCreating && (
-        <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4">
-          <ChromeDialogSurface
-            appearance={chromeAppearance}
-            className="max-w-md p-6 animate-in zoom-in-95"
-            style={mapChromeSurface}
-          >
-            <h2 className="text-2xl font-black text-gray-800 mb-6">New Project</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-600 mb-1">Project Name</label>
-                <input 
-                  autoFocus
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleCreate();
-                    }
-                  }}
-                  className="w-full p-3 bg-gray-50 rounded-xl outline-none focus:ring-2 transition-all font-medium"
-                  style={{ '--tw-ring-color': themeColor } as React.CSSProperties}
-                  onFocus={(e) => e.currentTarget.style.boxShadow = `0 0 0 2px ${themeColor}`}
-                  onBlur={(e) => e.currentTarget.style.boxShadow = ''}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-600 mb-2">项目类型</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewProjectKind('mapping')}
-                    className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-3 text-left transition-all ${
-                      newProjectKind === 'mapping'
-                        ? 'border-transparent text-theme-chrome-fg shadow-md'
-                        : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
-                    }`}
-                    style={newProjectKind === 'mapping' ? { backgroundColor: themeColor } : undefined}
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-bold">
-                      <MapIcon size={16} /> Mapping
-                    </span>
-                    <span className={`text-[11px] ${newProjectKind === 'mapping' ? 'opacity-80' : 'text-gray-500'}`}>
-                      地图 · 看板 · 表格
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewProjectKind('graph')}
-                    className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-3 text-left transition-all ${
-                      newProjectKind === 'graph'
-                        ? 'border-transparent text-theme-chrome-fg shadow-md'
-                        : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
-                    }`}
-                    style={newProjectKind === 'graph' ? { backgroundColor: themeColor } : undefined}
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-bold">
-                      <GitBranch size={16} /> Graph
-                    </span>
-                    <span className={`text-[11px] ${newProjectKind === 'graph' ? 'opacity-80' : 'text-gray-500'}`}>
-                      图谱 · 看板 · 表格
-                    </span>
-                  </button>
-                </div>
-              </div>
+      <ChromeWindow
+        open={isCreating}
+        onClose={closeCreateDialog}
+        backdropLabel="关闭新建项目"
+        placement="center"
+        compactBehavior="none"
+        presenceKind="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="新建项目"
+        className="flex w-[calc(100vw-1.5rem)] max-h-[min(85dvh,85vh)] min-w-0 max-w-md flex-col sm:w-[min(32rem,calc(100vw-2rem))] sm:max-w-lg"
+        style={mapChromeSurface}
+        onDragEnter={handleCreateDialogDragEnter}
+        onDragOver={handleCreateDialogDragOver}
+        onDragLeave={handleCreateDialogDragLeave}
+        onDrop={handleCreateDialogDrop}
+      >
+        <ChromeWindowHeader
+          title="新建项目"
+          onClose={closeCreateDialog}
+        />
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pt-2 pb-3 theme-surface-scrollbar">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-xs font-medium text-gray-600">项目名称</span>
+              <ChromeSearchField
+                ref={newProjectNameInputRef}
+                autoFocus
+                showLeadingIcon={false}
+                themeColor={themeColor}
+                containerClassName={`min-w-0 flex-1 ${newProjectNameShake ? 'chrome-field-shake' : ''}`.trim()}
+                type="text"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleCreate();
+                  }
+                }}
+                placeholder="输入名称"
+              />
+            </div>
 
-              <div>
-                <div className="relative flex items-center gap-3 mb-2">
-                  <div className="h-px flex-1 bg-gray-200/80" />
-                  <span className="text-[11px] font-medium text-gray-400 shrink-0">或从本地导入</span>
-                  <div className="h-px flex-1 bg-gray-200/80" />
-                </div>
-                <input
-                  ref={newProjectFileInputRef}
-                  type="file"
-                  accept=".json,application/json"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    setIsCreating(false);
-                    setNewProjectName('');
-                    setNewProjectKind('mapping');
-                    void handleImportProject(file, { merge: false });
-                  }}
+            <div className="flex items-start gap-2">
+              <span className="mt-1.5 shrink-0 text-xs font-medium text-gray-600">项目类型</span>
+              <div className="min-w-0 flex-1">
+                <ChromeSegmentedControl
+                  aria-label="项目类型"
+                  value={newProjectKind}
+                  onChange={setNewProjectKind}
+                  options={[
+                    {
+                      id: 'mapping',
+                      label: (
+                        <span className="flex items-center gap-1.5">
+                          <MapIcon size={14} /> Mapping
+                        </span>
+                      )
+                    },
+                    {
+                      id: 'graph',
+                      label: (
+                        <span className="flex items-center gap-1.5">
+                          <GitBranch size={14} /> Graph
+                        </span>
+                      )
+                    }
+                  ]}
                 />
-                <button
-                  type="button"
-                  onClick={() => newProjectFileInputRef.current?.click()}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-gray-300 bg-gray-50/80 text-sm font-bold text-gray-700 hover:bg-gray-100 hover:border-gray-400 transition-colors"
-                >
-                  <Upload size={18} strokeWidth={2} aria-hidden />
-                  上传项目 JSON
-                </button>
-                <p className="mt-1.5 text-[11px] text-gray-400 leading-snug">
-                  选择导出的项目文件，将作为新项目导入（名称与类型以文件为准）
+                <p className="mt-1 text-center text-[11px] leading-snug text-gray-400">
+                  {newProjectKind === 'graph' ? '图谱 · 看板 · 表格' : '地图 · 看板 · 表格'}
                 </p>
               </div>
             </div>
 
-
-            <div className="flex gap-3 mt-8">
-              <button 
-                onClick={() => {
-                  setIsCreating(false);
-                  setNewProjectKind('mapping');
-                }} 
-                className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl"
+            <div>
+              <input
+                ref={newProjectFileInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  closeCreateDialog();
+                  void handleImportProject(file, { merge: false });
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => newProjectFileInputRef.current?.click()}
+                className={`chrome-field flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-medium transition-colors ${
+                  isCreateFileDragging
+                    ? 'border-transparent text-theme-chrome-fg'
+                    : 'border-gray-300 text-gray-700'
+                }`}
+                style={isCreateFileDragging ? { backgroundColor: themeColor } : undefined}
               >
-                Cancel
-              </button>
-              <button 
-                onClick={handleCreate}
-                disabled={!newProjectName.trim()}
-                className="flex-1 py-3 text-theme-chrome-fg font-bold rounded-xl shadow-lg disabled:opacity-50 disabled:shadow-none"
-                style={{ backgroundColor: themeColor }}
-                onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = themeColorDark)}
-                onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = themeColor)}
-              >
-                Create
+                <Upload size={14} strokeWidth={2} aria-hidden />
+                上传项目 JSON
               </button>
             </div>
-          </ChromeDialogSurface>
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={closeCreateDialog}
+              className="chrome-field flex-1 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              className="flex-1 rounded-lg px-3 py-2 text-xs font-medium text-theme-chrome-fg transition-opacity hover:opacity-90"
+              style={{ backgroundColor: themeColor }}
+            >
+              创建
+            </button>
+          </div>
         </div>
-      )}
+      </ChromeWindow>
 
       {/* Import Dialog */}
       {showImportDialog && (
@@ -2060,10 +2081,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </button>
               <button 
                 onClick={() => importFileInputRef.current?.click()}
-                className="flex-1 py-3 text-theme-chrome-fg font-bold rounded-xl shadow-lg"
+                className="flex-1 py-3 text-theme-chrome-fg font-bold rounded-xl shadow-lg transition-opacity hover:opacity-90"
                 style={{ backgroundColor: themeColor }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColorDark}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColor}
               >
                 Select File
               </button>

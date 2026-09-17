@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Search, Copy, Loader2 } from 'lucide-react';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { ChromeSegmentedControl } from '../../ui/ChromeSegmentedControl';
@@ -119,6 +119,18 @@ export function MapSearchPanelBody({
     handleSelectBorder,
     handleCopyBorder
   } = borderSearch;
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchShake, setSearchShake] = useState(false);
+
+  const requestBorderSearch = () => {
+    if (!borderSearchQuery.trim()) {
+      setSearchShake(true);
+      window.setTimeout(() => setSearchShake(false), 360);
+      searchInputRef.current?.focus();
+      return;
+    }
+    handleBorderSearch();
+  };
 
   return (
     <>
@@ -156,12 +168,13 @@ export function MapSearchPanelBody({
 
         <div className="flex gap-2 mb-3">
           <ChromeSearchField
+              ref={searchInputRef}
               autoFocus
               themeColor={themeColor}
-              containerClassName="flex-1"
+              containerClassName={`flex-1 ${searchShake ? 'chrome-field-shake' : ''}`.trim()}
               value={borderSearchQuery}
               onChange={(e) => setBorderSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleBorderSearch()}
+              onKeyDown={(e) => e.key === 'Enter' && requestBorderSearch()}
               placeholder={borderSearchMode === 'region' ? '输入地区名称' : '输入地点名称'}
               trailing={
                 isSearchingBorder ? (
@@ -172,8 +185,8 @@ export function MapSearchPanelBody({
               }
             />
           <button
-            onClick={handleBorderSearch}
-            disabled={isSearchingBorder || !borderSearchQuery.trim()}
+            onClick={requestBorderSearch}
+            disabled={isSearchingBorder}
             className="h-9 shrink-0 rounded-[10px] px-3 text-sm font-bold text-theme-chrome-fg shadow-sm transition-[opacity,transform] active:scale-[0.98] disabled:opacity-50 sm:h-10"
             style={{ backgroundColor: themeColor }}
           >

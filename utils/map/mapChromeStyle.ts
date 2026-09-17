@@ -15,8 +15,17 @@ export function mapChromeMenuBackdropStyle(blurPx: number): CSSProperties {
   return style;
 }
 
-export const DEFAULT_MAP_UI_CHROME_OPACITY = 0.9;
-export const DEFAULT_MAP_UI_CHROME_BLUR_PX = 8;
+export const DEFAULT_MAP_UI_CHROME_OPACITY = 0.6;
+export const DEFAULT_MAP_UI_CHROME_OPACITY_BOTTOM = 0.4;
+export const DEFAULT_MAP_UI_CHROME_BLUR_PX = 4;
+
+function chromeGradientBackground(dark: boolean, opacity: number): string {
+  const o = Math.min(1, Math.max(0, opacity));
+  const rgb = dark ? '24 24 27' : '255 255 255';
+  const top = `var(--map-ui-chrome-opacity-top, var(--map-ui-chrome-opacity, ${o}))`;
+  const bottom = `var(--map-ui-chrome-opacity-bottom, var(--map-ui-chrome-opacity, ${o}))`;
+  return `linear-gradient(180deg, rgb(${rgb} / ${top}) 0%, rgb(${rgb} / ${bottom}) 100%)`;
+}
 
 /**
  * 对话框的背景遮罩也跟随「面板背景透明度 / 模糊半径」。
@@ -44,13 +53,20 @@ export function mapChromeModalBackdropStyle(opacity: number, blurPx: number): CS
  * 其 sibling 遮罩复用同一组参数，而无需额外穿透两层 props。
  */
 export function mapChromeModalBackdropFromSurfaceStyle(surface?: CSSProperties): CSSProperties {
+  const declaredOpacity = (surface as Record<string, unknown> | undefined)?.[
+    '--map-chrome-surface-opacity'
+  ];
   const background = typeof surface?.backgroundColor === 'string' ? surface.backgroundColor : '';
   const alpha = /rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\s*\)/i.exec(background)?.[1];
   const backdrop = typeof surface?.backdropFilter === 'string' ? surface.backdropFilter : '';
   const blur = /blur\(\s*([\d.]+)px\s*\)/i.exec(backdrop)?.[1];
 
   return mapChromeModalBackdropStyle(
-    alpha === undefined ? DEFAULT_MAP_UI_CHROME_OPACITY : Number(alpha),
+    typeof declaredOpacity === 'number'
+      ? declaredOpacity
+      : alpha === undefined
+        ? DEFAULT_MAP_UI_CHROME_OPACITY
+        : Number(alpha),
     blur === undefined ? DEFAULT_MAP_UI_CHROME_BLUR_PX : Number(blur)
   );
 }
@@ -110,13 +126,16 @@ export function mapChromeControlStyle(
   const o = Math.min(1, Math.max(0, opacity));
   const b = Math.min(48, Math.max(0, blurPx));
   const dark = chromeIsDark(appearance);
-  const style: CSSProperties = {
-    backgroundColor: dark ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`,
+  const style = {
+    // 不能再铺一层带 alpha 的 backgroundColor；它会与渐变复合，导致下端受上端牵连。
+    backgroundColor: 'transparent',
+    backgroundImage: chromeGradientBackground(dark, o),
+    '--map-chrome-surface-opacity': o,
     // 内联 color 覆盖图标按钮的默认 Tailwind 前景色，让 SVG 图标与文字一同继承。
     color: dark ? 'rgba(255, 255, 255, 0.92)' : '#374151',
     // 深色玻璃保留一丝高光即可；默认 gray-100/80 在暗底上会显得像实线白框。
     borderColor: dark ? 'rgba(255, 255, 255, 0.18)' : undefined
-  };
+  } as CSSProperties;
   if (b > 0) {
     const f = `blur(${b}px)`;
     style.backdropFilter = f;
@@ -146,12 +165,14 @@ export function mapChromeContentStyle(
   const o = Math.min(1, Math.max(0, opacity));
   const b = Math.min(48, Math.max(0, blurPx));
   const dark = chromeIsDark(appearance);
-  const style: CSSProperties = {
-    backgroundColor: dark ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`,
+  const style = {
+    backgroundColor: 'transparent',
+    backgroundImage: chromeGradientBackground(dark, o),
+    '--map-chrome-surface-opacity': o,
     color: dark ? 'rgba(255, 255, 255, 0.92)' : '#1f2937',
     // 面板根节点本身也必须覆盖原本的 gray-100 描边，不能只处理内部子元素。
     borderColor: dark ? 'rgba(255, 255, 255, 0.16)' : undefined
-  };
+  } as CSSProperties;
   if (b > 0) {
     const f = `blur(${b}px)`;
     style.backdropFilter = f;
@@ -183,11 +204,13 @@ export function mapChromeSurfaceStyle(
   const o = Math.min(1, Math.max(0, opacity));
   const b = Math.min(48, Math.max(0, blurPx));
   const dark = chromeIsDark(appearance);
-  const style: CSSProperties = {
-    backgroundColor: dark ? `rgba(24, 24, 27, ${o})` : `rgba(255, 255, 255, ${o})`,
+  const style = {
+    backgroundColor: 'transparent',
+    backgroundImage: chromeGradientBackground(dark, o),
+    '--map-chrome-surface-opacity': o,
     color: dark ? 'rgba(255, 255, 255, 0.92)' : undefined,
     borderColor: dark ? 'rgba(255, 255, 255, 0.16)' : undefined
-  };
+  } as CSSProperties;
   if (b > 0) {
     const f = `blur(${b}px)`;
     style.backdropFilter = f;
@@ -204,7 +227,8 @@ export function mapChromeSurfaceInlineCss(opacity: number, blurPx: number): stri
   const o = Math.min(1, Math.max(0, opacity));
   const b = Math.min(48, Math.max(0, blurPx));
   const parts = [
-    `background-color:rgba(255,255,255,${o})`,
+    'background-color:transparent',
+    `background-image:${chromeGradientBackground(false, o)}`,
     'border:1px solid rgba(243,244,246,0.8)',
     'border-radius:0.5rem',
     'box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1)'
@@ -239,19 +263,17 @@ export function mapChromeTextLabelInlineCss(
 
   return [
     mapChromeSurfaceInlineCss(o, blurPx),
-    `background-color:rgba(${background},${o})`,
+    'background-color:transparent',
+    `background-image:linear-gradient(180deg,rgba(${background},var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(${background},var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
     `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${borderOpacity})`
   ].join(';');
 }
 
 /** 图谱圆形底衬：填充与 mapChromeSurfaceStyle 一致，描边随不透明度略提亮 */
-export function mapChromeHaloFillAndBorder(opacity: number, blurPx: number): { fill: string; border: string } {
-  const surface = mapChromeSurfaceStyle(opacity, blurPx);
-  const fill =
-    typeof surface.backgroundColor === 'string'
-      ? surface.backgroundColor
-      : `rgba(255, 255, 255, ${DEFAULT_MAP_UI_CHROME_OPACITY})`;
+export function mapChromeHaloFillAndBorder(opacity: number, _blurPx: number): { fill: string; border: string } {
   const o = Math.min(1, Math.max(0, opacity));
+  // Canvas/Cytoscape 不支持 CSS 背景渐变，继续使用上端透明度作为单色近似。
+  const fill = `rgba(255, 255, 255, ${o})`;
   const border = `rgba(255, 255, 255, ${Math.min(1, o + 0.1)})`;
   return { fill, border };
 }

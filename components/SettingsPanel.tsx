@@ -45,6 +45,8 @@ interface SettingsPanelProps {
   onUiDarkModeChange?: (dark: boolean) => void;
   mapUiChromeOpacity: number;
   onMapUiChromeOpacityChange: (opacity: number) => void;
+  mapUiChromeOpacityBottom: number;
+  onMapUiChromeOpacityBottomChange: (opacity: number) => void;
   mapUiChromeBlurPx: number;
   onMapUiChromeBlurPxChange: (blurPx: number) => void;
   currentMapStyle: string;
@@ -82,6 +84,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onUiDarkModeChange,
   mapUiChromeOpacity,
   onMapUiChromeOpacityChange,
+  mapUiChromeOpacityBottom,
+  onMapUiChromeOpacityBottomChange,
   mapUiChromeBlurPx,
   onMapUiChromeBlurPxChange,
   currentMapStyle,
@@ -281,8 +285,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               onPinSizeChange &&
               clusterThreshold !== undefined &&
               onClusterThresholdChange ? (
-                <div className="grid grid-cols-1 gap-3">
-                  <SettingsCompactSlider
+                <>
+                  <div className="settings-detail-heading">细节设置</div>
+                  <div className="grid grid-cols-1 gap-3">
+                    <SettingsCompactSlider
                     label="Pin Size"
                     hint={
                       <HelpHint>缩放地图上每个便签定位图钉（水滴标）的显示大小，便于在密集区域点选。</HelpHint>
@@ -297,8 +303,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     minCaption="0.5x"
                     maxCaption="2.0x"
                   />
-                  {labelSize !== undefined && onLabelSizeChange ? (
-                    <SettingsCompactSlider
+                    {labelSize !== undefined && onLabelSizeChange ? (
+                      <SettingsCompactSlider
                       label="Label Size"
                       hint={
                         <HelpHint>缩放地图上便签标题等文字标签的整体字号与占用范围；与图钉大小相互独立。</HelpHint>
@@ -313,8 +319,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       minCaption="0.5x"
                       maxCaption="2.0x"
                     />
-                  ) : null}
-                  <SettingsCompactSlider
+                    ) : null}
+                    <SettingsCompactSlider
                     label="Cluster Threshold"
                     hint={
                       <HelpHint>
@@ -330,8 +336,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     formatValue={(v) => `${v}px`}
                     minCaption="1px"
                     maxCaption="100px"
-                  />
-                </div>
+                    />
+                  </div>
+                </>
               ) : (
                 <p className="text-xs leading-relaxed text-gray-500">地图控件参数暂不可用。</p>
               )}
@@ -483,6 +490,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             onUiDarkModeChange={onUiDarkModeChange ?? (() => {})}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={onMapUiChromeOpacityChange}
+            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+            onMapUiChromeOpacityBottomChange={onMapUiChromeOpacityBottomChange}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
             onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange}
           />

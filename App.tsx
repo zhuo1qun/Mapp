@@ -11,6 +11,8 @@ import {
   PROJECT_OPEN_OVERLAY_FADE_S,
   PROJECT_OPEN_SLIDE_DURATION_S,
   PROJECT_OPEN_SLIDE_EASE,
+  PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S,
+  PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S,
   PROJECT_SIDEBAR_DRAWER_WIDTH_PX,
   PROJECT_SIDEBAR_DOCKED_WIDTH_PX,
   PROJECT_LIST_MAX_WIDTH_PX,
@@ -60,7 +62,10 @@ import {
   mapChromeHoverBackground,
   mapChromeControlStyle,
   mapChromeControlHoverBackground,
-  resolveChromeAppearance
+  resolveChromeAppearance,
+  DEFAULT_MAP_UI_CHROME_OPACITY,
+  DEFAULT_MAP_UI_CHROME_OPACITY_BOTTOM,
+  DEFAULT_MAP_UI_CHROME_BLUR_PX
 } from './utils/map/mapChromeStyle';
 import { ChromeAppearanceContext } from './components/ui/chromeAppearanceContext';
 import { applyThemeChromeCssVars } from './utils/theme/themeChrome';
@@ -692,8 +697,11 @@ export default function App() {
   useEffect(() => {
     if (!sidebarExpandingToHome) return;
     const expandMs = Math.round(PROJECT_OPEN_SLIDE_DURATION_S * 1000);
-    // 让「项目 -> 主页」中间态停留节奏与「项目 -> 项目」一致
-    const ms = expandMs * 2 + 80;
+    const verticalMoveMs = Math.round(
+      (PROJECT_RETURN_HOME_LIST_MOVE_DELAY_S + PROJECT_RETURN_HOME_LIST_MOVE_DURATION_S) * 1000
+    );
+    // 选中态淡出与纵向落位走完后再切换主页数据，避免最后一段动画被状态收尾截断。
+    const ms = Math.max(expandMs * 2 + 80, verticalMoveMs + 80);
     const id = window.setTimeout(() => {
       const pid = expandToHomeProjectIdRef.current;
       expandToHomeProjectIdRef.current = null;
@@ -881,8 +889,11 @@ export default function App() {
   // Map Style State
   const [mapStyle, setMapStyle] = useState<string>('carto-light-nolabels');
 
-  const [mapUiChromeOpacity, setMapUiChromeOpacity] = useState(0.9);
-  const [mapUiChromeBlurPx, setMapUiChromeBlurPx] = useState(8);
+  const [mapUiChromeOpacity, setMapUiChromeOpacity] = useState(DEFAULT_MAP_UI_CHROME_OPACITY);
+  const [mapUiChromeOpacityBottom, setMapUiChromeOpacityBottom] = useState(
+    DEFAULT_MAP_UI_CHROME_OPACITY_BOTTOM
+  );
+  const [mapUiChromeBlurPx, setMapUiChromeBlurPx] = useState(DEFAULT_MAP_UI_CHROME_BLUR_PX);
   const [uiDarkMode, setUiDarkMode] = useState(false);
 
   const forceSatelliteDark = projectKind === 'mapping' && viewMode === 'map';
@@ -928,9 +939,11 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--map-ui-chrome-opacity', String(mapUiChromeOpacity));
+    root.style.setProperty('--map-ui-chrome-opacity-top', String(mapUiChromeOpacity));
+    root.style.setProperty('--map-ui-chrome-opacity-bottom', String(mapUiChromeOpacityBottom));
     const b = Math.min(48, Math.max(0, Math.round(mapUiChromeBlurPx)));
     root.style.setProperty('--map-ui-chrome-blur-px', b === 0 ? '0px' : `${b}px`);
-  }, [mapUiChromeOpacity, mapUiChromeBlurPx]);
+  }, [mapUiChromeOpacity, mapUiChromeOpacityBottom, mapUiChromeBlurPx]);
 
   // Load Theme Color from IndexedDB
   useEffect(() => {
@@ -985,6 +998,13 @@ export default function App() {
         const savedOpacity = await get<number>('mapp-map-ui-chrome-opacity');
         if (typeof savedOpacity === 'number' && !Number.isNaN(savedOpacity)) {
           setMapUiChromeOpacity(Math.min(1, Math.max(0.15, savedOpacity)));
+        }
+        const savedOpacityBottom = await get<number>('mapp-map-ui-chrome-opacity-bottom');
+        if (typeof savedOpacityBottom === 'number' && !Number.isNaN(savedOpacityBottom)) {
+          setMapUiChromeOpacityBottom(Math.min(1, Math.max(0.15, savedOpacityBottom)));
+        } else if (typeof savedOpacity === 'number' && !Number.isNaN(savedOpacity)) {
+          // 旧版本只有一个透明度；首次升级保持上下相同，避免材质突然变化。
+          setMapUiChromeOpacityBottom(Math.min(1, Math.max(0.15, savedOpacity)));
         }
         const savedBlur = await get<number>('mapp-map-ui-chrome-blur-px');
         if (typeof savedBlur === 'number' && !Number.isNaN(savedBlur)) {
@@ -1540,6 +1560,12 @@ export default function App() {
     await set('mapp-map-ui-chrome-opacity', o);
   };
 
+  const handleMapUiChromeOpacityBottomChange = async (opacity: number) => {
+    const o = Math.min(1, Math.max(0.15, opacity));
+    setMapUiChromeOpacityBottom(o);
+    await set('mapp-map-ui-chrome-opacity-bottom', o);
+  };
+
   const handleMapUiChromeBlurPxChange = async (blurPx: number) => {
     const b = Math.min(48, Math.max(0, Math.round(blurPx)));
     setMapUiChromeBlurPx(b);
@@ -1694,6 +1720,8 @@ export default function App() {
                   onThemeColorChange={handleThemeColorChange}
                   mapUiChromeOpacity={mapUiChromeOpacity}
                   onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
+                  mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+                  onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
                   mapUiChromeBlurPx={mapUiChromeBlurPx}
                   onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
                   uiDarkMode={uiDarkMode}
@@ -1812,6 +1840,8 @@ export default function App() {
                   onThemeColorChange={handleThemeColorChange}
                   mapUiChromeOpacity={mapUiChromeOpacity}
                   onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
+                  mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+                  onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
  mapUiChromeBlurPx={mapUiChromeBlurPx}
                   onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
                   uiDarkMode={uiDarkMode}
@@ -1851,6 +1881,7 @@ export default function App() {
           chromeBlurPx={mapUiChromeBlurPx}
           title="拖入 JSON 或 CSV 以导入"
           description={viewMode === 'graph' ? '数据会导入当前图谱项目' : '数据会导入当前表格项目'}
+          onDismiss={tableGraphDataFileDrop.dismissDrag}
         />
         <Suspense fallback={workspaceModuleLoadingFallback}>
         {activeProject ? (
@@ -2000,8 +2031,10 @@ export default function App() {
             uiDarkMode={uiDarkMode}
             onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
+            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
+            onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
             onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
             panelChromeStyle={panelChromeStyle}
             onUpdateConnections={async (connections) => {
@@ -2098,6 +2131,8 @@ export default function App() {
             onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
+            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+            onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
             onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
             mapStyleId={mapStyle}
@@ -2144,6 +2179,8 @@ export default function App() {
             onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
+            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+            onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
             onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
             mapStyleId={mapStyle}
@@ -2203,6 +2240,8 @@ export default function App() {
             onUiDarkModeChange={handleUiDarkModeChange}
             mapUiChromeOpacity={mapUiChromeOpacity}
             onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
+            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+            onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
             mapUiChromeBlurPx={mapUiChromeBlurPx}
             onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
             mapStyleId={mapStyle}

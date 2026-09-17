@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { isFileDragLeavingViewport, isFileDragTypes } from '../../utils/ui/fileDrag';
 
 interface UseFileDropProps {
   isEditorOpen: boolean;
@@ -21,7 +22,7 @@ export function useFileDrop({
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
+    if (isFileDragTypes(e.dataTransfer.types)) {
       setIsDragging(true);
     }
   }, []);
@@ -29,25 +30,26 @@ export function useFileDrop({
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
+    if (isFileDragTypes(e.dataTransfer.types)) {
       e.dataTransfer.dropEffect = 'copy';
     }
   }, []);
 
-  const handleDragLeave = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!isEditorOpen) {
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const { clientX: x, clientY: y } = e;
-        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-          setIsDragging(false);
-        }
-      }
-    },
-    [isEditorOpen]
-  );
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const { clientX: x, clientY: y } = e;
+    if (
+      isFileDragLeavingViewport(x, y) ||
+      x < rect.left ||
+      x > rect.right ||
+      y < rect.top ||
+      y > rect.bottom
+    ) {
+      setIsDragging(false);
+    }
+  }, []);
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
@@ -115,5 +117,5 @@ export function useFileDrop({
     style: undefined
   };
 
-  return { isDragging, rootProps };
+  return { isDragging, dismissDrag: handleDragEnd, rootProps };
 }

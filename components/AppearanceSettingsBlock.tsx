@@ -16,6 +16,8 @@ export interface AppearanceSettingsBlockProps {
   onUiDarkModeChange: (dark: boolean) => void;
   mapUiChromeOpacity: number;
   onMapUiChromeOpacityChange: (opacity: number) => void;
+  mapUiChromeOpacityBottom: number;
+  onMapUiChromeOpacityBottomChange: (opacity: number) => void;
   mapUiChromeBlurPx: number;
   onMapUiChromeBlurPxChange: (blurPx: number) => void;
   easterEggGravityY?: number;
@@ -32,6 +34,8 @@ export const AppearanceSettingsBlock: React.FC<AppearanceSettingsBlockProps> = (
   onUiDarkModeChange,
   mapUiChromeOpacity,
   onMapUiChromeOpacityChange,
+  mapUiChromeOpacityBottom,
+  onMapUiChromeOpacityBottomChange,
   mapUiChromeBlurPx,
   onMapUiChromeBlurPxChange,
   easterEggGravityY,
@@ -50,13 +54,14 @@ export const AppearanceSettingsBlock: React.FC<AppearanceSettingsBlockProps> = (
         themeColor={themeColor}
       />
 
+      <div className="settings-detail-heading">细节设置</div>
       <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2">
         <div className="min-w-0">
           <SettingsCompactSlider
-            label="面板背景透明度"
+            label="面板背景透明度（上端）"
             hint={
               <HelpHint>
-                控制工具栏、设置、搜索等浮层的不透明度；越低越能透出背后画布，但文字可读性会下降。
+                控制工具栏、设置、搜索等玻璃浮层顶部的不透明度。
               </HelpHint>
             }
             labelExtra={
@@ -95,6 +100,49 @@ export const AppearanceSettingsBlock: React.FC<AppearanceSettingsBlockProps> = (
         </div>
 
         <div className="min-w-0">
+          <SettingsCompactSlider
+            label="面板背景透明度（下端）"
+            hint={
+              <HelpHint>
+                控制玻璃浮层底部的不透明度；与上端数值不同会形成从上到下的透明度渐变。
+              </HelpHint>
+            }
+            labelExtra={
+              mapUiChromeOpacityBottom < PANEL_OPACITY_READABILITY_WARN_BELOW ? (
+                <PortalTooltip
+                  tone="warning"
+                  content={
+                    <p>
+                      当前透明度低于 40%，浮层上的文字与按钮可能
+                      <strong className="font-semibold">难以辨认</strong>
+                      。若看不清界面，请向右调高滑块。
+                    </p>
+                  }
+                >
+                  <button
+                    type="button"
+                    tabIndex={0}
+                    className="inline-flex h-5 w-5 cursor-default items-center justify-center rounded-full text-amber-600 outline-none hover:text-amber-800 focus-visible:text-amber-900 focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:ring-offset-1"
+                    aria-label="可读性提示：下端透明度偏低"
+                  >
+                    <AlertTriangle size={14} strokeWidth={2} />
+                  </button>
+                </PortalTooltip>
+              ) : null
+            }
+            themeColor={themeColor}
+            value={mapUiChromeOpacityBottom}
+            min={0.15}
+            max={1}
+            step={0.05}
+            onChange={onMapUiChromeOpacityBottomChange}
+            formatValue={(v) => `${Math.round(v * 100)}%`}
+            minCaption="更透"
+            maxCaption="更不透明"
+          />
+        </div>
+
+        <div className="min-w-0 sm:col-span-2">
           <SettingsCompactSlider
             label="背景模糊半径"
             hint={

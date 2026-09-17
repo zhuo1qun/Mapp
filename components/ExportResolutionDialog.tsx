@@ -35,8 +35,8 @@ export const ExportResolutionDialog: React.FC<ExportResolutionDialogProps> = ({
   view,
   currentDimensions,
   themeColor,
-  mapUiChromeOpacity = 0.9,
-  mapUiChromeBlurPx = 8
+  mapUiChromeOpacity = 0.6,
+  mapUiChromeBlurPx = 4
 }) => {
   const chromeAppearance = useChromeAppearance();
   const exportChromeStyle = mapChromeSurfaceStyle(
@@ -155,6 +155,7 @@ export const ExportResolutionDialog: React.FC<ExportResolutionDialogProps> = ({
             </div>
           </div>
 
+          <div className="settings-detail-heading">细节设置</div>
           <SettingsCompactSlider
             label="分辨率倍数"
             value={selectedRatio}

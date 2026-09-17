@@ -56,8 +56,10 @@ export const ChromeIconButton = React.forwardRef<HTMLButtonElement, ChromeIconBu
     const resetInactiveBackground = (el: HTMLButtonElement) => {
       if (ch?.backgroundColor) {
         el.style.backgroundColor = String(ch.backgroundColor);
+        el.style.backgroundImage = typeof ch.backgroundImage === 'string' ? ch.backgroundImage : '';
       } else {
         el.style.backgroundColor = '';
+        el.style.backgroundImage = '';
       }
     };
 
@@ -103,6 +105,7 @@ export const ChromeIconButton = React.forwardRef<HTMLButtonElement, ChromeIconBu
           e.stopPropagation();
           onPointerDown?.(e);
           if (pressThemeFlash && !active && themeColor) {
+            (e.currentTarget as HTMLButtonElement).style.backgroundImage = 'none';
             (e.currentTarget as HTMLButtonElement).style.backgroundColor = themeColor;
           }
         }}
@@ -117,6 +120,7 @@ export const ChromeIconButton = React.forwardRef<HTMLButtonElement, ChromeIconBu
           onMouseEnter?.(e);
           if (active) return;
           if (ch && chHover) {
+            e.currentTarget.style.backgroundImage = 'none';
             e.currentTarget.style.backgroundColor = chHover;
             return;
           }
@@ -128,7 +132,7 @@ export const ChromeIconButton = React.forwardRef<HTMLButtonElement, ChromeIconBu
           onMouseLeave?.(e);
           if (active) return;
           if (ch?.backgroundColor) {
-            e.currentTarget.style.backgroundColor = String(ch.backgroundColor);
+            resetInactiveBackground(e.currentTarget);
             return;
           }
           if (!ch && nonChromeIdleHover === 'imperative-gray100') {

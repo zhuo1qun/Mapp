@@ -42,8 +42,8 @@ export function buildStandaloneGraphHtml(payload: GraphExportPayload): string {
   <style>
     :root {
       --theme-color: ${payload.themeColor};
-      --map-ui-chrome-opacity: ${payload.chrome?.opacity ?? 0.9};
-      --map-ui-chrome-blur-px: ${(payload.chrome?.blurPx ?? 8) === 0 ? '0px' : `${payload.chrome?.blurPx ?? 8}px`};
+      --map-ui-chrome-opacity: ${payload.chrome?.opacity ?? 0.6};
+      --map-ui-chrome-blur-px: ${(payload.chrome?.blurPx ?? 4) === 0 ? '0px' : `${payload.chrome?.blurPx ?? 4}px`};
     }
     #cy { width: 100%; height: 100%; height: 100dvh; background: #f9fafb;
       background-image: radial-gradient(#e5e7eb 1px, transparent 1px); background-size: 20px 20px; }
@@ -53,9 +53,9 @@ export function buildStandaloneGraphHtml(payload: GraphExportPayload): string {
     #graph-related-panel:empty { display: none; }
     /* 与 App index.css .map-chrome-surface-fallback 一致：面板透明/模糊走 CSS 变量 */
     .map-chrome-surface {
-      background-color: rgb(255 255 255 / var(--map-ui-chrome-opacity, 0.9));
-      backdrop-filter: blur(var(--map-ui-chrome-blur-px, 8px));
-      -webkit-backdrop-filter: blur(var(--map-ui-chrome-blur-px, 8px));
+      background-color: rgb(255 255 255 / var(--map-ui-chrome-opacity, 0.6));
+      backdrop-filter: blur(var(--map-ui-chrome-blur-px, 4px));
+      -webkit-backdrop-filter: blur(var(--map-ui-chrome-blur-px, 4px));
     }
     .mapping-preview-markdown p { margin-bottom: 0.6rem; line-height: 1.4; }
     .mapping-preview-markdown p:last-child { margin-bottom: 0; }
