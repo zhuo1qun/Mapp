@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
 import type { Note } from '../../types';
 import { fileToBase64 } from '../../utils';
@@ -26,58 +26,29 @@ export function useCameraImport({
     );
   }, []);
 
-  const handleImportFromCamera = useCallback(async () => {
+  const [isCameraCaptureOpen, setIsCameraCaptureOpen] = useState(false);
+
+  /** 仅打开取景界面；用户按下快门后才会请求位置、创建记录和打开编辑器。 */
+  const handleImportFromCamera = useCallback(() => {
+    if (
+      location.protocol !== 'https:' &&
+      location.hostname !== 'localhost' &&
+      location.hostname !== '127.0.0.1'
+    ) {
+      alert('拍照需要 HTTPS。请通过 HTTPS 访问此站点，或在本机 localhost 开发环境中使用。');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert('当前浏览器不支持摄像头。请使用支持摄像头的现代浏览器。');
+      return;
+    }
+    setIsCameraCaptureOpen(true);
+  }, []);
+
+  const handleCameraPhoto = useCallback(async (blob: Blob) => {
+    // 快门已确认，立刻关掉取景器和摄像头；后续位置 / 写入过程不再占用镜头。
+    setIsCameraCaptureOpen(false);
     try {
-      if (
-        location.protocol !== 'https:' &&
-        location.hostname !== 'localhost' &&
-        location.hostname !== '127.0.0.1'
-      ) {
-        throw new Error(
-          'Camera access requires HTTPS. Please access this site over HTTPS or use localhost for development.'
-        );
-      }
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error(
-          'Camera API is not supported in this browser. Please use a modern browser with camera support.'
-        );
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      video.play();
-
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => resolve();
-      });
-
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
-      }
-
-      ctx.drawImage(video, 0, 0);
-      stream.getTracks().forEach((track) => track.stop());
-
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(
-          (b) => {
-            if (b) resolve(b);
-            else reject(new Error('Failed to convert canvas to blob'));
-          },
-          'image/jpeg',
-          0.8
-        );
-      });
-
       const userLocation = await getCurrentBrowserLocation();
       if (!userLocation) {
         throw new Error('Unable to get current location');
@@ -112,5 +83,11 @@ export function useCameraImport({
     }
   }, [getCurrentBrowserLocation, mapInstance, onAddNote, onNoteCreated]);
 
-  return { handleImportFromCamera, isCameraAvailable };
+  return {
+    handleImportFromCamera,
+    isCameraAvailable,
+    isCameraCaptureOpen,
+    closeCameraCapture: () => setIsCameraCaptureOpen(false),
+    handleCameraPhoto
+  };
 }

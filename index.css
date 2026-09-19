@@ -376,11 +376,11 @@
  * Subtracting the docked-sidebar inset here made the tabs wrap despite usable
  * space on both sides of the group. */
 @media (max-width: 639px) {
-  /* 覆盖工作区居中定位：固定元素同时有 left/right 时，left 会优先参与
-   * 定位，令右下页签看起来离右侧多出一段空白。 */
-  .ui-workspace-center-x.ui-workspace-bottom-bar {
+  /* 真正 fixed 的是动画外壳而非内部面板；在这里覆盖它的工作区居中定位。 */
+  .ui-workspace-view-switcher.ui-workspace-center-x {
     left: auto;
-    transition: none;
+    right: max(0.5rem, env(safe-area-inset-right, 0px));
+    bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
     /* Tailwind 的 -translate-x-1/2 使用独立的 translate 属性，
      * 仅重置 transform 不会取消这段半宽度左移。 */
     translate: none;
@@ -388,11 +388,6 @@
 
   .ui-workspace-bottom-bar {
     /* 手机上的空间留给地图/画布：切换器改为右下角纵向图标组。 */
-    left: auto;
-    /* 与右上角工具栏一致：最少距右 0.5rem，并在圆角 / 安全区设备上继续避开边缘。 */
-    right: max(0.5rem, env(safe-area-inset-right, 0px));
-    /* 比工具栏默认 bottom-4 更保守，给圆角与 Home Indicator 留出额外呼吸空间。 */
-    bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
     /* 与宽屏 p-1.5 保持一致；此前 4px 外壳在纵向页签组里显得左右过紧。 */
     padding: 0.375rem;
     width: auto;

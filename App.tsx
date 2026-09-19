@@ -2340,7 +2340,7 @@ export default function App() {
       <WorkspaceChromePresence
         visible={!isEditorOpen && !!activeProject && !mappingWorkspaceEditMode && isUIVisible && !!projectKind}
         motion="slide-up"
-        className="fixed bottom-4 ui-workspace-center-x -translate-x-1/2 z-[var(--z-workspace-tabs)]"
+        className="ui-workspace-view-switcher fixed bottom-4 ui-workspace-center-x -translate-x-1/2 z-[var(--z-workspace-tabs)]"
       >
         <div
           ref={mobileViewSwitcherRef}

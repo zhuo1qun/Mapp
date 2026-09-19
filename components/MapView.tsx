@@ -48,6 +48,7 @@ import { MapLayerControl } from './map/controls/MapLayerControl';
 import { NotePreviewCard } from './map/overlays/NotePreviewCard';
 import { MapLocationErrorBanner } from './map/overlays/MapLocationErrorBanner';
 import { MapImportMenuModal } from './map/overlays/MapImportMenuModal';
+import { CameraCaptureDialog } from './map/overlays/CameraCaptureDialog';
 import { MapTopRightEditToggle } from './map/overlays/MapTopRightEditToggle';
 import { MapPreviewTopRightToolbar } from './map/overlays/MapPreviewTopRightToolbar';
 import { type EditInspectorPanelProps, type InspectorGroupContext } from './map/overlays/MapEditInspectorPanel';
@@ -857,7 +858,13 @@ export const MapView: React.FC<MapViewProps> = ({
     checkLocationPermission
   } = useGeolocation(true);
 
-  const { handleImportFromCamera, isCameraAvailable } = useCameraImport({
+  const {
+    handleImportFromCamera,
+    isCameraAvailable,
+    isCameraCaptureOpen,
+    closeCameraCapture,
+    handleCameraPhoto
+  } = useCameraImport({
     getCurrentBrowserLocation,
     mapInstance,
     onAddNote,
@@ -2792,6 +2799,14 @@ export const MapView: React.FC<MapViewProps> = ({
         onImportData={() => dataImportInputRef.current?.click()}
         onImportCamera={handleImportFromCamera}
         cameraAvailable={isCameraAvailable()}
+      />
+
+      <CameraCaptureDialog
+        open={isCameraCaptureOpen}
+        onClose={closeCameraCapture}
+        onCapture={handleCameraPhoto}
+        chromeSurfaceStyle={mapChromeContentSurface}
+        chromeAppearance={mapChromeTone}
       />
     </div>
   );
