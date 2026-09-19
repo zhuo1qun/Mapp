@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Note } from '../../types';
+import { Note, Project } from '../../types';
 import { loadImage } from '../../utils/persistence/storage';
 import {
   convertHeicImageIfNeeded,
@@ -17,10 +17,11 @@ export interface ImportPreview {
 }
 
 interface UseImageImportProps {
-  project: any;
+  project: Project;
   notes: Note[];
-  onAddNote: (note: Note) => void;
-  onUpdateProject: (project: Partial<any>) => void;
+  onUpdateProject: (project: Project) => void | Promise<void>;
+  /** 导入已完整写入项目后通知调用方，用于聚焦新建点。 */
+  onNotesCreated?: (notes: Note[]) => void;
   onImportDialogChange?: (isOpen: boolean) => void;
   mapInstance: any;
 }
@@ -144,13 +145,14 @@ const calculateFingerprintFromBase64 = async (base64Image: string, note?: Note):
 export const useImageImport = ({
   project,
   notes,
-  onAddNote,
   onUpdateProject,
+  onNotesCreated,
   onImportDialogChange,
   mapInstance
 }: UseImageImportProps) => {
   const [importPreview, setImportPreview] = useState<ImportPreview[]>([]);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [isConfirmingImport, setIsConfirmingImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dataImportInputRef = useRef<HTMLInputElement>(null);
 
@@ -279,6 +281,8 @@ export const useImageImport = ({
 
   // Confirm import
   const handleConfirmImport = useCallback(async () => {
+    if (isConfirmingImport) return;
+
     // Filter out errors and duplicates
     const validPreviews = importPreview.filter(p => !p.error && !p.isDuplicate);
     const duplicateCount = importPreview.filter(p => !p.error && p.isDuplicate).length;
@@ -286,83 +290,90 @@ export const useImageImport = ({
     // Calculate board position for imported notes
     const boardNotes = notes.filter(n => n.boardX !== undefined && n.boardY !== undefined);
     const noteWidth = 256;
-    const noteHeight = 256;
     const spacing = 50;
 
     const newNotes: Note[] = [];
-    for (let i = 0; i < validPreviews.length; i++) {
-      const preview = validPreviews[i];
+    setIsConfirmingImport(true);
+    try {
+      for (let i = 0; i < validPreviews.length; i++) {
+        const preview = validPreviews[i];
 
-      try {
-        // Convert image to base64 (with compression, HEIC already converted)
-        const base64 = await fileToBase64(preview.file);
+        try {
+          // Convert image to base64 (with compression, HEIC already converted)
+          const base64 = await fileToBase64(preview.file);
 
-        // Create new note
-        const newNote: Note = {
-          id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          coords: {
-            lat: preview.lat ?? 0,
-            lng: preview.lng ?? 0
-          },
-          text: '',
-          emoji: '📍',
-          fontSize: 3,
-          images: [base64],
-          tags: [],
-          variant: 'image',
-          createdAt: Date.now(),
-          boardX: 0,
-          boardY: 0,
-          isInitialPosition: true
-        };
+          const newNote: Note = {
+            id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            coords: {
+              lat: preview.lat ?? 0,
+              lng: preview.lng ?? 0
+            },
+            text: '',
+            emoji: '📍',
+            fontSize: 3,
+            images: [base64],
+            tags: [],
+            variant: 'image',
+            createdAt: Date.now(),
+            boardX: 0,
+            boardY: 0,
+            isInitialPosition: true
+          };
 
-        // Calculate board position (same logic as handleLongPress)
-        if (boardNotes.length > 0) {
-          const lastNote = boardNotes[boardNotes.length - 1];
-          newNote.boardX = lastNote.boardX! + noteWidth + spacing;
-          newNote.boardY = lastNote.boardY!;
-        } else {
-          newNote.boardX = 100;
-          newNote.boardY = 100;
+          // Calculate board position (same logic as handleLongPress)
+          if (boardNotes.length > 0) {
+            const lastNote = boardNotes[boardNotes.length - 1];
+            newNote.boardX = lastNote.boardX! + noteWidth + spacing;
+            newNote.boardY = lastNote.boardY!;
+          } else {
+            newNote.boardX = 100;
+            newNote.boardY = 100;
+          }
+
+          newNotes.push(newNote);
+        } catch (error) {
+          console.error('Error processing image:', preview.file.name, error);
         }
-
-        newNotes.push(newNote);
-        onAddNote(newNote);
-      } catch (error) {
-        console.error('Error processing image:', preview.file.name, error);
       }
-    }
 
-    // Clear preview
-    importPreview.forEach(p => URL.revokeObjectURL(p.imageUrl));
-    setImportPreview([]);
-    setShowImportDialog(false);
-    onImportDialogChange?.(false);
+      // 一次性写入完整项目。此前只传 { notes } 会使活动项目丢失 id，触发永久的“加载项目”占位。
+      if (newNotes.length > 0) {
+        await onUpdateProject({
+          ...project,
+          notes: [...project.notes, ...newNotes]
+        });
+        onNotesCreated?.(newNotes);
+      }
 
-    // Show message if there were duplicates
-    if (duplicateCount > 0) {
-      alert(`Successfully imported ${validPreviews.length} new image(s). ${duplicateCount} duplicate(s) were skipped.`);
-    }
+      importPreview.forEach((preview) => URL.revokeObjectURL(preview.imageUrl));
+      setImportPreview([]);
+      setShowImportDialog(false);
+      onImportDialogChange?.(false);
 
-    // Update project with new notes
-    if (newNotes.length > 0) {
-      onUpdateProject({
-        notes: [...(project.notes || []), ...newNotes]
-      });
+      if (duplicateCount > 0) {
+        alert(`Successfully imported ${newNotes.length} new image(s). ${duplicateCount} duplicate(s) were skipped.`);
+      }
+    } catch (error) {
+      console.error('Failed to import photos:', error);
+      alert('导入照片失败，请重试。');
+    } finally {
+      setIsConfirmingImport(false);
     }
-  }, [importPreview, notes, onAddNote, onUpdateProject, onImportDialogChange, project.notes]);
+  }, [importPreview, notes, isConfirmingImport, onUpdateProject, onNotesCreated, onImportDialogChange, project]);
 
   // Cancel import
   const handleCancelImport = useCallback(() => {
     importPreview.forEach(p => URL.revokeObjectURL(p.imageUrl));
     setImportPreview([]);
     setShowImportDialog(false);
+    setIsConfirmingImport(false);
     onImportDialogChange?.(false);
   }, [importPreview, onImportDialogChange]);
 
   return {
     importPreview,
     showImportDialog,
+    isConfirmingImport,
     fileInputRef,
     dataImportInputRef,
     handleImageImport,

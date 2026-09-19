@@ -7,12 +7,15 @@ interface UseCameraImportProps {
   getCurrentBrowserLocation: () => Promise<{ lat: number; lng: number } | null>;
   mapInstance: LeafletMap | null;
   onAddNote: (note: Note) => void;
+  /** 新记录写入后由界面聚焦并打开编辑器。 */
+  onNoteCreated?: (note: Note) => void;
 }
 
 export function useCameraImport({
   getCurrentBrowserLocation,
   mapInstance,
-  onAddNote
+  onAddNote,
+  onNoteCreated
 }: UseCameraImportProps) {
   const isCameraAvailable = useCallback(() => {
     return (
@@ -98,6 +101,7 @@ export function useCameraImport({
       };
 
       onAddNote(newNote);
+      onNoteCreated?.(newNote);
 
       if (mapInstance) {
         mapInstance.flyTo([userLocation.lat, userLocation.lng], 16);
@@ -106,7 +110,7 @@ export function useCameraImport({
       console.error('Failed to import from camera:', error);
       alert(`相机导入失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
-  }, [getCurrentBrowserLocation, mapInstance, onAddNote]);
+  }, [getCurrentBrowserLocation, mapInstance, onAddNote, onNoteCreated]);
 
   return { handleImportFromCamera, isCameraAvailable };
 }

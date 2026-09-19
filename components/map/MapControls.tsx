@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import { Note } from '../../types';
 import { THEME_COLOR } from '../../constants';
-import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon } from 'lucide-react';
+import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon, Camera } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { ChromeMenuItem } from '../ui/ChromeMenuItem';
 import { ChromeWindow } from '../ui/ChromeWindow';
@@ -27,6 +27,8 @@ interface MapControlsProps {
   settingsButtonRef?: React.RefObject<HTMLButtonElement | null>;
   onCreateAtCurrentLocation: () => void;
   onImportFromPhotos: () => void;
+  onImportFromCamera: () => void;
+  cameraAvailable: boolean;
   isCreatingAtLocation?: boolean;
   showLocateMenu: boolean;
   showCreateMenu: boolean;
@@ -35,6 +37,8 @@ interface MapControlsProps {
   onCloseMenus: () => void;
   /** 由顶栏槽托管窗口时只渲染按钮。 */
   hostedWindow?: boolean;
+  /** 紧凑视口的新建操作改为贴近按钮展开的扇形菜单。 */
+  compactViewport?: boolean;
 }
 
 export const MapControls: React.FC<MapControlsProps> = ({
@@ -51,13 +55,16 @@ export const MapControls: React.FC<MapControlsProps> = ({
   settingsButtonRef,
   onCreateAtCurrentLocation,
   onImportFromPhotos,
+  onImportFromCamera,
+  cameraAvailable,
   isCreatingAtLocation = false,
   showLocateMenu,
   showCreateMenu,
   onToggleLocateMenu,
   onToggleCreateMenu,
   onCloseMenus,
-  hostedWindow = false
+  hostedWindow = false,
+  compactViewport = false
 }) => {
   const neutralStyle = chromeSurfaceStyle;
   const neutralHover = chromeHoverBackground;
@@ -86,6 +93,24 @@ export const MapControls: React.FC<MapControlsProps> = ({
       container.removeEventListener('pointerdown', handleCaptureStart, { capture: true });
     };
   }, []);
+
+  // 紧凑视口的新建菜单不再进入底部 sheet，因此在点到地图空白处或按 Escape 时自行收起。
+  useEffect(() => {
+    if (!compactViewport || !hostedWindow || !showCreateMenu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && controlsRef.current?.contains(event.target)) return;
+      onCloseMenus();
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCloseMenus();
+    };
+    document.addEventListener('pointerdown', dismiss, true);
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss, true);
+      document.removeEventListener('keydown', dismissOnEscape);
+    };
+  }, [compactViewport, hostedWindow, onCloseMenus, showCreateMenu]);
 
   const renderedKind = menuKind ?? (showLocateMenu ? 'locate' : showCreateMenu ? 'create' : null);
 
@@ -123,22 +148,127 @@ export const MapControls: React.FC<MapControlsProps> = ({
         <Settings size={18} className="sm:w-5 sm:h-5" />
       </ChromeIconButton>
 
-      <ChromeIconButton
-        className="group"
-        themeColor={themeColor}
-        chromeSurfaceStyle={neutralStyle}
-        chromeHoverBackground={neutralHover}
-        active={showCreateMenu}
-        onClick={onToggleCreateMenu}
-        onPointerMove={(e) => e.stopPropagation()}
-        tooltip="新建节点"
-      >
-        {isCreatingAtLocation ? (
-          <Loader2 size={18} className="sm:w-5 sm:h-5 animate-spin" />
-        ) : (
-          <Plus size={18} className="sm:w-5 sm:h-5" />
-        )}
-      </ChromeIconButton>
+      {/* 宽屏保留锚定式下拉；窄屏从主按钮向下展开，避免占用整个底部操作区。 */}
+      <div className="hidden sm:block">
+        <ChromeIconButton
+          className="group"
+          themeColor={themeColor}
+          chromeSurfaceStyle={neutralStyle}
+          chromeHoverBackground={neutralHover}
+          active={showCreateMenu}
+          onClick={onToggleCreateMenu}
+          onPointerMove={(e) => e.stopPropagation()}
+          tooltip="新建节点"
+        >
+          {isCreatingAtLocation ? (
+            <Loader2 size={18} className="sm:w-5 sm:h-5 animate-spin" />
+          ) : (
+            <Plus size={18} className="sm:w-5 sm:h-5" />
+          )}
+        </ChromeIconButton>
+      </div>
+
+      <div className="ui-map-compact-create-control fixed ui-workspace-left z-10 h-14 w-14 sm:hidden">
+        <ChromeIconButton
+          className="relative z-10 !h-14 !w-14 !rounded-2xl group"
+          themeColor={themeColor}
+          chromeSurfaceStyle={neutralStyle}
+          chromeHoverBackground={neutralHover}
+          active={showCreateMenu}
+          onClick={onToggleCreateMenu}
+          onPointerMove={(e) => e.stopPropagation()}
+          tooltip="新建节点"
+          aria-expanded={showCreateMenu}
+          aria-controls="map-create-radial-menu"
+        >
+          {isCreatingAtLocation ? (
+            <Loader2 size={24} className="animate-spin" />
+          ) : (
+            <Plus size={24} className={`transition-transform duration-200 ${showCreateMenu ? 'rotate-45' : ''}`} />
+          )}
+        </ChromeIconButton>
+
+        <div
+          id="map-create-radial-menu"
+          className="pointer-events-none absolute left-2 top-2 z-0 h-10 w-10"
+          aria-hidden={!showCreateMenu}
+        >
+          <div
+            className="absolute inset-0"
+            style={{
+              transform: showCreateMenu ? 'translate3d(0, -78px, 0) scale(1)' : 'scale(0.66)',
+              opacity: showCreateMenu ? 1 : 0,
+              transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '0ms' : '45ms'}, opacity 150ms ease ${showCreateMenu ? '0ms' : '45ms'}`
+            }}
+          >
+            <ChromeIconButton
+              className="ui-map-create-radial-action pointer-events-auto"
+              themeColor={themeColor}
+              chromeSurfaceStyle={neutralStyle}
+              chromeHoverBackground={neutralHover}
+              disabled={isCreatingAtLocation || !showCreateMenu}
+              tabIndex={showCreateMenu ? 0 : -1}
+              onClick={() => {
+                onCloseMenus();
+                onCreateAtCurrentLocation();
+              }}
+              tooltip="在当前位置添加"
+            >
+              {isCreatingAtLocation ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
+            </ChromeIconButton>
+          </div>
+
+          <div
+            className="absolute inset-0"
+            style={{
+              transform: showCreateMenu ? 'translate3d(55px, -55px, 0) scale(1)' : 'scale(0.66)',
+              opacity: showCreateMenu ? 1 : 0,
+              transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '35ms' : '0ms'}, opacity 150ms ease ${showCreateMenu ? '35ms' : '0ms'}`
+            }}
+          >
+            <ChromeIconButton
+              className="ui-map-create-radial-action pointer-events-auto"
+              themeColor={themeColor}
+              chromeSurfaceStyle={neutralStyle}
+              chromeHoverBackground={neutralHover}
+              disabled={!showCreateMenu}
+              tabIndex={showCreateMenu ? 0 : -1}
+              onClick={() => {
+                onCloseMenus();
+                onImportFromPhotos();
+              }}
+              tooltip="从相册导入"
+            >
+              <ImageIcon size={18} />
+            </ChromeIconButton>
+          </div>
+
+          <div
+            className="absolute inset-0"
+            style={{
+              transform: showCreateMenu ? 'translate3d(78px, 0, 0) scale(1)' : 'scale(0.66)',
+              opacity: showCreateMenu ? 1 : 0,
+              transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '70ms' : '0ms'}, opacity 150ms ease ${showCreateMenu ? '70ms' : '0ms'}`
+            }}
+          >
+            <ChromeIconButton
+              className="ui-map-create-radial-action pointer-events-auto"
+              themeColor={themeColor}
+              chromeSurfaceStyle={neutralStyle}
+              chromeHoverBackground={neutralHover}
+              disabled={!cameraAvailable || !showCreateMenu}
+              tabIndex={showCreateMenu && cameraAvailable ? 0 : -1}
+              onClick={() => {
+                onCloseMenus();
+                onImportFromCamera();
+              }}
+              tooltip={cameraAvailable ? '拍照添加' : '拍照需要 HTTPS'}
+            >
+              <Camera size={18} />
+            </ChromeIconButton>
+          </div>
+        </div>
+      </div>
 
       <ChromeIconButton
         className="group"

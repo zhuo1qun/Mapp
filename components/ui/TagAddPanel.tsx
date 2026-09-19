@@ -25,9 +25,13 @@ export interface TagAddPanelProps {
   /**
    * 传入时通过 portal 渲染到 document.body，fixed 定位于视口（便签编辑器内与 Emoji 浮层同级）
    */
-  portalPlacement?: { top: number; left: number } | null;
+  portalPlacement?: { top: number; left: number; maxHeight?: number } | null;
   /** portal 内容层 z-index，默认与 EmojiPicker 内容一致 */
   portalZIndex?: number;
+  /** 便签编辑器内使用：同 EmojiPicker 一样以全屏点击层关闭，而非文档级 outside handler。 */
+  portalBackdrop?: boolean;
+  /** 供锚定调用方在实际尺寸变化后重新计算位置。 */
+  portalPanelRef?: React.RefObject<HTMLDivElement | null>;
   placeholder?: string;
   applyLabel?: string;
   autoFocus?: boolean;
@@ -59,6 +63,8 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
   dismissIgnoreClosestSelector,
   portalPlacement,
   portalZIndex = PORTAL_Z,
+  portalBackdrop = false,
+  portalPanelRef,
   placeholder,
   applyLabel = '应用',
   autoFocus,
@@ -76,7 +82,7 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
   ignoreSelRef.current = dismissIgnoreClosestSelector;
 
   useEffect(() => {
-    if (!closeOnInteractOutside) return;
+    if (!closeOnInteractOutside || portalBackdrop) return;
     const onDocPointerDown = (e: PointerEvent) => {
       const root = rootRef.current;
       const t = e.target as Node;
@@ -90,6 +96,7 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
   }, [closeOnInteractOutside]);
 
   const shellClass = `map-chrome-content-${chromeAppearance} rounded-xl border border-gray-100/80 p-2.5 shadow-lg ${panelChromeStyle ? '' : 'bg-white'} ${className}`;
+  const panelRef = portalPanelRef ?? rootRef;
 
   const body = (
     <>
@@ -146,22 +153,32 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
 
   if (portalPlacement != null) {
     return createPortal(
-      <div
-        ref={rootRef}
-        data-tag-add-panel
-        className={`w-[min(100vw-16px,260px)] max-w-[min(100vw-16px,260px)] ${shellClass}`}
-        style={{
-          ...(panelChromeStyle || {}),
-          position: 'fixed',
-          top: portalPlacement.top,
-          left: portalPlacement.left,
-          zIndex: portalZIndex,
-          pointerEvents: 'auto',
-        }}
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        {body}
+      <div data-chrome-window-nested={portalBackdrop || undefined}>
+        {portalBackdrop ? (
+          <div
+            className="fixed inset-0"
+            style={{ zIndex: portalZIndex - 1 }}
+            onClick={() => void outsideRef.current()}
+          />
+        ) : null}
+        <div
+          ref={panelRef}
+          data-tag-add-panel
+          className={`w-[min(100vw-16px,260px)] max-w-[min(100vw-16px,260px)] overflow-y-auto ${shellClass}`}
+          style={{
+            ...(panelChromeStyle || {}),
+            position: 'fixed',
+            top: portalPlacement.top,
+            left: portalPlacement.left,
+            maxHeight: portalPlacement.maxHeight,
+            zIndex: portalZIndex,
+            pointerEvents: 'auto',
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {body}
+        </div>
       </div>,
       document.body
     );
@@ -169,7 +186,7 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
 
   return (
     <div
-      ref={rootRef}
+      ref={panelRef}
       data-tag-add-panel
       className={`w-full max-w-[min(100vw-24px,260px)] ${shellClass}`}
       style={panelChromeStyle}

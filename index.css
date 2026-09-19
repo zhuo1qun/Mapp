@@ -55,6 +55,27 @@
   }
 }
 
+/* 窄屏地图的主新建按钮固定在左下角，避开系统 Home Indicator。 */
+.ui-map-compact-create-control {
+  bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
+}
+
+.ui-board-compact-edit-control {
+  bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
+}
+
+/* 窄屏地图的扇形新建菜单在支持 hover 的设备上，沿用工具栏按钮原有的文字展开反馈。 */
+@media (max-width: 639px) and (hover: hover) {
+  .ui-map-create-radial-action:hover .ui-chrome-icon-button-label,
+  .ui-map-create-radial-action:focus-visible .ui-chrome-icon-button-label,
+  .ui-board-edit-radial-action:hover .ui-chrome-icon-button-label,
+  .ui-board-edit-radial-action:focus-visible .ui-chrome-icon-button-label {
+    max-width: 8rem;
+    margin-left: 0.5rem;
+    opacity: 1;
+  }
+}
+
 /**
  * 顶栏按钮呼出菜单：对齐页面左/右缘（与顶栏按钮 margin 一致），
  * 不再与单个按钮左/右齐平。右侧在编辑属性栏打开时由 --workspace-ui-right-edge 抬高。
@@ -726,6 +747,22 @@ body {
   color: var(--theme-chrome-interactive-fg-strong);
   background-color: color-mix(in srgb, var(--theme-chrome-interactive-fg-strong) 9%, transparent);
   opacity: 1;
+}
+
+/* 项目列表（主页 / 侧栏共用）：唯一的浮动底板由 mapChromeSurfaceStyle
+ * 提供与 ChromeWindow 相同的透明度、渐变、模糊和亮暗参数；CSS 只保留几何外形。 */
+.project-list-roster-selection {
+  border-radius: 1rem;
+}
+
+/* 项目行不再叠加通用按钮的逐卡 hover 底色；视觉选中只由上方那张共享底板承担。 */
+.project-list-row.theme-chrome-interactive::before,
+.project-list-row.theme-chrome-interactive:hover::before,
+.project-list-row.theme-chrome-interactive:focus-visible::before,
+.project-list-row.theme-chrome-interactive[data-chrome-selected='true']::before {
+  opacity: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1535,6 +1572,7 @@ body {
 /* Homepage hero: every glyph has a stable, lightly hand-drawn pose. */
 .title-character {
   display: inline-block;
+  margin-right: var(--title-character-gap, 0);
   transform: translateY(var(--title-character-offset-y, 0)) rotate(var(--title-character-rotate, 0deg));
   transform-origin: 50% 55%;
   will-change: transform;

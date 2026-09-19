@@ -3162,6 +3162,29 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     ]
   );
 
+  const enterBoardEditMode = useCallback(() => {
+    if (isSelectingNotePosition) setIsSelectingNotePosition(false);
+    onWorkspaceEditModeChange(true);
+  }, [isSelectingNotePosition, onWorkspaceEditModeChange]);
+
+  const exitBoardEditMode = useCallback(() => {
+    if (isSelectingNotePosition) setIsSelectingNotePosition(false);
+    onWorkspaceEditModeChange(false);
+    setIsBoxSelecting(false);
+    setBoxSelectStart(null);
+    setBoxSelectEnd(null);
+    setIsDrawingFrame(false);
+    setDrawingFrameStart(null);
+    setDrawingFrameEnd(null);
+    setSelectedFrameId(null);
+    resetInteraction();
+    setLocalDraggingFramePos(null);
+    setLocalResizingFrameSize(null);
+    setLocalResizingImageSize(null);
+    setEditingFrameTitle('');
+    setEditingFrameId(null);
+  }, [isSelectingNotePosition, onWorkspaceEditModeChange, resetInteraction]);
+
   useRegisterEditInspector(isUIVisible && workspaceEditMode, boardEditInspectorPanelProps);
 
   return (
@@ -4381,32 +4404,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             chromeSurfaceStyle={panelChromeStyle}
             chromeHoverBackground={chHover}
             reserveRightForInspector={workspaceEditMode}
-            onEnterEditMode={() => {
-              if (isSelectingNotePosition) setIsSelectingNotePosition(false);
-              onWorkspaceEditModeChange(true);
-            }}
-            onExitEditMode={() => {
-              if (isSelectingNotePosition) setIsSelectingNotePosition(false);
-              onWorkspaceEditModeChange(false);
-              setIsBoxSelecting(false);
-              setBoxSelectStart(null);
-              setBoxSelectEnd(null);
-              setIsDrawingFrame(false);
-              setDrawingFrameStart(null);
-              setDrawingFrameEnd(null);
-              setSelectedFrameId(null);
-              resetInteraction();
-              setLocalDraggingFramePos(null);
-              setLocalResizingFrameSize(null);
-              setLocalResizingImageSize(null);
-              setEditingFrameTitle('');
-              setEditingFrameId(null);
-            }}
+            onEnterEditMode={enterBoardEditMode}
+            onExitEditMode={exitBoardEditMode}
           />
         )}
 
-        {/* Edit Toolbar: 编辑模式下居中（L+ / L- / 工具） */}
-        {workspaceEditMode && (
+        {/* 窄屏左下角编辑入口始终可用；宽屏仅在编辑模式显示顶部工具。 */}
+        {isUIVisible && (
           <BoardTopCenterEditToolbar
             isEditMode={workspaceEditMode}
             isSelectingNotePosition={isSelectingNotePosition}
@@ -4415,6 +4419,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             themeColor={themeColor}
             chromeSurfaceStyle={panelChromeStyle}
             chromeHoverBackground={chHover}
+            onEnterEditMode={enterBoardEditMode}
+            onExitEditMode={exitBoardEditMode}
             onClearSelectingNotePosition={() => setIsSelectingNotePosition(false)}
             onToggleSelectNotePosition={() => {
               if (isSelectingNotePosition) {

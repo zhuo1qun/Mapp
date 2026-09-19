@@ -54,8 +54,12 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
   const [editingEndYear, setEditingEndYear] = useState('');
 
   const timeAnchorRef = useRef<HTMLButtonElement | null>(null);
-  const timePanelPortalRef = useRef<HTMLDivElement | null>(null);
-  const [timePanelPlacement, setTimePanelPlacement] = useState<{ top: number; left: number } | null>(null);
+  const timePanelRef = useRef<HTMLDivElement | null>(null);
+  const [timePanelPlacement, setTimePanelPlacement] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
 
   const closeTimeEdit = useCallback(() => {
     setIsEditingTime(false);
@@ -65,12 +69,17 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
   const updateTimePanelPlacement = useCallback(() => {
     const el = timeAnchorRef.current;
     if (!el) return;
-    setTimePanelPlacement(
-      computeAnchoredPanelPlacement(el.getBoundingClientRect(), {
-        panelWidth: TIME_PANEL_EST_W,
-        panelHeight: TIME_PANEL_EST_H,
-        align: 'end'
-      })
+    const panelRect = timePanelRef.current?.getBoundingClientRect();
+    const next = computeAnchoredPanelPlacement(el.getBoundingClientRect(), {
+      panelWidth: panelRect?.width || TIME_PANEL_EST_W,
+      panelHeight: panelRect?.height || TIME_PANEL_EST_H,
+      align: 'end',
+      vertical: 'below'
+    });
+    setTimePanelPlacement((current) =>
+      current?.top === next.top && current.left === next.left && current.maxHeight === next.maxHeight
+        ? current
+        : next
     );
   }, []);
 
@@ -90,22 +99,31 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
 
   useEffect(() => {
     if (!active || !isEditingTime) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (timeAnchorRef.current?.contains(t)) return;
-      if (timePanelPortalRef.current?.contains(t)) return;
+    const onReposition = () => updateTimePanelPlacement();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopImmediatePropagation();
       closeTimeEdit();
     };
-    const onReposition = () => updateTimePanelPlacement();
-    document.addEventListener('pointerdown', onPointerDown, true);
     window.addEventListener('resize', onReposition);
     window.addEventListener('scroll', onReposition, true);
+    document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
       window.removeEventListener('resize', onReposition);
       window.removeEventListener('scroll', onReposition, true);
+      document.removeEventListener('keydown', onKeyDown);
     };
   }, [active, isEditingTime, closeTimeEdit, updateTimePanelPlacement]);
+
+  useLayoutEffect(() => {
+    if (!isEditingTime || !timePanelPlacement || !timePanelRef.current) return;
+    const panel = timePanelRef.current;
+    const observer = new ResizeObserver(updateTimePanelPlacement);
+    observer.observe(panel);
+    if (timeAnchorRef.current) observer.observe(timeAnchorRef.current);
+    updateTimePanelPlacement();
+    return () => observer.disconnect();
+  }, [isEditingTime, timePanelPlacement, updateTimePanelPlacement]);
 
   useEffect(() => {
     if (!onProvideDismiss) return;
@@ -188,20 +206,26 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
       {isEditingTime &&
         timePanelPlacement &&
         createPortal(
-          <div
-            ref={timePanelPortalRef}
-            data-note-time-range-panel
-            className={`map-chrome-content-${chromeAppearance} flex flex-nowrap items-center gap-1.5 rounded-xl border border-gray-100/80 p-2 shadow-lg whitespace-nowrap ${panelChromeStyle ? '' : 'bg-white'}`}
-            style={{
-              ...(panelChromeStyle || {}),
-              position: 'fixed',
-              top: timePanelPlacement.top,
-              left: timePanelPlacement.left,
-              zIndex: 10003
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
+          <div data-note-time-range-panel data-chrome-window-nested="">
+            <div
+              className="fixed inset-0"
+              style={{ zIndex: 9999 }}
+              onClick={closeTimeEdit}
+            />
+            <div
+              ref={timePanelRef}
+              className={`map-chrome-content-${chromeAppearance} flex max-w-[calc(100vw-16px)] flex-nowrap items-center gap-1.5 overflow-x-auto rounded-xl border border-gray-100/80 p-2 shadow-lg whitespace-nowrap ${panelChromeStyle ? '' : 'bg-white'}`}
+              style={{
+                ...(panelChromeStyle || {}),
+                position: 'fixed',
+                top: timePanelPlacement.top,
+                left: timePanelPlacement.left,
+                maxHeight: timePanelPlacement.maxHeight,
+                zIndex: 10000
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
             <input
               type="number"
               min={1}
@@ -254,6 +278,7 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
             >
               <X size={16} />
             </button>
+            </div>
           </div>,
           document.body
         )}

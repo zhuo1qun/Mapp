@@ -46,7 +46,7 @@ export const BoardTopRightEditToggle: React.FC<Props> = ({
   return (
     <div
       data-allow-context-menu
-      className={`fixed top-2 sm:top-4 z-[500] flex h-10 sm:h-12 gap-3 pointer-events-auto items-center ${
+      className={`fixed top-2 sm:top-4 z-[500] hidden h-10 sm:h-12 gap-3 pointer-events-auto items-center sm:flex ${
         reserveRightForInspector
           ? 'right-2 sm:right-4 lg:right-[calc(20rem+0.75rem)]'
           : 'right-2 sm:right-4'

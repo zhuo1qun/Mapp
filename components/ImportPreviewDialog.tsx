@@ -10,8 +10,9 @@ interface ImportPreviewDialogProps {
   importPreview: ImportPreview[];
   themeColor: string;
   panelChromeStyle?: React.CSSProperties;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
+  isConfirming?: boolean;
   showCloseButton?: boolean;
   showCoordinates?: boolean;
 }
@@ -24,7 +25,8 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
   onConfirm,
   onCancel,
   showCloseButton = false,
-  showCoordinates = true
+  showCoordinates = true,
+  isConfirming = false
 }) => {
   const cardChrome =
     panelChromeStyle ??
@@ -55,6 +57,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
           {showCloseButton && (
             <button
               onClick={onCancel}
+              disabled={isConfirming}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
               title="Close (ESC)"
             >
@@ -112,13 +115,14 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
         <div className="p-4 flex justify-end gap-2">
           <button
             onClick={onCancel}
+            disabled={isConfirming}
             className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 font-medium transition-colors"
           >
             Cancel
           </button>
           <button
-            onClick={onConfirm}
-            disabled={importableCount === 0}
+            onClick={() => void onConfirm()}
+            disabled={importableCount === 0 || isConfirming}
             className="px-6 py-2 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-500 rounded-lg font-medium transition-colors text-theme-chrome-fg"
             style={{ backgroundColor: importableCount > 0 ? themeColor : undefined }}
             onMouseEnter={(e) => {
@@ -139,7 +143,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
               }
             }}
           >
-            Confirm Import ({importableCount})
+            {isConfirming ? 'Importing…' : `Confirm Import (${importableCount})`}
           </button>
         </div>
       </ChromeDialogSurface>

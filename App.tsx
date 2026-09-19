@@ -3,6 +3,7 @@ import React, { lazy, Suspense, useState, useEffect, useRef, useCallback, useMem
 import { Map as MapIcon, Grid, Menu, Loader2, Table2, GitBranch, Cloud, CloudOff, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from './components/ui/MotionDiv';
+import { WorkspaceChromePresence } from './components/ui/WorkspaceChromePresence';
 import { Note, ViewMode, Project, ProjectKind } from './types';
 import { get, set } from 'idb-keyval';
 import {
@@ -596,6 +597,12 @@ export default function App() {
     setSidebarDockedInline(false);
     setIsSidebarOpen(false);
   }, [activeProject]);
+
+  // 编辑模式只保留当前视图的编辑 chrome；项目侧栏沿用自身的抽屉退出动画收起。
+  useEffect(() => {
+    if (!mappingWorkspaceEditMode || !activeProject || !isSidebarOpen) return;
+    closeProjectSidebar();
+  }, [activeProject, closeProjectSidebar, isSidebarOpen, mappingWorkspaceEditMode]);
 
   /**
    * 非 Table 工作区的空白操作统一释放瞬时窗口；工具栏与窗口内部自行处理 toggle，
@@ -1956,10 +1963,12 @@ export default function App() {
         {/* 同步状态指示器 - 只在侧边栏打开时显示（在侧边栏内） */}
         {/* 主视图中不再显示云图标，统一在侧边栏显示 */}
         
-        {!isEditorOpen &&
-          !mappingWorkspaceEditMode &&
-          isUIVisible &&
-          !isSidebarOpen && (
+        <WorkspaceChromePresence
+          visible={!isEditorOpen && !mappingWorkspaceEditMode && isUIVisible && !isSidebarOpen}
+          motion="slide-left"
+          className="absolute left-0 z-[900]"
+          style={{ top: `${sidebarButtonY}px` }}
+        >
           <button
              onClick={(e) => {
                // 只有在没有拖动时才触发点击
@@ -2017,11 +2026,8 @@ export default function App() {
                  sidebarButtonDragRef.current.isDragging = false;
                }, 10);
              }}
-            className="sidebar-drawer-handle absolute left-0 z-[900] rounded-r-xl shadow-lg text-theme-chrome-fg transition-none cursor-move"
-             style={{ 
-               backgroundColor: themeColor,
-               top: `${sidebarButtonY}px`
-             }}
+            className="sidebar-drawer-handle rounded-r-xl shadow-lg text-theme-chrome-fg transition-none cursor-move"
+             style={{ backgroundColor: themeColor }}
              onMouseEnter={(e) => {
                const darkR = Math.max(0, Math.floor(parseInt(themeColor.slice(1, 3), 16) * 0.9));
                const darkG = Math.max(0, Math.floor(parseInt(themeColor.slice(3, 5), 16) * 0.9));
@@ -2036,7 +2042,7 @@ export default function App() {
           >
              <Menu size={18} />
           </button>
-        )}
+        </WorkspaceChromePresence>
 
         {viewMode === 'map' && projectKind === 'mapping' ? (
           isWorkspaceProjectDataStale ? (
@@ -2331,16 +2337,17 @@ export default function App() {
         </Suspense>
       </div>
 
-      {!isEditorOpen &&
-        activeProject &&
-        !mappingWorkspaceEditMode &&
-        isUIVisible && projectKind && (
+      <WorkspaceChromePresence
+        visible={!isEditorOpen && !!activeProject && !mappingWorkspaceEditMode && isUIVisible && !!projectKind}
+        motion="slide-up"
+        className="fixed bottom-4 ui-workspace-center-x -translate-x-1/2 z-[var(--z-workspace-tabs)]"
+      >
         <div
           ref={mobileViewSwitcherRef}
           data-allow-context-menu
           data-mobile-expanded={isMobileViewSwitcherExpanded ? 'true' : 'false'}
           data-mapp-chrome-ui=""
-          className={`fixed bottom-4 ui-workspace-center-x ui-workspace-bottom-bar -translate-x-1/2 z-[var(--z-workspace-tabs)] p-1.5 rounded-2xl shadow-xl border flex flex-nowrap justify-center gap-1 animate-in slide-in-from-bottom-4 fade-in ${
+          className={`ui-workspace-bottom-bar p-1.5 rounded-2xl shadow-xl border flex flex-nowrap justify-center gap-1 ${
             panelChromeStyle ? 'border-gray-100/80' : 'border-white/50 map-chrome-surface-fallback'
           }`}
           style={mapViewSwitcherStyle}
@@ -2414,7 +2421,7 @@ export default function App() {
             <span className="ui-workspace-view-tab-label">Table</span>
           </button>
         </div>
-      )}
+      </WorkspaceChromePresence>
             </div>
         </div>
       </div>

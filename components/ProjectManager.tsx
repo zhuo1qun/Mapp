@@ -25,6 +25,7 @@ import {
 import { ThemeColorPicker } from './ThemeColorPicker';
 import { AppearanceSettingsBlock } from './AppearanceSettingsBlock';
 import {
+  MAP_CHROME_SURFACE_BORDER_CLASS,
   mapChromeSurfaceStyle,
   mapChromeHoverBackground
 } from '../utils/map/mapChromeStyle';
@@ -42,6 +43,7 @@ import { fetchBuiltinExamplesManifest } from '../utils/builtinExamples/manifest'
 import { parseExportPayload } from '../utils/builtinExamples/projectFromExport';
 import {
   getHomeHeroCharacterPose,
+  getHomeHeroCharacterGapEm,
   HOME_HERO_LINES,
   isHomeHeroPinCharacter
 } from '../utils/home/homeHeroTitle';
@@ -399,6 +401,16 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [newProjectNameShake, setNewProjectNameShake] = useState(false);
   const newProjectNameInputRef = useRef<HTMLInputElement>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  /** 项目列表共用一张悬停选中底板，在条目之间连续移动。 */
+  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const rosterListRef = useRef<HTMLDivElement>(null);
+  const projectRowRefs = useRef(new Map<string, HTMLDivElement>());
+  const [rosterSelectionRect, setRosterSelectionRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -418,6 +430,44 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   } | null>(null);
   const [pendingBuiltinExampleUpdate, setPendingBuiltinExampleUpdate] = useState<Project | null>(null);
   const [isUpdatingBuiltinExample, setIsUpdatingBuiltinExample] = useState(false);
+
+  // 这张板只存在一份：hover 优先，其次是已展开的更多菜单，最后才是当前项目。
+  // 因为它不随着项目行挂载/卸载，切换、淡出和重新进入都是同一个实体的连续动画。
+  const rosterSelectionProjectId =
+    hoveredProjectId ??
+    openMenuId ??
+    (!clearSelectionInTransition ? currentProjectId : null);
+  const rosterProjectIdsKey = displayProjects.map((project) => project.id).join('|');
+
+  useLayoutEffect(() => {
+    const list = rosterListRef.current;
+    const row = rosterSelectionProjectId
+      ? projectRowRefs.current.get(rosterSelectionProjectId)
+      : null;
+    if (!list || !row) {
+      setRosterSelectionRect(null);
+      return;
+    }
+
+    const updateRect = () => {
+      setRosterSelectionRect({
+        x: row.offsetLeft,
+        y: row.offsetTop,
+        width: row.offsetWidth,
+        height: row.offsetHeight
+      });
+    };
+    updateRect();
+
+    const resizeObserver = new ResizeObserver(updateRect);
+    resizeObserver.observe(list);
+    resizeObserver.observe(row);
+    window.addEventListener('resize', updateRect);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateRect);
+    };
+  }, [rosterSelectionProjectId, rosterProjectIdsKey]);
 
   const canUpdateBuiltinExample = (project: Project) =>
     builtinExampleIds.has(project.id) && project.name === LEGACY_BUILTIN_EXAMPLE_NAME;
@@ -1309,7 +1359,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         : 'w-full h-[100dvh] min-h-0 overflow-y-auto theme-surface-scrollbar flex flex-col items-center justify-start pt-40 pb-0 p-4 relative';
 
   const titleClass =
-    'text-[clamp(4rem,21vw,6rem)] md:text-8xl font-black text-theme-chrome-fg tracking-tighter mb-4 text-center drop-shadow-sm leading-[0.9] flex flex-col';
+    'text-[clamp(4rem,21vw,6rem)] md:text-8xl font-thin text-theme-chrome-fg tracking-tighter mb-4 text-center drop-shadow-sm leading-[0.9] flex flex-col';
 
   useLayoutEffect(() => {
     if (!openMenuId || homeLikeList) {
@@ -1556,6 +1606,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       const pose = isPin
                         ? { rotateDeg: 0, translateYPx: 0 }
                         : getHomeHeroCharacterPose(lineIndex, characterIndex);
+                      const gapEm = getHomeHeroCharacterGapEm(lineIndex, characterIndex);
                       return (
                         <span
                           key={`${line}-${characterIndex}`}
@@ -1564,7 +1615,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                           style={
                             {
                               '--title-character-rotate': `${pose.rotateDeg}deg`,
-                              '--title-character-offset-y': `${pose.translateYPx}px`
+                              '--title-character-offset-y': `${pose.translateYPx}px`,
+                              '--title-character-gap': `${gapEm}em`
                             } as React.CSSProperties
                           }
                         >
@@ -1726,7 +1778,37 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           }
         }}
       >
-        <div className="flex flex-col gap-3">
+        <div ref={rosterListRef} className="relative flex flex-col">
+          <MotionDiv
+            aria-hidden="true"
+            className={`project-list-roster-selection pointer-events-none absolute left-0 top-0 z-0 rounded-2xl shadow-lg ${MAP_CHROME_SURFACE_BORDER_CLASS}`}
+            initial={{ opacity: 0, scale: 0.985 }}
+            animate={
+              rosterSelectionRect
+                ? {
+                    x: rosterSelectionRect.x,
+                    y: rosterSelectionRect.y,
+                    width: rosterSelectionRect.width,
+                    height: rosterSelectionRect.height,
+                    opacity: 1,
+                    scale: 1
+                  }
+                : { opacity: 0, scale: 0.985 }
+            }
+            transition={{
+              x: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+              y: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+              width: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+              height: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+              opacity: { duration: 0.16, ease: 'easeOut' },
+              scale: { duration: 0.16, ease: 'easeOut' }
+            }}
+            style={{
+              ...mapChromeSurface,
+              transformOrigin: 'center',
+              willChange: 'transform, width, height, opacity'
+            }}
+          />
           {displayProjects.map(p => {
             // 仅在「项目 -> 主页」中间态取消选中高亮；收束可见行的逻辑仍使用原 currentProjectId。
             const isCurrentOpen =
@@ -1740,9 +1822,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
             return (
             <MotionDiv
               key={p.id}
+              ref={(element) => {
+                if (element) projectRowRefs.current.set(p.id, element);
+                else projectRowRefs.current.delete(p.id);
+              }}
               data-pm-project-row={p.id}
               data-chrome-selected={isInteractionSelected || undefined}
-              className={`${themeChromeInteractiveClass} group relative flex items-center justify-between rounded-2xl border border-solid p-4`}
+              className={`${themeChromeInteractiveClass} project-list-row group relative isolate -mt-px first:mt-0 flex items-center justify-between overflow-hidden rounded-2xl border border-solid p-4`}
               animate={{ opacity: rowOpacity }}
               transition={{
                 opacity: {
@@ -1753,9 +1839,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               style={{
                 pointerEvents: hideOtherWhenTransition ? 'none' : undefined
               }}
+              onMouseEnter={() => setHoveredProjectId(p.id)}
+              onMouseLeave={() => setHoveredProjectId(null)}
             >
-              <div 
-                className="flex-1 cursor-pointer" 
+              <div
+                className="relative z-[1] flex-1 cursor-pointer"
                 onClick={() => !editingProjectId && onSelectProject(p.id)}
               >
                 {editingProjectId === p.id ? (

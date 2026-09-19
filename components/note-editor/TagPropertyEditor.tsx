@@ -4,7 +4,10 @@ import type { Tag } from '../../types';
 import { THEME_COLOR } from '../../constants';
 import { TagChip } from '../ui/TagChip';
 import { TagAddPanel } from '../ui/TagAddPanel';
-import { computeAnchoredPanelPlacement } from '../ui/anchoredPanelPlacement';
+import {
+  computeAnchoredPanelPlacement,
+  type AnchoredPanelPlacement
+} from '../ui/anchoredPanelPlacement';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 
@@ -55,7 +58,8 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const dismiss = onDismissOverlays ?? (() => {});
   const tagsRowRef = useRef<HTMLDivElement>(null);
-  const [tagPanelPos, setTagPanelPos] = useState<{ top: number; left: number } | null>(null);
+  const tagPanelPortalRef = useRef<HTMLDivElement>(null);
+  const [tagPanelPos, setTagPanelPos] = useState<AnchoredPanelPlacement | null>(null);
 
   const tagPanelOpen = isAddingTag || !!editingTagId;
 
@@ -63,12 +67,17 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
     // 添加：锚到属性行 + Tag；编辑：锚到标签行
     const el = (isAddingTag ? addTagAnchorRef?.current : null) ?? tagsRowRef.current;
     if (!el) return;
-    setTagPanelPos(
-      computeAnchoredPanelPlacement(el.getBoundingClientRect(), {
-        panelWidth: TAG_PANEL_EST_W,
-        panelHeight: TAG_PANEL_EST_H,
-        align: isAddingTag ? 'end' : 'start'
-      })
+    const panelRect = tagPanelPortalRef.current?.getBoundingClientRect();
+    const next = computeAnchoredPanelPlacement(el.getBoundingClientRect(), {
+      panelWidth: panelRect?.width || TAG_PANEL_EST_W,
+      panelHeight: panelRect?.height || TAG_PANEL_EST_H,
+      align: isAddingTag ? 'end' : 'start',
+      vertical: 'below'
+    });
+    setTagPanelPos((current) =>
+      current?.top === next.top && current.left === next.left && current.maxHeight === next.maxHeight
+        ? current
+        : next
     );
   }, [addTagAnchorRef, isAddingTag]);
 
@@ -90,6 +99,17 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
       window.removeEventListener('scroll', onReposition, true);
     };
   }, [tagPanelOpen, updateTagPanelPlacement]);
+
+  useLayoutEffect(() => {
+    if (!tagPanelOpen || !tagPanelPos || !tagPanelPortalRef.current) return;
+    const panel = tagPanelPortalRef.current;
+    const anchor = (isAddingTag ? addTagAnchorRef?.current : null) ?? tagsRowRef.current;
+    const observer = new ResizeObserver(updateTagPanelPlacement);
+    observer.observe(panel);
+    if (anchor) observer.observe(anchor);
+    updateTagPanelPlacement();
+    return () => observer.disconnect();
+  }, [addTagAnchorRef, isAddingTag, tagPanelOpen, tagPanelPos, updateTagPanelPlacement]);
 
   const renderTagChip = (tag: Tag, opts?: { className?: string }) => (
     <TagChip
@@ -182,6 +202,8 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
           onApply={onSaveTag}
           onDismissOutside={onSaveTag}
           portalPlacement={tagPanelPos}
+          portalBackdrop
+          portalPanelRef={tagPanelPortalRef}
           autoFocus
           onInputKeyDown={(e) => {
             if (e.key === 'Enter') onSaveTag();

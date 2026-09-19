@@ -458,6 +458,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapChromeHoverBg = mapChromeControlHoverBackground(mapUiChromeOpacity, mapChromeTone);
   const [editingNote, setEditingNote] = useState<Partial<Note> | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [pendingPersistedEditorNoteId, setPendingPersistedEditorNoteId] = useState<string | null>(null);
   const mapNoteSaveRef = useRef<(() => Promise<void>) | null>(null);
   const compactViewport = useCompactViewport();
   const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
@@ -479,6 +480,28 @@ export const MapView: React.FC<MapViewProps> = ({
   const [noteCoordOverrides, setNoteCoordOverrides] = useState<Record<string, Coordinates>>({});
   const isMarkerDraggingRef = useRef(false);
   const ignoreNextMarkerClickRef = useRef(false);
+
+  /**
+   * 相册 / 相机的点位先完成项目写入，再用实际已存在的 Note 打开编辑器。
+   * 这样用户一落地就能补标题和正文，也不会因异步写入让编辑器误判成草稿。
+   */
+  const queuePersistedNoteEditor = useCallback((note: Note) => {
+    setPendingPersistedEditorNoteId(note.id);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingPersistedEditorNoteId) return;
+    const note = notes.find((item) => item.id === pendingPersistedEditorNoteId);
+    if (!note) return;
+
+    setPreSelectedNotes(null);
+    setSelectedNoteIds(new Set([note.id]));
+    setSelectedNoteId(note.id);
+    setEditingNote(note);
+    setIsEditorOpen(true);
+    onToggleEditor(true);
+    setPendingPersistedEditorNoteId(null);
+  }, [notes, onToggleEditor, pendingPersistedEditorNoteId]);
   const ignoreNextMapClickRef = useRef(false);
 
   useEffect(
@@ -837,7 +860,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const { handleImportFromCamera, isCameraAvailable } = useCameraImport({
     getCurrentBrowserLocation,
     mapInstance,
-    onAddNote
+    onAddNote,
+    onNoteCreated: queuePersistedNoteEditor
   });
 
   const borderSearchState = useBorderSearch({
@@ -976,12 +1000,15 @@ export const MapView: React.FC<MapViewProps> = ({
     dataImportInputRef,
     handleImageImport,
     handleConfirmImport,
-    handleCancelImport
+    handleCancelImport,
+    isConfirmingImport
   } = useImageImport({
     project,
     notes,
-    onAddNote,
     onUpdateProject,
+    onNotesCreated: (newNotes) => {
+      if (newNotes[0]) queuePersistedNoteEditor(newNotes[0]);
+    },
     onImportDialogChange,
     mapInstance
   });
@@ -1075,6 +1102,8 @@ export const MapView: React.FC<MapViewProps> = ({
           : showCreateMenu
             ? 'create'
             : null;
+  // 窄屏的新建节点已由 MapControls 的扇形菜单承载，不应再同步打开底部 sheet。
+  const toolbarSlotKind = compactViewport && mapToolbarKind === 'create' ? null : mapToolbarKind;
   const mapNoteKind: 'preview' | 'editor' | null = isEditorOpen
     ? 'editor'
     : isUIVisible && selectedNoteId
@@ -2289,7 +2318,7 @@ export const MapView: React.FC<MapViewProps> = ({
             data-allow-context-menu
             data-mapp-chrome-ui=""
             className={`fixed top-2 sm:top-4 ui-workspace-left z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 sm:gap-3 pointer-events-none ${
-              mapToolbarKind ? 'map-toolbar--sheet-open' : ''
+              toolbarSlotKind ? 'map-toolbar--sheet-open' : ''
             } ${
               isMapToolbarEditMode
                 ? 'right-2 sm:right-4 lg:right-[calc(20rem+0.75rem)]'
@@ -2319,6 +2348,8 @@ export const MapView: React.FC<MapViewProps> = ({
                     onOpenSettings={handleToggleSettings}
                     onCreateAtCurrentLocation={handleCreateAtCurrentLocation}
                     onImportFromPhotos={handleImportFromPhotos}
+                    onImportFromCamera={handleImportFromCamera}
+                    cameraAvailable={isCameraAvailable()}
                     isCreatingAtLocation={isCreatingAtLocation}
                     showLocateMenu={showLocateMenu}
                     showCreateMenu={showCreateMenu}
@@ -2326,6 +2357,7 @@ export const MapView: React.FC<MapViewProps> = ({
                     onToggleCreateMenu={handleToggleCreateMenu}
                     onCloseMenus={handleCloseLocateAndCreateMenus}
                     hostedWindow
+                    compactViewport={compactViewport}
                   />
                   <MapLayerControl
                     showPanel={showFrameLayerPanel}
@@ -2383,7 +2415,7 @@ export const MapView: React.FC<MapViewProps> = ({
               </div>
 
               <ChromeToolbarSlot
-                kind={mapToolbarKind}
+                kind={toolbarSlotKind}
                 onClose={() => closeMapChromeExcept()}
                 appearance={mapChromeTone}
                 top={mapToolbarMenuTop}
@@ -2744,6 +2776,7 @@ export const MapView: React.FC<MapViewProps> = ({
         panelChromeStyle={mapChromeSurface}
         onConfirm={handleConfirmImport}
         onCancel={handleCancelImport}
+        isConfirming={isConfirmingImport}
         showCoordinates={true}
       />
 
