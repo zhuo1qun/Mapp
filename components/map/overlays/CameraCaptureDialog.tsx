@@ -12,7 +12,6 @@ type Props = {
   onCapture: (image: Blob) => Promise<void> | void;
   /** window：独立对话框；overlay：盖在 NoteEditor 上（对标 DrawingCanvas） */
   variant?: 'window' | 'overlay';
-  title?: string;
   themeColor?: string;
   chromeSurfaceStyle?: React.CSSProperties;
   chromeAppearance?: MapChromeAppearance;
@@ -24,7 +23,6 @@ export function CameraCaptureDialog({
   onClose,
   onCapture,
   variant = 'window',
-  title = '拍照',
   themeColor = THEME_COLOR,
   chromeSurfaceStyle,
   chromeAppearance
@@ -174,10 +172,6 @@ export function CameraCaptureDialog({
       >
         <X size={20} />
       </button>
-
-      <div className="h-6 w-px bg-gray-200/80" />
-
-      <span className="px-1 text-xs font-semibold text-gray-500">{title}</span>
 
       <div className="h-6 w-px bg-gray-200/80" />
 

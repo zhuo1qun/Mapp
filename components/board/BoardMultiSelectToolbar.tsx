@@ -1,5 +1,5 @@
 import React, { CSSProperties, RefObject } from 'react';
-import { Clock, Tag as TagIcon, Trash2, Undo2, Pencil, Group, Ungroup } from 'lucide-react';
+import { Clock, Tag as TagIcon, Trash2, Undo2, Pencil, Group, Ungroup, MapPin, GitBranch } from 'lucide-react';
 
 type MultiBatchPanel = 'none' | 'tag' | 'time';
 
@@ -14,6 +14,10 @@ export type BoardMultiSelectToolbarProps = {
   onToggleBatchTagPanel: () => void;
   onToggleBatchTimePanel: () => void;
   onRunBatchDelete: () => void;
+  /** 1 = 单选（与多选同一套工具栏，文案/追踪入口不同）。 */
+  selectionCount: number;
+  onLocateOnMap?: () => void;
+  onLocateOnGraph?: () => void;
 
   canGroup?: boolean;
   canUngroup?: boolean;
@@ -29,6 +33,8 @@ export type BoardMultiSelectToolbarProps = {
   onOpenBrowseTimeFilterPanel: () => void;
   onStopToolbarEvent?: (e: React.SyntheticEvent) => void;
   editPanelNode: React.ReactNode;
+  /** 贴在包围盒下方（靠近画布顶时避免工具栏被裁切）。 */
+  placeBelow?: boolean;
 };
 
 export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (props) => {
@@ -42,6 +48,9 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
     onToggleBatchTagPanel,
     onToggleBatchTimePanel,
     onRunBatchDelete,
+    selectionCount,
+    onLocateOnMap,
+    onLocateOnGraph,
     canGroup,
     canUngroup,
     onRunGroup,
@@ -53,7 +62,8 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
     onEnterEditModeFromBrowse,
     onOpenBrowseTagFilterPanel,
     onOpenBrowseTimeFilterPanel,
-    editPanelNode
+    editPanelNode,
+    placeBelow = false
   } = props;
 
   const stopToolbarEvent = (e: React.SyntheticEvent) => {
@@ -62,14 +72,51 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
     props.onStopToolbarEvent?.(e);
   };
 
+  const isMulti = selectionCount > 1;
+  const locateButtons =
+    onLocateOnMap || onLocateOnGraph ? (
+      <>
+        {onLocateOnMap ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              stopToolbarEvent(e);
+              onLocateOnMap();
+            }}
+            onPointerDown={stopToolbarEvent}
+            className="cursor-pointer border-0 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            title="定位到地图"
+          >
+            <MapPin size={16} />
+          </button>
+        ) : null}
+        {onLocateOnGraph ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              stopToolbarEvent(e);
+              onLocateOnGraph();
+            }}
+            onPointerDown={stopToolbarEvent}
+            className="cursor-pointer border-0 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            title="定位到图谱"
+          >
+            <GitBranch size={16} />
+          </button>
+        ) : null}
+      </>
+    ) : null;
+
   return (
     <div
       data-board-batch-toolbar-root
       className="absolute right-2 z-[2101] flex flex-col items-end gap-1.5"
       style={{
-        bottom: 'calc(100% + 8px)',
+        ...(placeBelow
+          ? { top: 'calc(100% + 8px)' }
+          : { bottom: 'calc(100% + 8px)' }),
         transform: `scale(${inverseCanvasScale})`,
-        transformOrigin: 'bottom right',
+        transformOrigin: placeBelow ? 'top right' : 'bottom right',
         pointerEvents: 'auto'
       }}
     >
@@ -87,7 +134,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
               }}
               onPointerDown={stopToolbarEvent}
               className="cursor-pointer border-0 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-              title="退出多选"
+              title={isMulti ? '退出多选' : '取消选中'}
             >
               <Undo2 size={16} />
             </button>
@@ -104,7 +151,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
               style={multiBatchPanel === 'tag' ? { boxShadow: `inset 0 0 0 1px ${themeColor}` } : undefined}
-              title="批量添加标签"
+              title={isMulti ? '批量添加标签' : '添加标签'}
             >
               <TagIcon size={16} />
             </button>
@@ -121,10 +168,11 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
               style={multiBatchPanel === 'time' ? { boxShadow: `inset 0 0 0 1px ${themeColor}` } : undefined}
-              title="批量修改起止时间"
+              title={isMulti ? '批量修改起止时间' : '修改起止时间'}
             >
               <Clock size={16} />
             </button>
+            {locateButtons}
             {canGroup && (
               <button
                 type="button"
@@ -155,7 +203,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
               }}
               onPointerDown={stopToolbarEvent}
               className="cursor-pointer border-0 p-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-              title="批量删除"
+              title={isMulti ? '批量删除' : '删除'}
             >
               <Trash2 size={16} />
             </button>
@@ -170,7 +218,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
               }}
               onPointerDown={stopToolbarEvent}
               className="cursor-pointer border-0 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-              title="退出多选"
+              title={isMulti ? '退出多选' : '取消选中'}
             >
               <Undo2 size={16} />
             </button>
@@ -206,6 +254,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
             >
               <Clock size={16} />
             </button>
+            {locateButtons}
             <button
               type="button"
               onClick={(e) => {

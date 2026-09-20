@@ -1959,7 +1959,7 @@ export const MapView: React.FC<MapViewProps> = ({
   useRegisterEditInspector(isUIVisible && isMapToolbarEditMode, mapEditInspectorPanelProps);
 
   const exportStandaloneMapTab = useCallback(async () => {
-    if (!mapInstance || isUIVisible) return;
+    if (!mapInstance) return;
     try {
       const payload = await buildMapTabExportPayload(project, themeColor, mapStyleId, mapInstance, {
         pinSize,
@@ -1977,7 +1977,6 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   }, [
     mapInstance,
-    isUIVisible,
     project,
     themeColor,
     mapStyleId,
@@ -2507,6 +2506,7 @@ export const MapView: React.FC<MapViewProps> = ({
                           showTextLabels={showTextLabels}
                           onShowTextLabelsChange={setShowTextLabels}
                           graphProject={project}
+                          onExportHtml={() => void exportStandaloneMapTab()}
                           onGraphProjectPatch={
                             onUpdateProject
                               ? (patch) => void onUpdateProject({ ...project, ...patch })

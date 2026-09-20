@@ -68,6 +68,8 @@ interface SettingsPanelProps {
     image: boolean;
     onChange: (next: { primary: boolean; image: boolean }) => void;
   };
+  /** 快照窗口「导出 HTML」：与 Tab/预览态右上角导出一致 */
+  onExportHtml?: () => void;
   /** 为 false 时只渲染内容，由顶栏槽提供 ChromeWindow。 */
   shell?: boolean;
   chromeAppearance?: MapChromeAppearance;
@@ -101,6 +103,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   graphProject,
   onGraphProjectPatch,
   boardVariantToggles,
+  onExportHtml,
   shell = true,
   chromeAppearance: chromeAppearanceProp
 }) => {
@@ -521,6 +524,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               settingsContextView
             );
           }}
+          onExportHtml={onExportHtml}
           view={settingsContextView}
           currentDimensions={snapshotDimensions}
           themeColor={themeColor}

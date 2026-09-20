@@ -20,6 +20,8 @@ interface ExportResolutionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (pixelRatio: number, options: SnapshotExportOptions) => void;
+  /** 与 Tab 模式右上角导出一致；有则替换底部「取消」为「导出 HTML」。 */
+  onExportHtml?: () => void;
   view: SnapshotExportView;
   currentDimensions: { width: number; height: number };
   themeColor: string;
@@ -32,6 +34,7 @@ export const ExportResolutionDialog: React.FC<ExportResolutionDialogProps> = ({
   isOpen,
   onClose,
   onConfirm,
+  onExportHtml,
   view,
   currentDimensions,
   themeColor,
@@ -183,13 +186,18 @@ export const ExportResolutionDialog: React.FC<ExportResolutionDialogProps> = ({
         </div>
 
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="chrome-field flex-1 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 transition-colors"
-          >
-            取消
-          </button>
+          {onExportHtml ? (
+            <button
+              type="button"
+              onClick={() => {
+                onExportHtml();
+                onClose();
+              }}
+              className="chrome-field flex-1 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 transition-colors"
+            >
+              导出 HTML
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {

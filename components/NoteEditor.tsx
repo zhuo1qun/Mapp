@@ -713,7 +713,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         <CameraCaptureDialog
           open
           variant="overlay"
-          title="拍照"
           themeColor={themeColor}
           chromeAppearance={chromeAppearance}
           chromeSurfaceStyle={editorChromeStyle}

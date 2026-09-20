@@ -31,7 +31,9 @@ export const BoardBatchTimePanel: React.FC<BoardBatchTimePanelProps> = ({
     >
       <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
         <Clock size={14} className="shrink-0 text-gray-400" />
-        统一设置 {selectedCount} 个便签的起止年（留空起年则清空时间）
+        {selectedCount === 1
+          ? '设置便签的起止年（留空起年则清空时间）'
+          : `统一设置 ${selectedCount} 个便签的起止年（留空起年则清空时间）`}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <input

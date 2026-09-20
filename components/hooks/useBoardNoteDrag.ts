@@ -37,6 +37,8 @@ export interface UseBoardNoteDragArgs {
   onBrowseOpenEditor: (note: Note) => void;
   /** 浏览态长按：切入编辑模式，但保留当前画布视图。 */
   onBrowseLongPressStartEdit: (note: Note) => void;
+  /** 编辑态拖动单张便签时，与多选共用选中描边/工具栏。 */
+  onBeginSingleNoteDrag?: (noteId: string) => void;
 }
 
 /**
@@ -60,7 +62,8 @@ export function useBoardNoteDrag({
   stopAnimations,
   cacheDragRect,
   onBrowseOpenEditor,
-  onBrowseLongPressStartEdit
+  onBrowseLongPressStartEdit,
+  onBeginSingleNoteDrag
 }: UseBoardNoteDragArgs) {
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -223,6 +226,7 @@ export function useBoardNoteDrag({
         setMultiSelectDragOffset({ x: 0, y: 0 });
         setDraggingNoteId(noteId);
         setDragOffset({ x: 0, y: 0 });
+        if (!isShiftPressed) onBeginSingleNoteDrag?.(noteId);
       }
       dragPointerPosRef.current = { x: e.clientX, y: e.clientY };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -237,7 +241,9 @@ export function useBoardNoteDrag({
       selectedNoteIds,
       clearSettleFallback,
       clearLongPressTimer,
-      onBrowseLongPressStartEdit
+      onBrowseLongPressStartEdit,
+      isShiftPressed,
+      onBeginSingleNoteDrag
     ]
   );
 

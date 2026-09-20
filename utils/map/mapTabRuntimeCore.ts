@@ -4,6 +4,7 @@ import {
   DEFAULT_MAP_UI_CHROME_OPACITY,
   mapChromeTextLabelInlineCss
 } from './mapChromeStyle';
+import { buildMapNoteIconModel } from './createMapNoteIcon';
 
 export function decodeMapTabPayloadFromBase64(b64: string): MapTabExportPayload {
   const json = decodeURIComponent(escape(atob(b64)));
@@ -130,44 +131,22 @@ type LMapLike = {
   remove: () => void;
 };
 
-function mapPinSize(sliderValue: number): number {
-  return ((sliderValue - 0.5) * (1.2 - 0.2)) / (2.0 - 0.5) + 0.2;
-}
-
 function pinIconHtml(
   note: MapTabExportNote,
   themeColor: string,
   clusterCount: number | undefined,
   pinSize: number
-): { html: string; size: number; anchor: [number, number] } {
-  const isFavorite = note.isFavorite === true;
-  const mapped = mapPinSize(pinSize);
-  const scale = (isFavorite ? 2 : 1) * mapped;
-  const baseSize = 40;
-  const size = baseSize * scale;
-  const borderWidth = 3;
-  const badgeSize = 20 * scale;
-  const badgeOffset = 8 * scale;
-  const countBadge =
-    clusterCount && clusterCount > 1
-      ? `<div style="position:absolute;top:-${badgeOffset}px;right:-${badgeOffset}px;width:${badgeSize}px;height:${badgeSize}px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.2);z-index:10;border:2px solid ${themeColor};"><span style="color:#000;font-size:${12 * scale}px;font-weight:bold;line-height:1;">${clusterCount}</span></div>`
-      : '';
-
-  let content = '';
-  if (note.images && note.images.length > 0) {
-    const src = escapeHtml(note.images[0]);
-    content = `<div style="position:absolute;inset:-25%;overflow:hidden;transform:rotate(45deg);transform-origin:center;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;transform:scale(1.5);transform-origin:center;" alt="" /></div>`;
-  } else if (note.sketch) {
-    const src = escapeHtml(note.sketch);
-    content = `<div style="position:absolute;inset:-25%;overflow:hidden;transform:rotate(45deg);transform-origin:center;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;transform:scale(1.5);transform-origin:center;" alt="" /></div>`;
-  } else if (note.emoji) {
-    const emojiSize = 20 * scale;
-    content = `<span style="transform:rotate(45deg);font-size:${emojiSize}px;line-height:1;z-index:1;position:relative;">${escapeHtml(note.emoji)}</span>`;
-  }
-
-  const html = `<div style="position:relative;background-color:${themeColor};width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);border:${borderWidth}px solid ${themeColor};overflow:hidden;">${content}</div>${countBadge}`;
-
-  return { html, size, anchor: [size / 2, size] };
+): { html: string; size: [number, number]; anchor: [number, number] } {
+  const model = buildMapNoteIconModel(note, {
+    themeColor,
+    clusterCount,
+    pinSize
+  });
+  return {
+    html: model.html,
+    size: model.size,
+    anchor: model.anchor
+  };
 }
 
 type MarkedLike = { parse: (md: string) => string } | null;
@@ -349,7 +328,7 @@ export function runMapTabStandalone(L: any, marked: MarkedLike, payload: MapTabE
         const note = cl.notes[0];
         const { html, size, anchor } = pinIconHtml(note, payload.themeColor, undefined, payload.pinSize);
         const m = L.marker(cl.position, {
-          icon: L.divIcon({ className: 'custom-icon', html, iconSize: [size, size], iconAnchor: anchor })
+          icon: L.divIcon({ className: 'custom-icon', html, iconSize: size, iconAnchor: anchor })
         });
         m.on('mouseover', () => {
           state.hoveredNoteId = note.id;
@@ -377,7 +356,7 @@ export function runMapTabStandalone(L: any, marked: MarkedLike, payload: MapTabE
         const note = cl.notes[0];
         const { html, size, anchor } = pinIconHtml(note, payload.themeColor, cl.notes.length, payload.pinSize);
         const m = L.marker(cl.position, {
-          icon: L.divIcon({ className: 'custom-icon', html, iconSize: [size, size], iconAnchor: anchor })
+          icon: L.divIcon({ className: 'custom-icon', html, iconSize: size, iconAnchor: anchor })
         });
         m.on('click', (e: { originalEvent?: Event }) => {
           e.originalEvent?.stopPropagation?.();

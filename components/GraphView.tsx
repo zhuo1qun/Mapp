@@ -2031,6 +2031,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
             currentMapStyle={mapStyleId}
             onMapStyleChange={onMapStyleChange ?? (() => {})}
             graphProject={project}
+            onExportHtml={exportStandaloneHtml}
             onGraphProjectPatch={
               onUpdateProject ? (patch) => void onUpdateProject(projectId, patch) : undefined
             }

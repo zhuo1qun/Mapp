@@ -62,10 +62,21 @@ export function useBorderSearch({
         bounded: false
       });
 
-      if (results.length === 0) {
-        setBorderSearchError('No matching results found');
+      // “画边界”只能使用能返回几何轮廓的 relation / way。Nominatim 的
+      // settlement 结果里仍可能混入 node；不能让它在此模式下变成建点操作。
+      const drawableResults =
+        borderSearchMode === 'region'
+          ? results.filter((result) => result.osm_type !== 'node')
+          : results;
+
+      if (drawableResults.length === 0) {
+        setBorderSearchError(
+          borderSearchMode === 'region'
+            ? '未找到可绘制边界的结果；请选择区域、道路或行政区。'
+            : 'No matching results found'
+        );
       } else {
-        setBorderSearchResults(results);
+        setBorderSearchResults(drawableResults);
       }
     } catch (err) {
       console.error('Search failed:', err);
@@ -80,7 +91,7 @@ export function useBorderSearch({
       setIsSearchingBorder(true);
       setBorderSearchError(null);
       try {
-        if (borderSearchMode === 'place' || result.osm_type === 'node') {
+        if (borderSearchMode === 'place') {
           const lat = parseFloat(result.lat);
           const lon = parseFloat(result.lon);
           const placeName = result.display_name.split(',')[0];
@@ -97,21 +108,31 @@ export function useBorderSearch({
           if (!isDuplicate) {
             setPendingPlaceNote({ lat, lng: lon, name: placeName });
           }
-        } else {
-          const geojson = await fetchBoundaryGeoJSON(result.osm_id, result.osm_type);
-          if (!geojson) {
-            setBorderSearchError('Failed to fetch details');
-            return;
-          }
-          if (setBorderGeoJSON) {
-            setBorderGeoJSON(geojson);
-          }
+          if (setShowBorderPanel) setShowBorderPanel(false);
+          setBorderSearchResults([]);
+          setBorderSearchQuery('');
+          return;
+        }
 
-          if (mapInstance) {
-            const L = await import('leaflet');
-            const layer = L.default.geoJSON(geojson as any);
-            mapInstance.fitBounds(layer.getBounds(), { padding: [20, 20], duration: 1.5 });
-          }
+        // 结果列表已过滤 node；这里保留保护，避免异步状态或未来调用方误把点位传入。
+        if (result.osm_type === 'node') {
+          setBorderSearchError('该结果是地点点位，不能绘制边界。请改用“找地点”。');
+          return;
+        }
+
+        const geojson = await fetchBoundaryGeoJSON(result.osm_id, result.osm_type);
+        if (!geojson) {
+          setBorderSearchError('Failed to fetch details');
+          return;
+        }
+        if (setBorderGeoJSON) {
+          setBorderGeoJSON(geojson);
+        }
+
+        if (mapInstance) {
+          const L = await import('leaflet');
+          const layer = L.default.geoJSON(geojson as any);
+          mapInstance.fitBounds(layer.getBounds(), { padding: [20, 20], duration: 1.5 });
         }
 
         if (setShowBorderPanel) setShowBorderPanel(false);

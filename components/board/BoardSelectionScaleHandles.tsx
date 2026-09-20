@@ -17,6 +17,8 @@ type BoardSelectionScaleHandlesProps = {
   themeColor: string;
   /** 画布缩放，手柄屏幕尺寸大致恒定 */
   canvasScale: number;
+  /** 悬停提示：多选聚散 / 图片缩放等 */
+  handleTitle?: string;
   onResizeStart: (
     event: ReactPointerEvent<HTMLDivElement>,
     corner: SelectionScaleCorner
@@ -26,6 +28,7 @@ type BoardSelectionScaleHandlesProps = {
 export function BoardSelectionScaleHandles({
   themeColor,
   canvasScale,
+  handleTitle,
   onResizeStart
 }: BoardSelectionScaleHandlesProps) {
   const inv = 1 / Math.max(0.05, canvasScale);
@@ -39,7 +42,8 @@ export function BoardSelectionScaleHandles({
     borderRadius: 3,
     boxShadow: '0 1px 4px rgba(15,23,42,0.28)',
     transform: `scale(${inv})`,
-    transformOrigin: 'center center'
+    transformOrigin: 'center center',
+    touchAction: 'none'
   };
 
   return (
@@ -48,6 +52,7 @@ export function BoardSelectionScaleHandles({
         <div
           key={corner}
           data-mapp-selection-scale-handle={corner}
+          title={handleTitle}
           className={`absolute z-[60] pointer-events-auto ${className}`}
           style={{ ...handleStyle, left, top }}
           onPointerDown={(event) => {

@@ -9,7 +9,7 @@ import {
 } from '../utils/layer/unifiedNoteLayer';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { NoteEditor } from './NoteEditor';
-import { X, Check, Minus, Locate, Settings } from 'lucide-react';
+import { Check, Minus, Settings } from 'lucide-react';
 import { generateId, fileToBase64, parseNoteContent } from '../utils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
 import { readImageGpsMetadata } from '../utils/media/imageFileProcessing';
@@ -75,6 +75,7 @@ import {
   snapshotSelectionPoses,
   type SelectionScaleCorner
 } from '../utils/board/boardSelectionScale';
+import { resizeBoardImageFromPointer } from '../utils/board/boardImageResize';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { LayerToolbarIcon } from './ui/LayerToolbarIcon';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
@@ -876,6 +877,33 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   }, [frames]);
   const [localResizingImageSize, setLocalResizingImageSize] = useState<{ id: string; x: number; y: number; width: number; height: number } | null>(null);
+  const imageResizeSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!localResizingImageSize || interactionKind === 'resizing-image') return;
+    const note = notes.find((n) => n.id === localResizingImageSize.id);
+    if (
+      note &&
+      note.boardX === localResizingImageSize.x &&
+      note.boardY === localResizingImageSize.y &&
+      (note.imageWidth || 256) === localResizingImageSize.width &&
+      (note.imageHeight || 256) === localResizingImageSize.height
+    ) {
+      if (imageResizeSettleTimerRef.current) {
+        clearTimeout(imageResizeSettleTimerRef.current);
+        imageResizeSettleTimerRef.current = null;
+      }
+      setLocalResizingImageSize(null);
+    }
+  }, [interactionKind, localResizingImageSize, notes]);
+
+  useEffect(() => {
+    return () => {
+      if (imageResizeSettleTimerRef.current) {
+        clearTimeout(imageResizeSettleTimerRef.current);
+      }
+    };
+  }, []);
   /** 多选包围盒缩放预览：id → 新 board 坐标（松手后保留至 notes 对齐） */
   const [selectionScalePreview, setSelectionScalePreview] = useState<Map<
     string,
@@ -1027,7 +1055,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     stopAnimations,
     cacheDragRect,
     onBrowseOpenEditor: openBoardNoteEditor,
-    onBrowseLongPressStartEdit: enterEditFromTouchLongPress
+    onBrowseLongPressStartEdit: enterEditFromTouchLongPress,
+    onBeginSingleNoteDrag: (noteId) => {
+      setSelectedNoteId(noteId);
+      setSelectedNoteIds(new Set([noteId]));
+      setSelectedConnectionId(null);
+      setSelectedFrameId(null);
+    }
   });
 
   const { handleNoteClick, handleNoteDoubleClick, clearDeferredClick } = useBoardNoteInteraction({
@@ -2133,6 +2167,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       setDrawingFrameEnd(null);
       setLocalDraggingFramePos(null);
       setLocalResizingFrameSize(null);
+      if (imageResizeSettleTimerRef.current) {
+        clearTimeout(imageResizeSettleTimerRef.current);
+        imageResizeSettleTimerRef.current = null;
+      }
       setLocalResizingImageSize(null);
       clearSelectionScalePreview();
       dragRectRef.current = null;
@@ -2527,47 +2565,21 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         case 'resizing-image': {
           const boardPoint = resolveBoardPoint();
           if (!boardPoint) return;
-          const worldX = boardPoint.x;
-          const worldY = boardPoint.y;
-          const centerX = activeInteraction.startBoardX + activeInteraction.startWidth / 2;
-          const centerY = activeInteraction.startBoardY + activeInteraction.startHeight / 2;
-
-          let distanceX = 0;
-          let distanceY = 0;
-          switch (activeInteraction.corner) {
-            case 'tl':
-              distanceX = centerX - worldX;
-              distanceY = centerY - worldY;
-              break;
-            case 'tr':
-              distanceX = worldX - centerX;
-              distanceY = centerY - worldY;
-              break;
-            case 'bl':
-              distanceX = centerX - worldX;
-              distanceY = worldY - centerY;
-              break;
-            case 'br':
-              distanceX = worldX - centerX;
-              distanceY = worldY - centerY;
-              break;
-          }
-
-          const distance = Math.max(Math.abs(distanceX), Math.abs(distanceY));
-          const scale =
-            distance / (Math.min(activeInteraction.startWidth, activeInteraction.startHeight) / 2);
-          const newWidth = Math.max(50, activeInteraction.startWidth * scale);
-          const newHeight = Math.max(50, activeInteraction.startHeight * scale);
-          const newBoardX = centerX - newWidth / 2;
-          const newBoardY = centerY - newHeight / 2;
+          const next = resizeBoardImageFromPointer({
+            startX: activeInteraction.startBoardX,
+            startY: activeInteraction.startBoardY,
+            startWidth: activeInteraction.startWidth,
+            startHeight: activeInteraction.startHeight,
+            corner: activeInteraction.corner,
+            pointerX: boardPoint.x,
+            pointerY: boardPoint.y,
+            lockAspect: !(e.shiftKey || isShiftPressed)
+          });
 
           if (notes.some((n) => n.id === activeInteraction.id)) {
             setLocalResizingImageSize({
               id: activeInteraction.id,
-              x: newBoardX,
-              y: newBoardY,
-              width: newWidth,
-              height: newHeight
+              ...next
             });
           }
           return;
@@ -2734,9 +2746,17 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                       imageHeight: localResizingImageSize.height
                   });
               }
+              if (imageResizeSettleTimerRef.current) {
+                clearTimeout(imageResizeSettleTimerRef.current);
+              }
+              imageResizeSettleTimerRef.current = setTimeout(() => {
+                setLocalResizingImageSize(null);
+                imageResizeSettleTimerRef.current = null;
+              }, 500);
+          } else {
+              setLocalResizingImageSize(null);
           }
           resetInteraction(e.pointerId);
-          setLocalResizingImageSize(null);
           dragRectRef.current = null;
           releasePointer(e.pointerId);
           return;
@@ -2968,20 +2988,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   };
 
-  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
-      e.stopPropagation();
-      e.preventDefault();
-      // Reset blank click count to prevent exiting edit mode
-      
-      // If multiple notes are selected, delete all selected notes
-      if (selectedNoteIds.size > 1 && selectedNoteIds.has(id)) {
-        deleteBoardNotesWithExit(Array.from(selectedNoteIds));
-      } else {
-        // Single note deletion
-        deleteBoardNotesWithExit([id]);
-      }
-  };
-
   const handleFrameSelect = useCallback(
     (frameId: string) => {
       if (isZooming || !workspaceEditMode) return;
@@ -3098,6 +3104,50 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     [
       beginScalingSelection,
       capturePointer,
+      notes,
+      selectedNoteIds,
+      stopAnimations,
+      workspaceEditMode
+    ]
+  );
+
+  const handleSelectionChromeHandleStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>, corner: SelectionScaleCorner) => {
+      if (selectedNoteIds.size > 1) {
+        handleSelectionScaleStart(event, corner);
+        return;
+      }
+      event.stopPropagation();
+      event.preventDefault();
+      if (!workspaceEditMode || selectedNoteIds.size !== 1 || isZoomingRef.current) return;
+      const note = notes.find((n) => selectedNoteIds.has(n.id));
+      if (!note || !noteRendersAsBoardSticker(note)) return;
+      stopAnimations();
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      dragRectRef.current = rect;
+      const preview = localResizingImageSize?.id === note.id ? localResizingImageSize : null;
+      const { width, height } = boardNoteDimensions(note);
+      beginResizingImage(event.pointerId, {
+        id: note.id,
+        corner,
+        startWidth: preview?.width ?? width,
+        startHeight: preview?.height ?? height,
+        startBoardX: preview?.x ?? note.boardX,
+        startBoardY: preview?.y ?? note.boardY
+      });
+      capturePointer(event.pointerId);
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [
+      beginResizingImage,
+      capturePointer,
+      handleSelectionScaleStart,
+      localResizingImageSize,
       notes,
       selectedNoteIds,
       stopAnimations,
@@ -3643,12 +3693,16 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                     ? 'board-note-motion--enter'
                     : '';
               const scalePreviewPos = selectionScalePreview?.get(note.id);
+              const imageResizePreview =
+                localResizingImageSize?.id === note.id ? localResizingImageSize : null;
               const currentX =
+                imageResizePreview?.x ??
                 scalePreviewPos?.boardX ??
                 note.boardX +
                   (isDragging ? dragOffset.x : 0) +
                   (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.x : 0);
               const currentY =
+                imageResizePreview?.y ??
                 scalePreviewPos?.boardY ??
                 note.boardY +
                   (isDragging ? dragOffset.y : 0) +
@@ -3658,7 +3712,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               const containingFrame = frames.find(frame => isNoteInFrame(note, frame));
               const isInFrame = !!containingFrame;
 
-              const { width: noteWidth, height: noteHeight } = boardNoteDimensions(note);
+              const { width: baseNoteWidth, height: baseNoteHeight } = boardNoteDimensions(note);
+              const noteWidth = imageResizePreview?.width ?? baseNoteWidth;
+              const noteHeight = imageResizePreview?.height ?? baseNoteHeight;
 
               let clampClass = '';
               if (!isImage) {
@@ -3689,7 +3745,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                         transform: `scale(${standardSizeScale})`,
                         transformOrigin: 'center',
                   }}
-                  className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
+                  className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'} ${imageResizePreview ? 'transition-none' : ''}`}
                     onPointerDown={(e) => handleNotePointerDown(e, note.id, note)}
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={(e) => handleNotePointerUp(e, note)}
@@ -3704,80 +3760,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   }}
                   onDoubleClick={(e) => handleNoteDoubleClick(e, note)}
                 >
-                  {workspaceEditMode && (
-                      <>
-                      <button 
-                        onClick={(e) => handleDeleteClick(e, note.id)}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        type="button"
-                        className="absolute -top-3 -right-3 z-50 bg-red-500 text-white rounded-full p-1.5 shadow-md opacity-0 pointer-events-none transition-opacity transition-transform hover:scale-110 group-hover:opacity-100 group-hover:pointer-events-auto"
-                      >
-                        <X size={14} />
-                      </button>
-                        {/* Resize handles for image notes - 仅单选；多选改用包围盒聚散手柄 */}
-                        {(selectedNoteId === note.id || selectedNoteIds.has(note.id)) &&
-                          selectedNoteIds.size <= 1 && (
-                          <>
-                            {(['tl', 'tr', 'bl', 'br'] as const).map(corner => {
-                              const width = noteWidth;
-                              const height = noteHeight;
-                              
-                              let left = 0, top = 0;
-                              switch (corner) {
-                                case 'tl':
-                                  left = 0;
-                                  top = 0;
-                                  break;
-                                case 'tr':
-                                  left = width;
-                                  top = 0;
-                                  break;
-                                case 'bl':
-                                  left = 0;
-                                  top = height;
-                                  break;
-                                case 'br':
-                                  left = width;
-                                  top = height;
-                                  break;
-                              }
-                              
-                              return (
-                                <div
-                                  key={corner}
-                                  className="absolute z-50 w-4 h-4 -translate-x-1/2 -translate-y-1/2 border-2 border-white rounded-full shadow-lg cursor-nwse-resize transition-transform pointer-events-auto hover:scale-125"
-                            style={{ 
-                                    backgroundColor: themeColor,
-                                    left: `${left}px`, 
-                                    top: `${top}px`
-                                  }}
-                                  onPointerDown={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    const rect = containerRef.current?.getBoundingClientRect();
-                                    if (!rect) return;
-                                    dragRectRef.current = rect;
-                                    beginResizingImage(e.pointerId, {
-                                      id: note.id,
-                                      corner,
-                                      startWidth: noteWidth,
-                                      startHeight: noteHeight,
-                                      startBoardX: note.boardX,
-                                      startBoardY: note.boardY
-                                    });
-                                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                                  }}
-                                />
-                              );
-                            })}
-                          </>
-                        )}
-                      </>
-                    )}
                     <div 
-                        className={`w-full h-full flex flex-col overflow-visible group rounded-sm transition-shadow ${isDragging ? 'ring-4' : isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
+                        className={`w-full h-full flex flex-col overflow-visible group rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
                             style={{ 
-                            boxShadow: isDragging ? `0 0 0 4px ${themeColor}` : undefined,
                             backgroundColor: 'transparent'
                         }}
                     >
@@ -3838,24 +3823,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   }}
                   onDoubleClick={(e) => handleNoteDoubleClick(e, note)}
                 >
-                  {workspaceEditMode && (
-                      <>
-                      <button 
-                        onClick={(e) => handleDeleteClick(e, note.id)}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        type="button"
-                        className="absolute -top-3 -right-3 z-50 bg-red-500 text-white rounded-full p-1.5 shadow-md opacity-0 pointer-events-none transition-opacity transition-transform hover:scale-110 group-hover:opacity-100 group-hover:pointer-events-auto"
-                      >
-                        <X size={14} />
-                      </button>
-                        
-                      </>
-                  )}
 
                   <div 
-                          className={`w-full h-full shadow-xl flex flex-col overflow-hidden group rounded-sm transition-shadow ${isDragging ? 'shadow-2xl ring-4' : isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
+                          className={`w-full h-full shadow-xl flex flex-col overflow-hidden group rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
                           style={{
-                              boxShadow: isDragging ? `0 0 0 4px ${themeColor}` : undefined,
                               transform: `rotate(${(parseInt(note.id.slice(-2), 36) % 6) - 3}deg)`,
                               backgroundColor: boardCardBackground
                           }}
@@ -3925,30 +3896,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                                                 <span key={t.id} className="flex-shrink-0 h-6 px-2.5 rounded-full text-xs font-bold text-white shadow-sm flex items-center gap-1" style={{ backgroundColor: t.color }}>{t.label}</span>
                                         ))}
                                     </div>
-                                        {note.coords && note.coords.lat !== 0 && note.coords.lng !== 0 && onSwitchToMapView && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onSwitchToMapView(note.coords);
-                                                }}
-                                                className="p-1.5 rounded-full bg-white/80 hover:bg-white shadow-sm transition-colors opacity-0 group-hover:opacity-100 pointer-events-auto"
-                                                title="定位到地图"
-                                            >
-                                                <Locate size={14} className="text-gray-700" />
-                                            </button>
-                                        )}
-                                        {onSwitchToGraphView && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onSwitchToGraphView(note.id);
-                                                }}
-                                                className="p-1.5 rounded-full bg-white/80 hover:bg-white shadow-sm transition-colors opacity-0 group-hover:opacity-100 pointer-events-auto"
-                                                title="定位到图谱"
-                                            >
-                                                <Locate size={14} className="text-gray-700" />
-                                            </button>
-                                        )}
                                     </div>
                               </div>
                           </div>
@@ -3957,22 +3904,32 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               );
           })}
 
-          {/* Multi-select bounding box（编辑 / 非编辑 + Shift 多选共用） */}
-          {selectedNoteIds.size > 1 && (() => {
+          {/* 选中包围盒：单选与多选同一套虚线描边 + 工具栏（编辑 / 浏览 Shift 共用） */}
+          {selectedNoteIds.size >= 1 && (() => {
             const selectedNotes = notes.filter(n => selectedNoteIds.has(n.id));
             if (selectedNotes.length === 0) return null;
             
             // Calculate bounding box
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             selectedNotes.forEach(note => {
-              const { width: noteWidth, height: noteHeight } = boardNoteDimensions(note);
+              const imageResizePreview =
+                localResizingImageSize?.id === note.id ? localResizingImageSize : null;
+              const { width: baseNoteWidth, height: baseNoteHeight } = boardNoteDimensions(note);
+              const noteWidth = imageResizePreview?.width ?? baseNoteWidth;
+              const noteHeight = imageResizePreview?.height ?? baseNoteHeight;
               const scalePreviewPos = selectionScalePreview?.get(note.id);
-              const noteX =
-                scalePreviewPos?.boardX ??
-                note.boardX + (isMultiSelectDragging ? multiSelectDragOffset.x : 0);
-              const noteY =
-                scalePreviewPos?.boardY ??
-                note.boardY + (isMultiSelectDragging ? multiSelectDragOffset.y : 0);
+              const dragDx = isMultiSelectDragging
+                ? multiSelectDragOffset.x
+                : draggingNoteId === note.id
+                  ? dragOffset.x
+                  : 0;
+              const dragDy = isMultiSelectDragging
+                ? multiSelectDragOffset.y
+                : draggingNoteId === note.id
+                  ? dragOffset.y
+                  : 0;
+              const noteX = imageResizePreview?.x ?? scalePreviewPos?.boardX ?? note.boardX + dragDx;
+              const noteY = imageResizePreview?.y ?? scalePreviewPos?.boardY ?? note.boardY + dragDy;
               
               minX = Math.min(minX, noteX);
               minY = Math.min(minY, noteY);
@@ -4059,6 +4016,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               const idsToDelete = Array.from(selectedNoteIds);
               if (idsToDelete.length === 0) return;
               if (
+                idsToDelete.length > 1 &&
                 !confirm(
                   `确定删除已选中的 ${idsToDelete.length} 个便签吗？\n此操作无法撤回。`
                 )
@@ -4127,11 +4085,19 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   pointerEvents: 'none',
                 }}
               >
-                {workspaceEditMode ? (
+                {workspaceEditMode &&
+                (selectedNoteIds.size > 1 ||
+                  (selectedNotes.length === 1 &&
+                    noteRendersAsBoardSticker(selectedNotes[0]))) ? (
                   <BoardSelectionScaleHandles
                     themeColor={themeColor}
                     canvasScale={transform.scale}
-                    onResizeStart={handleSelectionScaleStart}
+                    handleTitle={
+                      selectedNoteIds.size > 1
+                        ? '拖动以聚散选中卡片'
+                        : '拖动缩放，按住 Shift 可自由变形'
+                    }
+                    onResizeStart={handleSelectionChromeHandleStart}
                   />
                 ) : null}
                 <BoardMultiSelectToolbar
@@ -4139,6 +4105,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   panelChromeStyle={panelChromeStyle}
                   inverseCanvasScale={1 / transform.scale}
                   isEditMode={workspaceEditMode}
+                  placeBelow={minY - padding < 80 / Math.max(0.05, transform.scale)}
                   multiBatchPanel={multiBatchPanel}
                   onExitMultiSelectToolbar={exitMultiSelectToolbar}
                   onToggleBatchTagPanel={() =>
@@ -4148,6 +4115,18 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                     setMultiBatchPanel((p) => (p === 'time' ? 'none' : 'time'))
                   }
                   onRunBatchDelete={runBatchDelete}
+                  selectionCount={selectedNoteIds.size}
+                  onLocateOnMap={(() => {
+                    if (selectedNotes.length !== 1 || !onSwitchToMapView) return undefined;
+                    const n = selectedNotes[0];
+                    if (!n.coords || (n.coords.lat === 0 && n.coords.lng === 0)) return undefined;
+                    return () => onSwitchToMapView(n.coords);
+                  })()}
+                  onLocateOnGraph={
+                    selectedNotes.length === 1 && onSwitchToGraphView
+                      ? () => onSwitchToGraphView(selectedNotes[0].id)
+                      : undefined
+                  }
                   canGroup={canGroup}
                   canUngroup={canUngroup}
                   onRunGroup={runGroupSelected}
@@ -4209,7 +4188,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                         <TagAddPanel
                           themeColor={themeColor}
                           panelChromeStyle={panelChromeStyle}
-                          title={`为 ${selectedNoteIds.size} 个便签添加标签`}
+                          title={
+                            selectedNoteIds.size === 1
+                              ? '为便签添加标签'
+                              : `为 ${selectedNoteIds.size} 个便签添加标签`
+                          }
                           label={batchTagLabel}
                           onLabelChange={setBatchTagLabel}
                           selectedColor={TAG_COLORS[batchTagColorIndex % TAG_COLORS.length]}
