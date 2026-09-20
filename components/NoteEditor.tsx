@@ -4,6 +4,7 @@ import { THEME_COLOR } from '../constants';
 import { generateId, parseNoteContent } from '../utils';
 import { buildEditorModel, fromEditorModel } from '../utils/note/editorModel';
 import { DrawingCanvas } from './DrawingCanvas';
+import { CameraCaptureDialog } from './map/overlays/CameraCaptureDialog';
 import { useTiptapEditor } from './hooks/useTiptapEditor';
 import { useNoteState } from './hooks/useNoteState';
 import { useMediaHandler } from './hooks/useMediaHandler';
@@ -13,7 +14,8 @@ import { ContentSection } from './note-editor/ContentSection';
 import { PropertySection } from './note-editor/PropertySection';
 import { MediaSection } from './note-editor/MediaSection';
 import { MetadataSection } from './note-editor/MetadataSection';
-import { Camera, PenTool, Minus, Smile } from 'lucide-react';
+import { Camera, Image as ImageIcon, PenTool, Minus, Smile } from 'lucide-react';
+import { blobToDataUrl } from '../utils/persistence/imageAssetStore';
 import { EmojiPicker } from './note-editor/EmojiPicker';
 import {
   NOTE_EDITOR_ADD_PILL_ACTIVE,
@@ -67,6 +69,11 @@ interface NoteEditorProps {
   onCanvasMediaDetailOpenChange?: (open: boolean) => void;
   /** 为 false 时只渲染内容，由地图便签槽提供 ChromeWindow。 */
   shell?: boolean;
+  /**
+   * 打开编辑器时自动进入拍照取景（对标涂鸦 overlay）。
+   * 用于「拍照新建点位」：先落临时图钉再开编辑器拍照挂媒体。
+   */
+  autoOpenCamera?: boolean;
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -88,7 +95,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   animationAnchor,
   presentation = 'modal',
   onCanvasMediaDetailOpenChange,
-  shell = true
+  shell = true,
+  autoOpenCamera = false
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const isCanvasWindow = presentation === 'canvas-window';
@@ -181,6 +189,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     imageRefs,
     sketch,
     appendSketch,
+    appendDisplayImages,
     isProcessingImages,
     isResolvingMedia,
     handleImageUpload,
@@ -208,6 +217,25 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   richPasteHandlerRef.current = handlePaste;
 
   const [isSketching, setIsSketching] = useState(false);
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+  const mediaOverlayActive = isSketching || isCapturingPhoto;
+  const autoCameraConsumedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsSketching(false);
+      setIsCapturingPhoto(false);
+      autoCameraConsumedRef.current = false;
+      return;
+    }
+    // 拍照新建：编辑器打开后只自动进入一次取景，关掉后不反复弹出
+    if (autoOpenCamera && !autoCameraConsumedRef.current) {
+      autoCameraConsumedRef.current = true;
+      setIsSketching(false);
+      setIsCapturingPhoto(true);
+    }
+  }, [isOpen, autoOpenCamera]);
+
   const [lassoIndex, setLassoIndex] = useState<number | null>(null);
   const [lassoSourceSrc, setLassoSourceSrc] = useState<string | null>(null);
   const [cropBusy, setCropBusy] = useState(false);
@@ -578,15 +606,29 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         title="添加图片"
       >
         <NoteEditorAddPillLabel>+ 图片</NoteEditorAddPillLabel>
+        <ImageIcon size={14} strokeWidth={2} className="shrink-0" aria-hidden />
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          dismissOverlays();
+          setIsSketching(false);
+          setIsCapturingPhoto(true);
+        }}
+        className={`${NOTE_EDITOR_ADD_PILL_CLASS} ${isCapturingPhoto ? NOTE_EDITOR_ADD_PILL_ACTIVE : NOTE_EDITOR_ADD_PILL_IDLE}`}
+        title="拍照"
+      >
+        <NoteEditorAddPillLabel>+ 拍照</NoteEditorAddPillLabel>
         <Camera size={14} strokeWidth={2} className="shrink-0" aria-hidden />
       </button>
       <button
         type="button"
         onClick={() => {
           dismissOverlays();
+          setIsCapturingPhoto(false);
           setIsSketching(true);
         }}
-        className={`${NOTE_EDITOR_ADD_PILL_CLASS} ${NOTE_EDITOR_ADD_PILL_IDLE}`}
+        className={`${NOTE_EDITOR_ADD_PILL_CLASS} ${isSketching ? NOTE_EDITOR_ADD_PILL_ACTIVE : NOTE_EDITOR_ADD_PILL_IDLE}`}
         title="添加涂鸦"
       >
         <NoteEditorAddPillLabel>+ 涂鸦</NoteEditorAddPillLabel>
@@ -655,6 +697,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         <div className="absolute inset-0 z-50" onPointerDown={(e) => e.stopPropagation()}>
           <DrawingCanvas
             backgroundColor={color}
+            themeColor={themeColor}
+            chromeAppearance={chromeAppearance}
+            chromeSurfaceStyle={editorChromeStyle}
             onSave={(data) => {
               if (data && data !== '') appendSketch(data);
               setIsSketching(false);
@@ -664,7 +709,27 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         </div>
       ) : null}
 
-      <div className={`flex flex-col flex-1 h-full min-h-0 ${isSketching ? 'invisible' : ''}`} style={{ zIndex: 10 }}>
+      {isCapturingPhoto ? (
+        <CameraCaptureDialog
+          open
+          variant="overlay"
+          title="拍照"
+          themeColor={themeColor}
+          chromeAppearance={chromeAppearance}
+          chromeSurfaceStyle={editorChromeStyle}
+          onClose={() => setIsCapturingPhoto(false)}
+          onCapture={async (blob) => {
+            const dataUrl = await blobToDataUrl(blob);
+            appendDisplayImages([dataUrl]);
+            setIsCapturingPhoto(false);
+          }}
+        />
+      ) : null}
+
+      <div
+        className={`flex flex-col flex-1 h-full min-h-0 ${mediaOverlayActive ? 'invisible' : ''}`}
+        style={{ zIndex: 10 }}
+      >
         <NoteHeader
           themeColor={themeColor}
           title={displayTitle}
@@ -879,7 +944,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             isCanvasWindow
               ? 'w-full max-w-full max-h-[calc(100dvh-8rem)]'
               : 'w-[500px] max-w-[min(95%,calc(100%-2rem))] max-h-[90vh] max-h-[90dvh]'
-          } flex flex-col relative transition-colors duration-300 min-h-[300px] ${isSketching ? 'min-h-[500px]' : ''}`}
+          } flex flex-col relative transition-colors duration-300 min-h-[300px] ${mediaOverlayActive ? 'min-h-[500px]' : ''}`}
           style={{
             ...editorChromeStyle,
             overflow: 'hidden',

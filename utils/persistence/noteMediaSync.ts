@@ -131,6 +131,15 @@ export function syncNoteLegacyFromMedia(note: Note): Note {
 
 /** 确保 media 存在并与 legacy 双向一致（保存/加载入口） */
 export function ensureNoteMediaSynced(note: Note): Note {
+  // `saveProject` normalizes a project before it migrates inline image data to
+  // IndexedDB. At that point a camera/photo import legitimately still carries
+  // `data:image/...` values. Converting it through media[] first would retain
+  // only asset ids and silently erase those pixels before migration can save
+  // them. Keep the inline payload intact until `migrateNoteImages` replaces it
+  // with an asset id.
+  if ((note.images || []).some((image) => typeof image === 'string' && image.startsWith('data:image/'))) {
+    return { ...note };
+  }
   const withMedia = syncNoteMediaFromLegacy(note);
   const synced = syncNoteLegacyFromMedia(withMedia);
   // 首项裁剪贴纸误标为 image 时恢复 standard，保留 mapping 点位

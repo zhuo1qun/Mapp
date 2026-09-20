@@ -2061,63 +2061,59 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     {
                       id: 'mapping',
                       label: (
-                        <span className="flex items-center gap-1.5">
-                          <MapIcon size={14} /> Mapping
+                        <span className="flex flex-col items-center leading-tight">
+                          <span className="flex items-center gap-1.5">
+                            <MapIcon size={14} /> Mapping
+                          </span>
+                          {newProjectKind === 'mapping' ? (
+                            <span className="mt-0.5 text-[9px] font-medium text-gray-500">地图 · 看板 · 表格</span>
+                          ) : null}
                         </span>
                       )
                     },
                     {
                       id: 'graph',
                       label: (
-                        <span className="flex items-center gap-1.5">
-                          <GitBranch size={14} /> Graph
+                        <span className="flex flex-col items-center leading-tight">
+                          <span className="flex items-center gap-1.5">
+                            <GitBranch size={14} /> Graph
+                          </span>
+                          {newProjectKind === 'graph' ? (
+                            <span className="mt-0.5 text-[9px] font-medium text-gray-500">图谱 · 看板 · 表格</span>
+                          ) : null}
                         </span>
                       )
                     }
                   ]}
                 />
-                <p className="mt-1 text-center text-[11px] leading-snug text-gray-400">
-                  {newProjectKind === 'graph' ? '图谱 · 看板 · 表格' : '地图 · 看板 · 表格'}
-                </p>
               </div>
             </div>
 
-            <div>
-              <input
-                ref={newProjectFileInputRef}
-                type="file"
-                accept=".json,application/json"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  closeCreateDialog();
-                  void handleImportProject(file, { merge: false });
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => newProjectFileInputRef.current?.click()}
-                className={`chrome-field flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-2 text-xs font-medium transition-colors ${
-                  isCreateFileDragging
-                    ? 'border-transparent text-theme-chrome-fg'
-                    : 'border-gray-300 text-gray-700'
-                }`}
-                style={isCreateFileDragging ? { backgroundColor: themeColor } : undefined}
-              >
-                <Upload size={14} strokeWidth={2} aria-hidden />
-                上传项目 JSON
-              </button>
-            </div>
+            <input
+              ref={newProjectFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                closeCreateDialog();
+                void handleImportProject(file, { merge: false });
+              }}
+            />
           </div>
 
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              onClick={closeCreateDialog}
-              className="chrome-field flex-1 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 transition-colors"
+              onClick={() => newProjectFileInputRef.current?.click()}
+              className={`chrome-field flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                isCreateFileDragging ? 'text-theme-chrome-fg' : 'text-gray-700'
+              }`}
+              style={isCreateFileDragging ? { backgroundColor: themeColor } : undefined}
             >
-              取消
+              <Upload size={14} strokeWidth={2} aria-hidden />
+              上传 JSON
             </button>
             <button
               type="button"

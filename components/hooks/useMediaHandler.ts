@@ -553,6 +553,7 @@ export function useMediaHandler({
     sketch,
     setSketch,
     appendSketch,
+    appendDisplayImages,
     isProcessingImages,
     isResolvingMedia,
     handleImageUpload,

@@ -76,6 +76,7 @@ import { useCsvImport } from './components/hooks/useCsvImport';
 import { useFileDrop } from './components/hooks/useFileDrop';
 import { ChromeDropOverlay } from './components/ui/ChromeDropOverlay';
 import { ModuleLoadProgress } from './components/ui/ModuleLoadProgress';
+import { WorkspaceErrorBoundary } from './components/ui/WorkspaceErrorBoundary';
 import { EditInspectorProvider } from './components/editInspector/EditInspectorProvider';
 import { installBuiltinExamples } from './utils/builtinExamples/install';
 import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
@@ -136,11 +137,6 @@ export default function App() {
    * 用 ref 避免额外 state；与 projectEnterCollapsing 同帧读取即可。
    */
   const enterFromHomeKeepDockedRef = useRef(false);
-  /**
-   * overlay↔docked 无缝交接：下一帧挂载/卸载的壳跳过 width:0 / x:-100% 入退场，
-   * 避免窄屏「先闪回收起再拉开」。
-   */
-  const sidebarShellHandoffRef = useRef(false);
 
   const viewState = useViewState();
   const appState = useAppState();
@@ -373,10 +369,6 @@ export default function App() {
 
     await afterNextPaint();
     await waitForAnimation(projectEnterExpandMs);
-    // 窄屏：主页进入后的收束在 docked 上完成，结束后无缝交接 overlay（跳过 width:0 / 滑入）
-    if (enterFromHomeKeepDockedRef.current && !projectSidebarLargeViewportRef.current) {
-      sidebarShellHandoffRef.current = true;
-    }
     enterFromHomeKeepDockedRef.current = false;
     setProjectEnterCollapsing(false);
   }, [projectEnterExpandMs, setIsSidebarOpen]);
@@ -734,10 +726,6 @@ export default function App() {
       setActiveProject(null);
       setIsSidebarOpen(true);
       setSidebarDockedInline(true);
-      // 窄屏：overlay 已在全宽，交接 docked 时跳过 width:0 入场
-      if (!projectSidebarLargeViewportRef.current) {
-        sidebarShellHandoffRef.current = true;
-      }
       /** 先保留 sidebarExpandingToHome，下一帧再关 transitionListOnly：列表与主页共用 expand 壳与同一套 scroll 区，避免整块列表瞬切 */
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -836,21 +824,6 @@ export default function App() {
     projectSidebarIsFullWidth,
     projectSidebarLargeViewport
   ]);
-
-  /** 侧栏 docked：全宽启动页与项目内联共用同一壳，不再切换到单独「全屏 ProjectManager」 */
-  const showDockedProjectSidebar =
-    isUIVisible && isSidebarOpen && projectSidebarIsDocked;
-
-  /** handoff 消费后清掉，避免下次打开误跳过入场动画 */
-  useEffect(() => {
-    if (!sidebarShellHandoffRef.current) return;
-    const id = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        sidebarShellHandoffRef.current = false;
-      });
-    });
-    return () => window.cancelAnimationFrame(id);
-  }, [showDockedProjectSidebar, projectSidebarIsDocked]);
 
   /**
    * 进入项目时工作区占位：中间态内不再单独展示「加载项目」屏（进度并入侧栏顶条），
@@ -1709,38 +1682,31 @@ export default function App() {
       <div className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${uiDarkMode ? 'bg-zinc-800' : 'bg-gray-50'}`}>
         <div className={`flex h-full min-h-0 min-w-0 w-full flex-1 flex-row ${uiDarkMode ? 'bg-zinc-800' : 'bg-gray-50'}`}>
           <AnimatePresence initial={false}>
-            {showDockedProjectSidebar && (
+            {isSidebarOpen && isUIVisible && (
               <MotionDiv
-                key="docked-project-sidebar"
-                className="relative z-[1990] h-full min-h-0 shrink-0 overflow-hidden shadow-2xl"
+                key="project-sidebar"
+                className={
+                  projectSidebarIsDocked
+                    ? 'relative z-[1990] h-full min-h-0 shrink-0 overflow-hidden shadow-2xl'
+                    : 'fixed inset-y-0 left-0 z-[2001] h-full min-h-0 shrink-0 overflow-hidden shadow-2xl'
+                }
                 style={{
                   borderRightWidth: projectSidebarIsFullWidth ? 0 : 1,
                   borderRightStyle: 'solid',
                   borderRightColor: themeColor,
                   backgroundColor: themeColor,
-                  willChange: 'width',
+                  willChange: projectSidebarIsDocked ? 'width' : 'transform, width',
                   boxShadow: projectSidebarIsFullWidth ? 'none' : undefined
                 }}
-                // Docked sidebar only changes its occupied width. Combining a
-                // width animation with a second translate made its transparent
-                // outer shell expose the workspace behind it like a second panel.
-                // 窄屏从全宽 overlay 交接时跳过 width:0，避免先闪收再展开。
-                initial={sidebarShellHandoffRef.current ? false : { width: 0 }}
-                animate={{ width: projectSidebarDrawerWidthPx }}
-                exit={
-                  sidebarShellHandoffRef.current
-                    ? { opacity: 0, transition: { duration: 0 } }
-                    : { width: 0 }
-                }
+                initial={projectSidebarIsDocked ? { width: 0 } : { x: '-100%' }}
+                animate={{ x: 0, width: projectSidebarDrawerWidthPx }}
+                exit={projectSidebarIsDocked ? { width: 0 } : { x: '-100%' }}
                 transition={{
                   width: {
                     type: 'tween',
                     duration: PROJECT_OPEN_SLIDE_DURATION_S,
                     ease: PROJECT_OPEN_SLIDE_EASE
                   }
-                }}
-                onAnimationStart={() => {
-                  if (sidebarShellHandoffRef.current) sidebarShellHandoffRef.current = false;
                 }}
               >
                 <Suspense fallback={projectManagerLazyFallback}>
@@ -1832,106 +1798,6 @@ export default function App() {
                    sidebarExpandingToHome || sidebarExpandForProjectSwitch ? 'none' : 'auto'
                }}
              />
-             <MotionDiv
-               className="relative h-full z-[2001] overflow-hidden shrink-0 shadow-2xl"
-               initial={
-                 sidebarShellHandoffRef.current
-                   ? { x: 0, width: projectSidebarDrawerWidthPx }
-                   : { x: '-100%', width: projectSidebarDrawerWidthPx }
-               }
-               animate={{
-                 x: 0,
-                 width: projectSidebarDrawerWidthPx
-               }}
-               exit={
-                 sidebarShellHandoffRef.current
-                   ? { opacity: 0, transition: { duration: 0 } }
-                   : { x: '-100%' }
-               }
-               transition={{
-                 x: {
-                   type: 'tween',
-                   duration: PROJECT_OPEN_SLIDE_DURATION_S,
-                   ease: PROJECT_OPEN_SLIDE_EASE
-                 },
-                 width: {
-                   type: 'tween',
-                   duration: PROJECT_OPEN_SLIDE_DURATION_S,
-                   ease: PROJECT_OPEN_SLIDE_EASE
-                 }
-               }}
-               style={{ willChange: 'transform, width' }}
-               onAnimationStart={() => {
-                 if (sidebarShellHandoffRef.current) sidebarShellHandoffRef.current = false;
-               }}
-             >
-              <Suspense fallback={projectManagerLazyFallback}>
-                <ProjectManager
-                 isSidebar
-                 expandToHomeLayout={
-                   sidebarExpandingToHome || isProjectEnterTransition
-                 }
-                 transitionListOnly={projectManagerTransitionListOnly}
-                 showHomeHeroInTransition={pendingEnterWorkspaceFromHome}
-                 sidebarExpandingToHome={sidebarExpandingToHome}
-                clearSelectionInTransition={
-                  returnHomeClearingSelection || sidebarExpandingToHome
-                }
-                 easterEggMode={atSteadyProjectHome && homeEasterEggMode}
-                 onToggleEasterEggMode={() => {
-                   setHomeEasterEggMode((v) => !v);
-                 }}
-                 easterEggGravityY={homeEasterEggGravityY}
-                 onEasterEggGravityYChange={async (v) => {
-                   const next = Math.min(3, Math.max(0, v));
-                   setHomeEasterEggGravityY(next);
-                   await set('mapp-home-easter-egg-gravity-y', next);
-                 }}
-                 easterEggMouseConstraintStiffness={homeEasterEggMouseConstraintStiffness}
-                 onEasterEggMouseConstraintStiffnessChange={async (v) => {
-                   const next = Math.min(0.5, Math.max(0.02, v));
-                   setHomeEasterEggMouseConstraintStiffness(next);
-                   await set('mapp-home-easter-egg-mouse-stiffness', next);
-                 }}
-                 showProjectLoadBar={projectEnterLoadBarVisible}
-                 projectLoadProgress={projectEnterLoadProgress}
-                 projects={summariesToProjects(projectSummaries)}
-                 currentProjectId={currentProjectId}
-                 onCreateProject={handleCreateProject}
-                 onSelectProject={handleSelectProject}
-                 onDeleteProject={handleDeleteProject}
-         onUpdateProject={handleUpdateProject}
-                  onDuplicateProject={handleDuplicateProject}
-                  onCloseSidebar={closeProjectSidebar}
-                  onBackToHome={handleBackToHome}
-                  viewMode={viewMode}
-                  activeProject={activeProject}
-                  onExportCSV={handleExportCSV}
-                  syncStatus={syncStatus}
-                  onCleanupBrokenReferences={handleCleanupBrokenReferences}
-                  onCheckData={handleCheckData}
-                  themeColor={themeColor}
-                  onThemeColorChange={handleThemeColorChange}
-                  mapUiChromeOpacity={mapUiChromeOpacity}
-                  onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
-                  mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
-                  onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
- mapUiChromeBlurPx={mapUiChromeBlurPx}
-                  onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
-                  uiDarkMode={uiDarkMode}
-                  onUiDarkModeChange={handleUiDarkModeChange}
-                  currentMapStyle={mapStyle}
-                  onMapStyleChange={(styleId) => {
-                    setMapStyle(styleId);
-                    set('mapp-map-style', styleId);
-                  }}
-                 exampleDevMaintenanceMode={exampleDevMaintenanceMode}
-                 onExampleDevMaintenanceModeToggle={() =>
-                   setExampleDevMaintenanceMode((v) => !v)
-                 }
-                />
-              </Suspense>
-             </MotionDiv>
         </div>
       )}
       </AnimatePresence>
@@ -1958,6 +1824,7 @@ export default function App() {
           onDismiss={tableGraphDataFileDrop.dismissDrag}
         />
         <Suspense fallback={workspaceModuleLoadingFallback}>
+        <WorkspaceErrorBoundary themeColor={themeColor}>
         {activeProject ? (
           <>
         {/* 同步状态指示器 - 只在侧边栏打开时显示（在侧边栏内） */}
@@ -2334,6 +2201,7 @@ export default function App() {
         ) : (
           <div className="h-full min-h-0 flex-1 bg-gray-100" aria-hidden />
         )}
+        </WorkspaceErrorBoundary>
         </Suspense>
       </div>
 

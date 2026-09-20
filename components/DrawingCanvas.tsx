@@ -1,21 +1,35 @@
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, type CSSProperties } from 'react';
 import { Eraser, Pencil, Trash2, Check, X } from 'lucide-react';
 import { THEME_COLOR, THEME_COLOR_DARK } from '../constants';
+import type { MapChromeAppearance } from '../utils/map/mapChromeStyle';
+import { ChromeFloatingToolbar } from './ui/ChromeFloatingToolbar';
 
 interface DrawingCanvasProps {
   onSave: (dataUrl: string) => void;
   onCancel: () => void;
   initialData?: string;
   backgroundColor?: string;
+  themeColor?: string;
+  chromeAppearance?: MapChromeAppearance;
+  chromeSurfaceStyle?: CSSProperties;
 }
 
-export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ onSave, onCancel, initialData, backgroundColor = '#ffffff' }) => {
+export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
+  onSave,
+  onCancel,
+  initialData,
+  backgroundColor = '#ffffff',
+  themeColor = THEME_COLOR,
+  chromeAppearance,
+  chromeSurfaceStyle
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState('#000000');
   const [mode, setMode] = useState<'draw' | 'erase'>('draw');
+  const [doneHover, setDoneHover] = useState(false);
 
   // Initialize and Resize Canvas
   useEffect(() => {
@@ -235,60 +249,84 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ onSave, onCancel, 
         // Remove onPointerLeave to prevent accidental stops near edges, relying on setPointerCapture
       />
 
-      {/* Floating Toolbar */}
-      <div 
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md px-4 py-2 rounded-full shadow-xl border border-gray-100"
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-         <button onClick={(e) => { e.stopPropagation(); onCancel(); }} className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors">
+      {/* Floating Toolbar — ChromeWindow 材质 / 圆角 */}
+      <ChromeFloatingToolbar appearance={chromeAppearance} style={chromeSurfaceStyle}>
+         <button
+           type="button"
+           onClick={(e) => { e.stopPropagation(); onCancel(); }}
+           className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+           aria-label="取消涂鸦"
+         >
             <X size={20} />
          </button>
 
-         <div className="w-px h-6 bg-gray-200"></div>
+         <div className="h-6 w-px bg-gray-200/80" />
 
-         <div className="flex bg-gray-100 rounded-lg p-0.5">
+         <div className="flex rounded-lg bg-gray-100/90 p-0.5">
             <button
+              type="button"
               onClick={() => setMode('draw')}
-              className={`p-1.5 rounded-md transition-all ${mode === 'draw' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
-              style={mode === 'draw' ? { color: THEME_COLOR } : undefined}
+              className={`rounded-md p-1.5 transition-all ${mode === 'draw' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
+              style={mode === 'draw' ? { color: themeColor } : undefined}
+              aria-label="画笔"
             >
               <Pencil size={18} />
             </button>
             <button
+              type="button"
               onClick={() => setMode('erase')}
-              className={`p-1.5 rounded-md transition-all ${mode === 'erase' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
-              style={mode === 'erase' ? { color: THEME_COLOR } : undefined}
+              className={`rounded-md p-1.5 transition-all ${mode === 'erase' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
+              style={mode === 'erase' ? { color: themeColor } : undefined}
+              aria-label="橡皮"
             >
               <Eraser size={18} />
             </button>
          </div>
 
-         <div className="flex gap-1.5">
+         <div className="flex gap-1.5 px-0.5">
             {['#000000', '#EF4444', '#F59E0B', '#10B981', '#3B82F6'].map(c => (
                 <button
+                    type="button"
                     key={c}
                     onClick={() => { setColor(c); setMode('draw'); }}
-                    className={`w-5 h-5 rounded-full border border-black/10 transition-transform ${color === c && mode === 'draw' ? 'scale-125 ring-1 ring-gray-400' : ''}`}
+                    className={`h-5 w-5 rounded-md border border-black/10 transition-transform ${color === c && mode === 'draw' ? 'scale-110 ring-1 ring-gray-400' : ''}`}
                     style={{ backgroundColor: c }}
+                    aria-label={`颜色 ${c}`}
                 />
             ))}
          </div>
 
-         <div className="w-px h-6 bg-gray-200"></div>
+         <div className="h-6 w-px bg-gray-200/80" />
 
-        <button onClick={handleDone} className="p-2 text-theme-chrome-fg rounded-full shadow-sm active:scale-95 transition-all" style={{ backgroundColor: THEME_COLOR }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = THEME_COLOR_DARK} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = THEME_COLOR}>
+        <button
+          type="button"
+          onClick={handleDone}
+          className="rounded-lg p-2 text-theme-chrome-fg shadow-sm transition-all active:scale-95"
+          style={{
+            backgroundColor:
+              doneHover
+                ? themeColor === THEME_COLOR
+                  ? THEME_COLOR_DARK
+                  : themeColor
+                : themeColor
+          }}
+          onMouseEnter={() => setDoneHover(true)}
+          onMouseLeave={() => setDoneHover(false)}
+          aria-label="完成涂鸦"
+        >
             <Check size={20} />
          </button>
-      </div>
+      </ChromeFloatingToolbar>
 
-      {/* Tipping Trash Can Clear Button - Moved to Top Left */}
       <button 
+        type="button"
         onClick={clearCanvas}
         onPointerDown={(e) => e.stopPropagation()}
-        className="absolute top-4 left-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors z-50 group"
-        title="Clear"
+        className="absolute top-4 left-4 z-50 rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 group"
+        title="清空"
+        aria-label="清空画布"
       >
-        <div className="group-hover:rotate-12 transition-transform duration-300 origin-bottom-right">
+        <div className="origin-bottom-right transition-transform duration-300 group-hover:rotate-12">
              <div className="rotate-45">
                 <Trash2 size={24} />
              </div>

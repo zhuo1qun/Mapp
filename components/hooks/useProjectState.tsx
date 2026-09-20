@@ -183,17 +183,20 @@ export const useProjectState = (): UseProjectStateReturn => {
 
   // Update project
   const updateProject = useCallback(async (updatedProject: Project) => {
-    await saveProject(updatedProject);
-    setActiveProject(updatedProject);
-    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+    // saveProject converts inline camera/photo data into IndexedDB media asset
+    // ids. Keep that returned form in React state too; otherwise the UI holds
+    // a pre-migration note while storage holds a different one.
+    const persistedProject = await saveProject(updatedProject);
+    setActiveProject(persistedProject);
+    setProjects(prev => prev.map(p => p.id === persistedProject.id ? persistedProject : p));
 
     // Also update projectSummaries to reflect name / kind changes
     setProjectSummaries(prev => prev.map(summary =>
-      summary.id === updatedProject.id
+      summary.id === persistedProject.id
         ? {
             ...summary,
-            name: updatedProject.name,
-            projectKind: updatedProject.projectKind
+            name: persistedProject.name,
+            projectKind: persistedProject.projectKind
           }
         : summary
     ));

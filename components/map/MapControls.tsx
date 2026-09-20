@@ -28,7 +28,6 @@ interface MapControlsProps {
   onCreateAtCurrentLocation: () => void;
   onImportFromPhotos: () => void;
   onImportFromCamera: () => void;
-  cameraAvailable: boolean;
   isCreatingAtLocation?: boolean;
   showLocateMenu: boolean;
   showCreateMenu: boolean;
@@ -56,7 +55,6 @@ export const MapControls: React.FC<MapControlsProps> = ({
   onCreateAtCurrentLocation,
   onImportFromPhotos,
   onImportFromCamera,
-  cameraAvailable,
   isCreatingAtLocation = false,
   showLocateMenu,
   showCreateMenu,
@@ -209,8 +207,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
               disabled={isCreatingAtLocation || !showCreateMenu}
               tabIndex={showCreateMenu ? 0 : -1}
               onClick={() => {
-                onCloseMenus();
                 onCreateAtCurrentLocation();
+                onCloseMenus();
               }}
               tooltip="在当前位置添加"
             >
@@ -256,13 +254,14 @@ export const MapControls: React.FC<MapControlsProps> = ({
               themeColor={themeColor}
               chromeSurfaceStyle={neutralStyle}
               chromeHoverBackground={neutralHover}
-              disabled={!cameraAvailable || !showCreateMenu}
-              tabIndex={showCreateMenu && cameraAvailable ? 0 : -1}
+              // 不可用时仍保留可点击入口；具体失败由取景器内错误提示。
+              disabled={!showCreateMenu}
+              tabIndex={showCreateMenu ? 0 : -1}
               onClick={() => {
-                onCloseMenus();
                 onImportFromCamera();
+                onCloseMenus();
               }}
-              tooltip={cameraAvailable ? '拍照添加' : '拍照需要 HTTPS'}
+              tooltip="拍照添加"
             >
               <Camera size={18} />
             </ChromeIconButton>
@@ -363,8 +362,8 @@ export function MapLocateCreateMenu({
             }
             onClick={(e) => {
               e.stopPropagation();
-              onCloseMenus();
               onCreateAtCurrentLocation();
+              onCloseMenus();
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerMove={(e) => e.stopPropagation()}

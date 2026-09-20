@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { VitePWA } from 'vite-plugin-pwa';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -10,8 +11,12 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        // 手机用局域网 IP 访问时必须是 HTTPS，否则 Geolocation 会静默失败且不弹权限窗。
+        // localhost 本身是安全上下文；启用 basic-ssl 后手机请打开 https://<电脑IP>:3000
+        https: true,
       },
       plugins: [
+        basicSsl(),
         tailwindcss(),
         react(),
         VitePWA({

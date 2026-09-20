@@ -18,7 +18,6 @@ import { useGeolocation } from '@/components/hooks/useGeolocation';
 import { useImageImport } from '@/components/hooks/useImageImport';
 import { useMapLayers } from '@/components/hooks/useMapLayers';
 import { useMapStyling } from '@/components/hooks/useMapStyling';
-import { useCameraImport } from '@/components/hooks/useCameraImport';
 import { useBorderSearch } from '@/components/hooks/useBorderSearch';
 import { useMapClustering } from '@/components/hooks/useMapClustering';
 import { useMapInitialization } from '@/components/hooks/useMapInitialization';
@@ -47,8 +46,8 @@ import { MapSearchPanel, MapSearchPanelBody } from './map/controls/MapSearchPane
 import { MapLayerControl } from './map/controls/MapLayerControl';
 import { NotePreviewCard } from './map/overlays/NotePreviewCard';
 import { MapLocationErrorBanner } from './map/overlays/MapLocationErrorBanner';
+import { MapLocationEnableBanner } from './map/overlays/MapLocationEnableBanner';
 import { MapImportMenuModal } from './map/overlays/MapImportMenuModal';
-import { CameraCaptureDialog } from './map/overlays/CameraCaptureDialog';
 import { MapTopRightEditToggle } from './map/overlays/MapTopRightEditToggle';
 import { MapPreviewTopRightToolbar } from './map/overlays/MapPreviewTopRightToolbar';
 import { type EditInspectorPanelProps, type InspectorGroupContext } from './map/overlays/MapEditInspectorPanel';
@@ -336,7 +335,6 @@ const MapTileDirectionalPrefetch: React.FC<{
 };
 
 /** 空项目自动定位按项目只发起一次，切视图卸载 MapView 后不重跑。 */
-const emptyProjectLocateStarted = new Set<string>();
 // 长按期间只完成图钉的放大；松手后才进入回缩收稳，避免两段动画抢在一起。
 const MAP_NOTE_GROW_MS = 320;
 const MAP_NOTE_SETTLE_MS = 240;
@@ -344,7 +342,7 @@ const MAP_NOTE_EXIT_MS = 220;
 
 interface MapViewProps {
   project: Project;
-  onAddNote: (note: Note) => void;
+  onAddNote: (note: Note) => void | Promise<void>;
   onUpdateNote: (note: Note) => void;
   onDeleteNote?: (noteId: string) => void;
   onToggleEditor: (isOpen: boolean) => void;
@@ -460,10 +458,12 @@ export const MapView: React.FC<MapViewProps> = ({
   const [editingNote, setEditingNote] = useState<Partial<Note> | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [pendingPersistedEditorNoteId, setPendingPersistedEditorNoteId] = useState<string | null>(null);
+  /** 与「当前位置新建」同路径；为 true 时 NoteEditor 打开后自动进入内嵌 +拍照 */
+  const [editorAutoOpenCamera, setEditorAutoOpenCamera] = useState(false);
   const mapNoteSaveRef = useRef<(() => Promise<void>) | null>(null);
   const compactViewport = useCompactViewport();
   const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
-  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'settle' | 'exit'>('enter');
+  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'settle' | 'exit' | undefined>(undefined);
   // 所有退出路径（取消草稿、删除已有点）共用这一份状态，避免重复播放离场动画。
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const introTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -483,12 +483,16 @@ export const MapView: React.FC<MapViewProps> = ({
   const ignoreNextMarkerClickRef = useRef(false);
 
   /**
-   * 相册 / 相机的点位先完成项目写入，再用实际已存在的 Note 打开编辑器。
+   * 相册导入的点位先完成项目写入，再用实际已存在的 Note 打开编辑器。
    * 这样用户一落地就能补标题和正文，也不会因异步写入让编辑器误判成草稿。
    */
   const queuePersistedNoteEditor = useCallback((note: Note) => {
     setPendingPersistedEditorNoteId(note.id);
   }, []);
+
+  useEffect(() => {
+    if (!isEditorOpen) setEditorAutoOpenCamera(false);
+  }, [isEditorOpen]);
 
   useEffect(() => {
     if (!pendingPersistedEditorNoteId) return;
@@ -519,7 +523,7 @@ export const MapView: React.FC<MapViewProps> = ({
   );
   const noteMotionById = useMemo<Readonly<Record<string, 'enter' | 'settle' | 'exit'>> | undefined>(
     () =>
-      introNote?.id
+      introNote?.id && introNoteMotion
         ? {
             [introNote.id]: introNoteMotion
           }
@@ -828,8 +832,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const [showLocateMenu, setShowLocateMenu] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
 
-  // Location error retry tracking
-  const [hasRetriedLocation, setHasRetriedLocation] = useState(false);
+  // Location request UI
   const [isLocating, setIsLocating] = useState(false);
   const [locateEpoch, setLocateEpoch] = useState(0);
   const [isCreatingAtLocation, setIsCreatingAtLocation] = useState(false);
@@ -851,25 +854,19 @@ export const MapView: React.FC<MapViewProps> = ({
     currentLocation,
     deviceHeading,
     hasLocationPermission,
+    needsLocationEnable,
+    isRequestingLocation,
+    isSecureContext,
     locationError,
     setLocationError,
-    requestLocation,
-    getCurrentBrowserLocation,
-    checkLocationPermission
+    requestLocation
   } = useGeolocation(true);
 
-  const {
-    handleImportFromCamera,
-    isCameraAvailable,
-    isCameraCaptureOpen,
-    closeCameraCapture,
-    handleCameraPhoto
-  } = useCameraImport({
-    getCurrentBrowserLocation,
-    mapInstance,
-    onAddNote,
-    onNoteCreated: queuePersistedNoteEditor
-  });
+  const [locationEnableDismissed, setLocationEnableDismissed] = useState(false);
+
+  useEffect(() => {
+    setLocationEnableDismissed(false);
+  }, [project.id]);
 
   const borderSearchState = useBorderSearch({
     mapInstance,
@@ -882,16 +879,12 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Auto-hide location error after 2 seconds
   useEffect(() => {
-    if (locationError) {
-      const timer = setTimeout(() => {
-        // We can't directly set locationError to null since it's managed by the hook
-        // Instead, we'll trigger a new location request to clear the error state
-        setHasRetriedLocation(false);
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [locationError]);
+    if (!locationError) return;
+    const timer = setTimeout(() => {
+      setLocationError(null);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [locationError, setLocationError]);
 
   // Enhanced location request with auto-retry and navigation
   const handleLocateCurrentPosition = useCallback(async () => {
@@ -909,23 +902,21 @@ export const MapView: React.FC<MapViewProps> = ({
 
     const gen = beginPendingMapLocate(projectId);
     try {
+      // 必须在 click 栈里同步发起 getCurrentPosition（启用权限 / 冷启动定位）。
+      const locPromise = requestLocation({ requestOrientation: true });
       if (mapViewMountedRef.current) {
         setIsLocating(true);
-        setHasRetriedLocation(false);
         setLocationError(null);
       }
 
-      let loc = await requestLocation({ requestOrientation: true });
-      if (!loc && mapViewMountedRef.current && !hasRetriedLocation) {
-        setHasRetriedLocation(true);
-        await new Promise((r) => setTimeout(r, 1000));
-        loc = await requestLocation({ requestOrientation: true });
-      }
+      const loc = await locPromise;
 
       if (!loc) {
         cancelPendingMapLocate(projectId, gen);
         return;
       }
+
+      setLocationEnableDismissed(false);
 
       // 当前地图仍在场时直接飞入，避免再经由全局事件转发一轮；切出视图后才保留 intent 给下次挂载。
       const map = mapInstanceRef.current;
@@ -944,7 +935,32 @@ export const MapView: React.FC<MapViewProps> = ({
     } finally {
       if (mapViewMountedRef.current) setIsLocating(false);
     }
-  }, [currentLocation, requestLocation, hasRetriedLocation, setLocationError, project.id]);
+  }, [currentLocation, requestLocation, setLocationError, project.id]);
+
+  /** 冷启动门闸：click 第一行就发起 getCurrentPosition，专用于唤起系统权限。 */
+  const handleEnableLocation = useCallback(() => {
+    const locPromise = requestLocation({ requestOrientation: true });
+    if (mapViewMountedRef.current) {
+      setIsLocating(true);
+      setLocationError(null);
+    }
+    void locPromise
+      .then((loc) => {
+        if (!loc || !mapViewMountedRef.current) return;
+        setLocationEnableDismissed(false);
+        const map = mapInstanceRef.current;
+        if (map?.getContainer().isConnected) {
+          setViewPositionCache(project.id, 'map', {
+            center: [loc.lat, loc.lng],
+            zoom: 16
+          });
+          map.flyTo([loc.lat, loc.lng], 16, { duration: 0.9 });
+        }
+      })
+      .finally(() => {
+        if (mapViewMountedRef.current) setIsLocating(false);
+      });
+  }, [requestLocation, setLocationError, project.id]);
 
   // Map position management hook
   const { initialMapPosition, handleMapPositionChange } = useMapPosition({
@@ -956,32 +972,10 @@ export const MapView: React.FC<MapViewProps> = ({
     defaultCenter
   });
 
-  // Empty project (no pins / no cache / no nav): prefer current location, then keep fallback
+  // 空项目不自动申请定位：权限只在用户点击「定位 / 当前位置新建 / 拍照新建」时申请。
   useEffect(() => {
     setLateAutoCenter(null);
   }, [project.id]);
-
-  useEffect(() => {
-    if (navigateToCoords) return;
-    if (mapGeoNotes.length > 0) return;
-    const cached = getViewPositionCache(project.id, 'map');
-    if (cached?.center && cached.zoom) return;
-    if (peekReadyMapLocate(project.id) || getPendingMapLocate(project.id)) return;
-    if (emptyProjectLocateStarted.has(project.id)) return;
-
-    emptyProjectLocateStarted.add(project.id);
-    const gen = beginPendingMapLocate(project.id);
-    (async () => {
-      const loc = await requestLocation({ requestOrientation: false });
-      if (!loc) {
-        cancelPendingMapLocate(project.id, gen);
-        emptyProjectLocateStarted.delete(project.id);
-        return;
-      }
-      if (!completePendingMapLocate(project.id, gen, loc.lat, loc.lng, 16)) return;
-      setViewPositionCache(project.id, 'map', { center: [loc.lat, loc.lng], zoom: 16 });
-    })();
-  }, [navigateToCoords, mapGeoNotes.length, project.id, requestLocation]);
 
   useEffect(() => {
     const onPending = () => {
@@ -1361,7 +1355,7 @@ export const MapView: React.FC<MapViewProps> = ({
   );
 
   const createNewMapNote = useCallback(
-    (coords: Coordinates): Partial<Note> => {
+    (coords: Coordinates, overrides?: Partial<Note>): Partial<Note> => {
       const { boardX, boardY } = computeBoardPosition();
       return {
         id: generateId(),
@@ -1376,7 +1370,8 @@ export const MapView: React.FC<MapViewProps> = ({
         isFavorite: false,
         color: '#FFFFFF',
         boardX,
-        boardY
+        boardY,
+        ...overrides
       };
     },
     [computeBoardPosition]
@@ -1386,8 +1381,8 @@ export const MapView: React.FC<MapViewProps> = ({
    * 临时图钉只存在于当前 MapView；保存时以相同 id 写入项目，图层直接接手而不闪断。
    */
   const stageNewMapNote = useCallback(
-    (coords: Coordinates): Partial<Note> => {
-      const note = createNewMapNote(coords);
+    (coords: Coordinates, overrides?: Partial<Note>): Partial<Note> => {
+      const note = createNewMapNote(coords, overrides);
       setPreSelectedNotes(null);
       setSelectedNoteIds(new Set([note.id]));
       setSelectedNoteId(note.id);
@@ -1429,6 +1424,57 @@ export const MapView: React.FC<MapViewProps> = ({
     [onDeleteNote]
   );
 
+  /**
+   * 地图新建统一入口：有实时定位则直接用（与长按同路径）；否则再在手势内请求 GPS。
+   * 拍照仅多一步 autoOpenCamera。
+   */
+  const createNoteAtCurrentLocation = useCallback(
+    async (opts?: { autoOpenCamera?: boolean }) => {
+      try {
+        // 已有 watch / 定位结果时直接建点，避免再冷启动 getCurrentPosition
+        //（Safari 上常在「定位成功」后仍报 POSITION_UNAVAILABLE）。
+        const locPromise = currentLocation
+          ? Promise.resolve(currentLocation)
+          : requestLocation({ requestOrientation: false });
+        setIsCreatingAtLocation(true);
+        setLocationError(null);
+        const loc = await locPromise;
+        if (!loc) return;
+        const map = mapInstanceRef.current;
+        if (map) {
+          map.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
+        }
+        const newNote = stageNewMapNote(
+          { lat: loc.lat, lng: loc.lng },
+          opts?.autoOpenCamera ? { emoji: '📷' } : undefined
+        );
+        setEditorAutoOpenCamera(!!opts?.autoOpenCamera);
+        openNewNoteEditorAfterIntro(newNote);
+      } catch (error) {
+        console.error('Create note at current location failed:', error);
+        setEditorAutoOpenCamera(false);
+      } finally {
+        setIsCreatingAtLocation(false);
+      }
+    },
+    [
+      currentLocation,
+      requestLocation,
+      setLocationError,
+      stageNewMapNote,
+      openNewNoteEditorAfterIntro
+    ]
+  );
+
+  const handleCreateAtCurrentLocation = useCallback(() => {
+    void createNoteAtCurrentLocation();
+  }, [createNoteAtCurrentLocation]);
+
+  /** 与当前位置新建同一套流程，编辑器内自动打开 +拍照 overlay */
+  const handleImportFromCamera = useCallback(() => {
+    void createNoteAtCurrentLocation({ autoOpenCamera: true });
+  }, [createNoteAtCurrentLocation]);
+
   const handleLongPress = useCallback(
     (coords: Coordinates) => {
       const newNote = stageNewMapNote(coords);
@@ -1454,25 +1500,6 @@ export const MapView: React.FC<MapViewProps> = ({
       void exitMapNote(cancelledNoteId, false);
     }
   }, [exitMapNote]);
-
-  const handleCreateAtCurrentLocation = useCallback(async () => {
-    try {
-      setIsCreatingAtLocation(true);
-      setLocationError(null);
-      const loc = await requestLocation({ requestOrientation: false });
-      if (!loc) return;
-      const map = mapInstanceRef.current;
-      if (map) {
-        map.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
-      }
-      const newNote = stageNewMapNote({ lat: loc.lat, lng: loc.lng });
-      openNewNoteEditorAfterIntro(newNote);
-    } catch (error) {
-      console.error('Create at current location failed:', error);
-    } finally {
-      setIsCreatingAtLocation(false);
-    }
-  }, [requestLocation, setLocationError, stageNewMapNote, openNewNoteEditorAfterIntro]);
 
   const handleImportFromPhotos = useCallback(() => {
     fileInputRef.current?.click();
@@ -2240,13 +2267,26 @@ export const MapView: React.FC<MapViewProps> = ({
           />
         )}
 
+        <MapLocationEnableBanner
+          visible={(needsLocationEnable || !isSecureContext) && !locationEnableDismissed && !locationError}
+          isRequesting={isRequestingLocation || locatingActive}
+          insecureContext={!isSecureContext}
+          themeColor={themeColor}
+          chromeSurfaceStyle={mapChromeContentSurface}
+          chromeAppearance={mapChromeTone}
+          onEnable={handleEnableLocation}
+          onDismiss={() => setLocationEnableDismissed(true)}
+        />
+
         <MapLocationErrorBanner
           locationError={locationError}
-          isLocating={locatingActive}
-          onRetry={handleLocateCurrentPosition}
+          isLocating={locatingActive || isRequestingLocation}
+          themeColor={themeColor}
+          chromeSurfaceStyle={mapChromeContentSurface}
+          chromeAppearance={mapChromeTone}
+          onRetry={handleEnableLocation}
           onClose={() => {
             setLocationError(null);
-            setHasRetriedLocation(false);
             setIsLocating(false);
           }}
         />
@@ -2356,7 +2396,6 @@ export const MapView: React.FC<MapViewProps> = ({
                     onCreateAtCurrentLocation={handleCreateAtCurrentLocation}
                     onImportFromPhotos={handleImportFromPhotos}
                     onImportFromCamera={handleImportFromCamera}
-                    cameraAvailable={isCameraAvailable()}
                     isCreatingAtLocation={isCreatingAtLocation}
                     showLocateMenu={showLocateMenu}
                     showCreateMenu={showCreateMenu}
@@ -2692,6 +2731,7 @@ export const MapView: React.FC<MapViewProps> = ({
                     onDelete={handleDeleteNoteWithExit}
                     initialNote={editingNote || {}}
                     isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
+                    autoOpenCamera={editorAutoOpenCamera}
                     onSwitchToBoardView={(coords) => onSwitchToBoardView(coords, mapInstance)}
                     themeColor={themeColor}
                     mapUiChromeOpacity={mapUiChromeOpacity}
@@ -2798,15 +2838,6 @@ export const MapView: React.FC<MapViewProps> = ({
         onImportPhotos={() => fileInputRef.current?.click()}
         onImportData={() => dataImportInputRef.current?.click()}
         onImportCamera={handleImportFromCamera}
-        cameraAvailable={isCameraAvailable()}
-      />
-
-      <CameraCaptureDialog
-        open={isCameraCaptureOpen}
-        onClose={closeCameraCapture}
-        onCapture={handleCameraPhoto}
-        chromeSurfaceStyle={mapChromeContentSurface}
-        chromeAppearance={mapChromeTone}
       />
     </div>
   );

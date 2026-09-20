@@ -1319,7 +1319,9 @@ async function migrateNoteImages(note: Note): Promise<Note> {
         }
       } catch (error) {
         console.error(`Failed to migrate image for note ${note.id}:`, error);
-        continue;
+        // 不能把失败图片悄悄从持久化项目中排除；调用方必须得到失败并保留临时点，
+        // 否则会出现“当前会话看得到、刷新后照片丢失”的假成功。
+        throw error;
       }
     }
     migratedNote.images = nextRefs.map((r) => r.assetId);
@@ -1341,7 +1343,7 @@ async function migrateNoteImages(note: Note): Promise<Note> {
       }
     } catch (error) {
       console.error(`Failed to migrate sketch for note ${note.id}:`, error);
-      migratedNote.sketch = undefined;
+      throw error;
     }
   }
 
@@ -1752,4 +1754,3 @@ export async function getProjectVersion(projectId: string): Promise<number> {
   const project = await loadProject(projectId, false);
   return project?.version || 0;
 }
-

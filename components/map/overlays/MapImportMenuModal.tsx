@@ -14,7 +14,6 @@ type Props = {
   onImportPhotos: () => void;
   onImportData: () => void;
   onImportCamera: () => void;
-  cameraAvailable: boolean;
 };
 
 export const MapImportMenuModal: React.FC<Props> = ({
@@ -25,8 +24,7 @@ export const MapImportMenuModal: React.FC<Props> = ({
   onClose,
   onImportPhotos,
   onImportData,
-  onImportCamera,
-  cameraAvailable
+  onImportCamera
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   return (
@@ -66,24 +64,17 @@ export const MapImportMenuModal: React.FC<Props> = ({
     >
       Import from Data (JSON/CSV)
     </ChromeMenuItem>
-    {cameraAvailable ? (
-      <ChromeMenuItem
-        icon={<Plus size={16} />}
-        hoverBackground={chromeHoverBackground}
-        onClick={(e) => {
-          e.stopPropagation();
-          onImportCamera();
-          onClose();
-        }}
-      >
-        Import from Camera
-      </ChromeMenuItem>
-    ) : (
-      <div className="flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500">
-        <Plus size={16} className="opacity-50" />
-        <span>Camera requires HTTPS</span>
-      </div>
-    )}
+    <ChromeMenuItem
+      icon={<Plus size={16} />}
+      hoverBackground={chromeHoverBackground}
+      onClick={(e) => {
+        e.stopPropagation();
+        onImportCamera();
+        onClose();
+      }}
+    >
+      Import from Camera
+    </ChromeMenuItem>
   </ChromeWindow>
   );
 };
