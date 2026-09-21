@@ -27,7 +27,7 @@ interface NoteHeaderProps {
   onLocateGraph?: () => void;
 
   onSave: () => void;
-  /** 新建空草稿可直接取消，不写入项目。 */
+  /** 当前内容为空即显示取消；已落盘的空便签也走删除路径。 */
   discardDraft?: boolean;
   onDiscardDraft?: () => void;
 

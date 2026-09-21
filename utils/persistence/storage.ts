@@ -464,7 +464,9 @@ export async function saveImage(base64Data: string): Promise<string> {
   }
 
   const contentHash = await hashMediaPayload(base64Data);
-  const existingId = await findMediaIdByContentHash(IMAGE_PREFIX, contentHash);
+  // The legacy contentHash samples the payload. Verify full content before reusing
+  // an asset, otherwise different photos with matching samples share the wrong pixels.
+  const existingId = await findMediaIdByContentHash(IMAGE_PREFIX, contentHash, base64Data);
   if (existingId) {
     console.log(`Reusing existing image: ${existingId}`);
     return existingId;

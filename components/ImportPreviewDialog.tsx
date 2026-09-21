@@ -13,6 +13,11 @@ interface ImportPreviewDialogProps {
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
   isConfirming?: boolean;
+  isPreparing?: boolean;
+  progress?: { completed: number; total: number };
+  message?: string | null;
+  hasImportError?: boolean;
+  onRetryPreparation?: () => void | Promise<void>;
   showCloseButton?: boolean;
   showCoordinates?: boolean;
 }
@@ -26,7 +31,12 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
   onCancel,
   showCloseButton = false,
   showCoordinates = true,
-  isConfirming = false
+  isConfirming = false,
+  isPreparing = false,
+  progress,
+  message,
+  hasImportError = false,
+  onRetryPreparation
 }) => {
   const cardChrome =
     panelChromeStyle ??
@@ -35,13 +45,14 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
   const importableCount = importPreview.filter(p => !p.error && !p.isDuplicate).length;
   const duplicateCount = importPreview.filter(p => !p.error && p.isDuplicate).length;
   const errorCount = importPreview.filter(p => p.error).length;
+  const canRetryPreparation = importPreview.some(p => p.errorKind === 'gps-read' || p.errorKind === 'image');
 
   return (
     <ChromePresence open={isOpen} kind="dialog">
       {(phase) => (
         <div className={`fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 chrome-dialog-backdrop-${phase}`}>
       <ChromeDialogSurface
-        className={`max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col chrome-dialog-${phase}`}
+        className={`w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col chrome-dialog-${phase}`}
         style={cardChrome}
       >
         {/* Header */}
@@ -50,9 +61,15 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
             <h3 className="text-lg font-bold text-gray-800">Import Photo Preview</h3>
             <div className="mt-1 text-sm text-gray-600">
               Importable: {importableCount} |
-              Already imported: {duplicateCount} |
+              Duplicates: {duplicateCount} |
               Cannot import: {errorCount}
             </div>
+            {isPreparing && (
+              <p role="status" className="mt-2 text-sm text-gray-600">
+                正在读取照片与检查重复… {progress?.completed ?? 0} / {progress?.total ?? 0}
+              </p>
+            )}
+            {message && <p role={hasImportError ? 'alert' : 'status'} className="mt-2 break-words text-sm text-gray-700">{message}</p>}
           </div>
           {showCloseButton && (
             <button
@@ -68,19 +85,22 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {importPreview.map((preview, index) => (
-              <div key={index} className="relative aspect-square">
+              <div key={index} className="min-w-0">
+                <div className="relative aspect-square">
                 <img
                   src={preview.imageUrl}
                   alt={`Preview ${index + 1}`}
                   className="w-full h-full object-cover rounded-lg"
+                  loading="lazy"
+                  decoding="async"
                 />
-                {preview.error ? (
+                {preview.error || preview.saveError ? (
                   <div className="absolute inset-0 bg-red-500/20 rounded-lg flex items-center justify-center">
                     <div className="text-center text-red-600 text-xs px-2">
                       <X size={16} className="mx-auto mb-1" />
-                      <span className="font-bold">{preview.error}</span>
+                      <span className="font-bold">{preview.saveError ? '保存失败，可重试' : '未能导入'}</span>
                     </div>
                   </div>
                 ) : preview.isDuplicate ? (
@@ -93,13 +113,18 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
                       style={{ color: showCloseButton ? themeColor : '#d97706' }}
                     >
                       <Check size={16} className="mx-auto mb-1" />
-                      <span className="font-bold">Already imported</span>
+                      <span className="font-bold">重复照片</span>
                     </div>
                   </div>
                 ) : (
                   <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1.5">
                     <Check size={12} />
                   </div>
+                )}
+                </div>
+                <p className="mt-1 truncate text-xs text-gray-600" title={preview.file.name}>{preview.file.name}</p>
+                {(preview.error || preview.saveError) && (
+                  <p className="mt-1 break-words text-xs text-red-600">{preview.error || preview.saveError}</p>
                 )}
                 {showCoordinates && !preview.error && preview.lat !== null && preview.lng !== null && (
                   <div className="mt-1 text-xs text-gray-600">
@@ -112,7 +137,16 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 flex justify-end gap-2">
+        <div className="p-4 flex flex-wrap justify-end gap-2">
+          {canRetryPreparation && onRetryPreparation && (
+            <button
+              onClick={() => void onRetryPreparation()}
+              disabled={isPreparing || isConfirming}
+              className="px-4 py-2 rounded-lg bg-gray-100 disabled:opacity-50"
+            >
+              重新读取照片
+            </button>
+          )}
           <button
             onClick={onCancel}
             disabled={isConfirming}
@@ -122,7 +156,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
           </button>
           <button
             onClick={() => void onConfirm()}
-            disabled={importableCount === 0 || isConfirming}
+            disabled={importableCount === 0 || isConfirming || isPreparing}
             className="px-6 py-2 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-500 rounded-lg font-medium transition-colors text-theme-chrome-fg"
             style={{ backgroundColor: importableCount > 0 ? themeColor : undefined }}
             onMouseEnter={(e) => {
@@ -143,7 +177,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
               }
             }}
           >
-            {isConfirming ? 'Importing…' : `Confirm Import (${importableCount})`}
+            {isPreparing ? 'Preparing…' : isConfirming ? 'Importing…' : hasImportError ? `重试导入 (${importableCount})` : `Confirm Import (${importableCount})`}
           </button>
         </div>
       </ChromeDialogSurface>

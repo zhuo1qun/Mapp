@@ -1,7 +1,13 @@
 (() => {
   // utils/theme/themeChrome.ts
+  var THEME_CHROME_LAB_L_THRESHOLD = 80;
+  var D65_YN = 1;
   var LAB_EPS = 216 / 24389;
   var LAB_KAPPA = 24389 / 27;
+  function srgbChannelToLinear(c255) {
+    const c = c255 / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
   function parseHexToRgb(hex) {
     const h = hex.trim();
     const m6 = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);
@@ -21,6 +27,25 @@
       };
     }
     return null;
+  }
+  function cielabLFromRgb(r, g, b) {
+    const rl = srgbChannelToLinear(r);
+    const gl = srgbChannelToLinear(g);
+    const bl = srgbChannelToLinear(b);
+    const y = rl * 0.2126729 + gl * 0.7151522 + bl * 0.072175;
+    const yr = y / D65_YN;
+    const fy = yr > LAB_EPS ? Math.cbrt(yr) : (LAB_KAPPA * yr + 16) / 116;
+    return 116 * fy - 16;
+  }
+  function cielabLFromHex(hex) {
+    const rgb = parseHexToRgb(hex);
+    if (!rgb) return null;
+    return cielabLFromRgb(rgb.r, rgb.g, rgb.b);
+  }
+  function getThemeChromeForegroundHex(themeColor) {
+    const L = cielabLFromHex(themeColor);
+    if (L == null) return "#ffffff";
+    return L > THEME_CHROME_LAB_L_THRESHOLD ? "#000000" : "#ffffff";
   }
 
   // utils/map/mapChromeStyle.ts
@@ -81,6 +106,112 @@
       `background-image:linear-gradient(180deg,rgba(${background},var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(${background},var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
       `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${borderOpacity})`
     ].join(";");
+  }
+
+  // utils/persistence/imageAssetStore.ts
+  function isMediaRefId(value) {
+    return typeof value === "string" && value.startsWith("img-");
+  }
+
+  // utils/persistence/mediaDisplay.ts
+  function isDisplayableImageSrc(src) {
+    if (!src) return false;
+    if (isMediaRefId(src)) return false;
+    return src.startsWith("data:image/") || src.startsWith("blob:") || src.startsWith("http://") || src.startsWith("https://");
+  }
+  function noteHasBoardTextContent(note) {
+    const text = note.text || "";
+    const firstNewline = text.indexOf("\n");
+    const rawTitle = firstNewline === -1 ? text : text.slice(0, firstNewline);
+    const detail = firstNewline === -1 ? "" : text.slice(firstNewline + 1);
+    const title = rawTitle.replace(/^#+\s+/, "").trim();
+    return title.length > 0 || detail.trim().length > 0;
+  }
+  function noteHasBoardMedia(note) {
+    return Boolean(
+      note.media?.length || note.imageRefs?.length || note.images?.length || note.sketch
+    );
+  }
+  function noteRendersAsBoardSticker(note) {
+    return !noteHasBoardTextContent(note) && noteHasBoardMedia(note);
+  }
+
+  // utils/map/createMapNoteIcon.ts
+  function escapeHtmlAttr(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function mapPinScale(pinSize, isFavorite) {
+    const mapped = pinSize ? (pinSize - 0.5) * (1.2 - 0.2) / (2 - 0.5) + 0.2 : 1;
+    return (isFavorite ? 2 : 1) * mapped;
+  }
+  function photoThumbEdge(scale) {
+    return Math.max(24, Math.round(96 * scale));
+  }
+  function firstDisplayableMapPhotoSrc(note) {
+    const img = note.images?.[0];
+    if (isDisplayableImageSrc(img)) return img;
+    if (isDisplayableImageSrc(note.sketch)) return note.sketch;
+    return null;
+  }
+  function clusterBadgeHtml(clusterCount, themeColor, scale, hang) {
+    if (!clusterCount || clusterCount <= 1) return "";
+    const size = 40 * scale;
+    const offset = hang ? size * 0.24 : 0;
+    const fg = getThemeChromeForegroundHex(themeColor);
+    return `<div style="
+      position:absolute;top:-${offset}px;right:-${offset}px;
+      width:${size}px;height:${size}px;
+      background:${themeColor};border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+    "><span style="color:${fg};font-size:${20 * scale}px;font-weight:400;line-height:1;">${clusterCount}</span></div>`;
+  }
+  function motionWrap(inner, width, height, motion) {
+    const cls = `mapp-map-pin-motion${motion ? ` mapp-map-pin-motion--${motion}` : ""}`;
+    return `<div class="${cls}" style="position:relative;width:${width}px;height:${height}px;transform-origin:${width / 2}px ${height}px;overflow:visible;">${inner}</div>`;
+  }
+  function buildMapNoteIconModel(note, opts) {
+    const { themeColor, clusterCount, pinSize, motion } = opts;
+    const scale = mapPinScale(pinSize, note.isFavorite === true);
+    const photoSrc = firstDisplayableMapPhotoSrc(note);
+    const asPhotoSticker = noteRendersAsBoardSticker(note);
+    const badge = clusterBadgeHtml(clusterCount, themeColor, scale, asPhotoSticker);
+    if (asPhotoSticker) {
+      const edge = photoThumbEdge(scale);
+      const radius = Math.max(8, Math.round(edge * 0.16));
+      const media = photoSrc ? `<img src="${escapeHtmlAttr(photoSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" />` : `<div style="width:100%;height:100%;background:${themeColor};opacity:0.35;"></div>`;
+      const inner = `<div style="
+          width:${edge}px;height:${edge}px;border-radius:${radius}px;overflow:hidden;
+          background:#f3f4f6;box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
+          border:2px solid ${themeColor};
+        ">${media}</div>${badge}`;
+      return {
+        html: motionWrap(inner, edge, edge, motion),
+        size: [edge, edge],
+        anchor: [edge / 2, edge]
+      };
+    }
+    const size = 40 * scale;
+    let content = "";
+    if (photoSrc) {
+      content = `<div style="position:absolute;inset:-25%;overflow:hidden;transform:rotate(45deg);transform-origin:center;">
+      <img src="${escapeHtmlAttr(photoSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;transform:scale(1.5);transform-origin:center;" />
+    </div>`;
+    } else if (note.emoji) {
+      content = `<span style="transform:rotate(45deg);font-size:${20 * scale}px;line-height:1;z-index:1;position:relative;">${escapeHtmlAttr(note.emoji)}</span>`;
+    }
+    const teardrop = `<div style="
+      background-color:${themeColor};
+      width:${size}px;height:${size}px;
+      border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
+      border:3px solid ${themeColor};overflow:hidden;
+    ">${content}</div>${badge}`;
+    return {
+      html: motionWrap(teardrop, size, size, motion),
+      size: [size, size],
+      anchor: [size / 2, size]
+    };
   }
 
   // utils/map/mapTabRuntimeCore.ts
@@ -165,32 +296,17 @@
     });
     return clusters;
   }
-  function mapPinSize(sliderValue) {
-    return (sliderValue - 0.5) * (1.2 - 0.2) / (2 - 0.5) + 0.2;
-  }
   function pinIconHtml(note, themeColor, clusterCount, pinSize) {
-    const isFavorite = note.isFavorite === true;
-    const mapped = mapPinSize(pinSize);
-    const scale = (isFavorite ? 2 : 1) * mapped;
-    const baseSize = 40;
-    const size = baseSize * scale;
-    const borderWidth = 3;
-    const badgeSize = 20 * scale;
-    const badgeOffset = 8 * scale;
-    const countBadge = clusterCount && clusterCount > 1 ? `<div style="position:absolute;top:-${badgeOffset}px;right:-${badgeOffset}px;width:${badgeSize}px;height:${badgeSize}px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.2);z-index:10;border:2px solid ${themeColor};"><span style="color:#000;font-size:${12 * scale}px;font-weight:bold;line-height:1;">${clusterCount}</span></div>` : "";
-    let content = "";
-    if (note.images && note.images.length > 0) {
-      const src = escapeHtml(note.images[0]);
-      content = `<div style="position:absolute;inset:-25%;overflow:hidden;transform:rotate(45deg);transform-origin:center;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;transform:scale(1.5);transform-origin:center;" alt="" /></div>`;
-    } else if (note.sketch) {
-      const src = escapeHtml(note.sketch);
-      content = `<div style="position:absolute;inset:-25%;overflow:hidden;transform:rotate(45deg);transform-origin:center;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;transform:scale(1.5);transform-origin:center;" alt="" /></div>`;
-    } else if (note.emoji) {
-      const emojiSize = 20 * scale;
-      content = `<span style="transform:rotate(45deg);font-size:${emojiSize}px;line-height:1;z-index:1;position:relative;">${escapeHtml(note.emoji)}</span>`;
-    }
-    const html = `<div style="position:relative;background-color:${themeColor};width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);border:${borderWidth}px solid ${themeColor};overflow:hidden;">${content}</div>${countBadge}`;
-    return { html, size, anchor: [size / 2, size] };
+    const model = buildMapNoteIconModel(note, {
+      themeColor,
+      clusterCount,
+      pinSize
+    });
+    return {
+      html: model.html,
+      size: model.size,
+      anchor: model.anchor
+    };
   }
   function runMapTabStandalone(L, marked, payload) {
     const el = document.getElementById("map");
@@ -335,7 +451,7 @@
           const note = cl.notes[0];
           const { html, size, anchor } = pinIconHtml(note, payload.themeColor, void 0, payload.pinSize);
           const m = L.marker(cl.position, {
-            icon: L.divIcon({ className: "custom-icon", html, iconSize: [size, size], iconAnchor: anchor })
+            icon: L.divIcon({ className: "custom-icon", html, iconSize: size, iconAnchor: anchor })
           });
           m.on("mouseover", () => {
             state.hoveredNoteId = note.id;
@@ -363,7 +479,7 @@
           const note = cl.notes[0];
           const { html, size, anchor } = pinIconHtml(note, payload.themeColor, cl.notes.length, payload.pinSize);
           const m = L.marker(cl.position, {
-            icon: L.divIcon({ className: "custom-icon", html, iconSize: [size, size], iconAnchor: anchor })
+            icon: L.divIcon({ className: "custom-icon", html, iconSize: size, iconAnchor: anchor })
           });
           m.on("click", (e) => {
             e.originalEvent?.stopPropagation?.();

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "test:camera": "node scripts/test-camera.mjs",
+    "test:image-import": "node scripts/test-image-import.mjs",
+    "test:note-draft": "node scripts/test-note-draft.mjs",
     "build:graph-standalone": "esbuild graph-standalone-entry.ts --bundle --format=iife --platform=browser --target=es2020 --outfile=utils/graph/graphStandalone.inline.js",
     "build:map-tab-standalone": "esbuild map-tab-standalone-entry.ts --bundle --format=iife --platform=browser --target=es2020 --outfile=utils/map/mapTabStandalone.inline.js",
     "predev": "npm run build:graph-standalone && npm run build:map-tab-standalone",

@@ -92,7 +92,7 @@ async function run() {
     stagedNote = {
       id: `note-${Date.now()}`,
       coords: location,
-      emoji: '📷',
+      emoji: '',
       text: '',
       images: [],
       tags: [],

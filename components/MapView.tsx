@@ -64,6 +64,7 @@ import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot'
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { parseNoteContent } from '../utils';
 import { NoteEditor } from './NoteEditor';
+import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { generateId } from '../utils';
 import { hexToRgb, isPhotoTakenRecently } from '../utils/map/mapUtils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
@@ -460,7 +461,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const [pendingPersistedEditorNoteId, setPendingPersistedEditorNoteId] = useState<string | null>(null);
   /** 与「当前位置新建」同路径；为 true 时 NoteEditor 打开后自动进入内嵌 +拍照 */
   const [editorAutoOpenCamera, setEditorAutoOpenCamera] = useState(false);
-  const mapNoteSaveRef = useRef<(() => Promise<void>) | null>(null);
+  const mapNoteSaveRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
   const compactViewport = useCompactViewport();
   const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
   const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'settle' | 'exit' | undefined>(undefined);
@@ -1002,7 +1003,12 @@ export const MapView: React.FC<MapViewProps> = ({
     handleImageImport,
     handleConfirmImport,
     handleCancelImport,
-    isConfirmingImport
+    isConfirmingImport,
+    isPreparingImport,
+    importProgress,
+    importMessage,
+    hasImportError,
+    handleRetryPreparation
   } = useImageImport({
     project,
     notes,
@@ -1444,10 +1450,7 @@ export const MapView: React.FC<MapViewProps> = ({
         if (map) {
           map.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
         }
-        const newNote = stageNewMapNote(
-          { lat: loc.lat, lng: loc.lng },
-          opts?.autoOpenCamera ? { emoji: '📷' } : undefined
-        );
+        const newNote = stageNewMapNote({ lat: loc.lat, lng: loc.lng });
         setEditorAutoOpenCamera(!!opts?.autoOpenCamera);
         openNewNoteEditorAfterIntro(newNote);
       } catch (error) {
@@ -1715,7 +1718,7 @@ export const MapView: React.FC<MapViewProps> = ({
   );
 
   
-  const handleSaveNote = (noteData: Partial<Note>) => {
+  const handleSaveNote = async (noteData: Partial<Note>) => {
     if (noteData.id && notes.some(n => n.id === noteData.id)) {
       // 确保保留原始note的variant
       const existingNote = notes.find(n => n.id === noteData.id);
@@ -1725,7 +1728,7 @@ export const MapView: React.FC<MapViewProps> = ({
         variant: noteData.variant || existingNote!.variant,
         isFavorite: noteData.isFavorite ?? existingNote?.isFavorite ?? false
       } as Note;
-      onUpdateNote(fullNote);
+      await onUpdateNote(fullNote);
       // Update editingNote to reflect the saved changes
       setEditingNote(fullNote);
       setIntroNote((current) => (current?.id === fullNote.id ? fullNote : current));
@@ -1736,7 +1739,7 @@ export const MapView: React.FC<MapViewProps> = ({
         variant: noteData.variant || 'standard',
         isFavorite: noteData.isFavorite ?? false
       } as Note;
-      onAddNote(fullNote);
+      await onAddNote(fullNote);
       // For new notes, update editingNote as well
       setEditingNote(fullNote);
       setIntroNote((current) => (current?.id === fullNote.id ? fullNote : current));
@@ -1780,10 +1783,10 @@ export const MapView: React.FC<MapViewProps> = ({
     if (isEditorOpen) {
       const save = mapNoteSaveRef.current;
       if (save) {
-        void save().then(() => closeEditorAndDismissNoteSlot('saved'));
+        void save().then((outcome) => closeEditorAndDismissNoteSlot(outcome));
         return;
       }
-      closeEditorAndDismissNoteSlot('saved');
+      closeEditorAndDismissNoteSlot('discarded');
       return;
     }
     setSelectedNoteId(null);
@@ -2824,6 +2827,11 @@ export const MapView: React.FC<MapViewProps> = ({
         onConfirm={handleConfirmImport}
         onCancel={handleCancelImport}
         isConfirming={isConfirmingImport}
+        isPreparing={isPreparingImport}
+        progress={importProgress}
+        message={importMessage}
+        hasImportError={hasImportError}
+        onRetryPreparation={handleRetryPreparation}
         showCoordinates={true}
       />
 

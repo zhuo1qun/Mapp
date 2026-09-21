@@ -3,6 +3,7 @@ import { Note, Tag } from '../types';
 import { THEME_COLOR } from '../constants';
 import { generateId, parseNoteContent } from '../utils';
 import { buildEditorModel, fromEditorModel } from '../utils/note/editorModel';
+import { isNoteContentEmpty, submitNoteDraft, type NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { DrawingCanvas } from './DrawingCanvas';
 import { CameraCaptureDialog } from './map/overlays/CameraCaptureDialog';
 import { useTiptapEditor } from './hooks/useTiptapEditor';
@@ -46,11 +47,11 @@ interface NoteEditorProps {
   /** 保存成功后的关闭路径；可与取消草稿的关闭过渡不同。 */
   onSaveClose?: () => void;
   /** 供记录切换等场景先提交当前草稿、但不关闭编辑器。 */
-  saveDraftRef?: React.MutableRefObject<(() => Promise<void>) | null>;
-  onSave: (note: Partial<Note>) => void;
+  saveDraftRef?: React.MutableRefObject<(() => Promise<NoteDraftOutcome>) | null>;
+  onSave: (note: Partial<Note>) => void | Promise<void>;
   /** 调用方尚未把这条便签写入项目数据。 */
   isNewNote?: boolean;
-  onDelete?: (noteId: string) => void;
+  onDelete?: (noteId: string) => void | Promise<void>;
   onSwitchToMapView?: (coords?: { lat: number; lng: number }) => void;
   onSwitchToBoardView?: (coords?: { x: number; y: number }, mapInstance?: any) => void;
   /** Graph 项目：关闭编辑器并在图谱中聚焦该便签 */
@@ -391,18 +392,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     });
   };
 
-  const isEmptyNote = (noteData: Partial<Note>): boolean => {
-    const hasText = noteData.text && noteData.text.trim().length > 0;
-    const hasEmoji = !isCompactMode && noteData.emoji && noteData.emoji.length > 0;
-    const hasImages = noteData.images && noteData.images.length > 0;
-    const hasSketch = noteData.sketch && noteData.sketch.length > 0;
-    const hasMedia = (noteData.media?.length ?? 0) > 0;
-    const hasTags = !isCompactMode && noteData.tags && noteData.tags.length > 0;
-    const hasTime = noteData.startYear != null || noteData.endYear != null;
-    return !hasText && !hasEmoji && !hasImages && !hasSketch && !hasMedia && !hasTags && !hasTime;
-  };
-
-  const isDiscardableNewDraft = isNewNote && isEmptyNote({
+  const isDiscardableDraft = isNoteContentEmpty({
     text,
     emoji,
     tags,
@@ -412,9 +402,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     imageRefs,
     sketch,
     media: mediaItems,
-  });
+  }, isCompactMode);
 
-  const handleSave = async (closeAfterSave = true) => {
+  const handleSave = async (closeAfterSave = true): Promise<NoteDraftOutcome> => {
     const persisted = await persistMediaForSave();
     const noteData = getCurrentNoteData(persisted);
 
@@ -423,24 +413,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     }
     if (!noteData.media) noteData.media = persisted.media;
 
-    if (isEmptyNote(noteData) && initialNote?.id && !isNewNote && onDelete) {
-      await Promise.resolve(onDelete(initialNote.id));
-      if (closeAfterSave) onClose();
-      return;
-    }
-
-    if (isEmptyNote(noteData) && (isNewNote || !initialNote?.id)) {
-      if (closeAfterSave) onClose();
-      return;
-    }
-
-    onSave(noteData);
+    const outcome = await submitNoteDraft(noteData, { isNewNote, onSave, onDelete });
 
     if (closeAfterSave) {
-      setTimeout(() => {
-        (onSaveClose ?? onClose)();
-      }, 0);
+      if (outcome === 'discarded') onClose();
+      else setTimeout(() => { (onSaveClose ?? onClose)(); }, 0);
     }
+    return outcome;
   };
 
   if (saveDraftRef) saveDraftRef.current = () => handleSave(false);
@@ -776,10 +755,10 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             dismissOverlays();
             void handleSave();
           }}
-          discardDraft={isDiscardableNewDraft}
+          discardDraft={isDiscardableDraft}
           onDiscardDraft={() => {
             dismissOverlays();
-            onClose();
+            void handleSave();
           }}
         />
 

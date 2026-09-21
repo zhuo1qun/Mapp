@@ -10,6 +10,7 @@ import { generateId, parseNoteContent } from '../utils';
 import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
 import { emojiLayerStateFromLegacyTagState, groupDisplayLabel, noteBelongsToLayerGroupKey } from '../utils/layer/unifiedNoteLayer';
 import { NoteEditor } from './NoteEditor';
+import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
@@ -152,7 +153,7 @@ export const TableView: React.FC<TableViewProps> = ({
   const [pendingDelete, setPendingDelete] = useState<PendingTableDelete | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [editorNoteId, setEditorNoteId] = useState<string | null>(null);
-  const editorSaveDraftRef = useRef<(() => Promise<void>) | null>(null);
+  const editorSaveDraftRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const canvasStageRef = useRef<HTMLDivElement>(null);
   const listWindowRef = useRef<HTMLDivElement>(null);
@@ -1008,6 +1009,7 @@ export const TableView: React.FC<TableViewProps> = ({
           isOpen={!!editorNoteId}
           onClose={() => setEditorNoteId(null)}
           saveDraftRef={editorSaveDraftRef}
+          onDelete={onDeleteNote}
           onSave={(updatedNote) => {
             if (editorNoteId) {
               const existingNote = project.notes.find(n => n.id === editorNoteId);

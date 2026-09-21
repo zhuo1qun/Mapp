@@ -45,6 +45,10 @@ export async function readImageGpsMetadata(file: File): Promise<ImageGpsMetadata
   const lat = latitude !== null && Number.isFinite(latitude) ? latitude : null;
   const lng = longitude !== null && Number.isFinite(longitude) ? longitude : null;
 
+  if ((lat !== null && Math.abs(lat) > 90) || (lng !== null && Math.abs(lng) > 180)) {
+    throw new Error('照片 GPS 坐标超出有效范围');
+  }
+
   return { lat, lng, output };
 }
 

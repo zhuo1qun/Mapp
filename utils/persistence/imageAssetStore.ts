@@ -216,7 +216,8 @@ export async function writeMediaRecordFromDataUrl(
 /** 按 contentHash 查找已有资产（仅扫 v1 记录与可哈希的旧字符串） */
 export async function findMediaIdByContentHash(
   prefix: typeof IMAGE_PREFIX | typeof SKETCH_PREFIX,
-  contentHash: string
+  contentHash: string,
+  expectedDataUrl?: string
 ): Promise<string | null> {
   const allKeys = await keys();
   const mediaKeys = allKeys.filter(
@@ -228,7 +229,8 @@ export async function findMediaIdByContentHash(
       const raw = await get<StoredImageValue>(key);
       if (!raw) continue;
       if (isStoredImageRecordV1(raw)) {
-        if (raw.asset.contentHash === contentHash) {
+        if (raw.asset.contentHash === contentHash &&
+            (expectedDataUrl === undefined || await blobToDataUrl(raw.blob) === expectedDataUrl)) {
           return key.slice(prefix.length);
         }
         continue;
@@ -236,7 +238,9 @@ export async function findMediaIdByContentHash(
       const dataUrl = await storedValueToDataUrl(raw);
       if (!dataUrl) continue;
       const h = await hashMediaPayload(dataUrl);
-      if (h === contentHash) return key.slice(prefix.length);
+      if (h === contentHash && (expectedDataUrl === undefined || dataUrl === expectedDataUrl)) {
+        return key.slice(prefix.length);
+      }
     } catch {
       continue;
     }
