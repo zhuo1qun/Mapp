@@ -76,7 +76,7 @@
     DEFAULT_MAP_UI_CHROME_OPACITY,
     DEFAULT_MAP_UI_CHROME_BLUR_PX
   );
-  var MAP_CHROME_SURFACE_BORDER_CLASS = "border border-gray-100/80";
+  var MAP_CHROME_SURFACE_BORDER_CLASS = "chrome-glass-edge border border-gray-100/80";
   var MAP_CHROME_SURFACE_SHELL_CLASS = `rounded-lg shadow-lg ${MAP_CHROME_SURFACE_BORDER_CLASS}`;
   function mapChromeSurfaceInlineCss(opacity, blurPx) {
     const o = Math.min(1, Math.max(0, opacity));

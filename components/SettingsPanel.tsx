@@ -3,8 +3,6 @@ import { createPortal } from 'react-dom';
 import { Camera, ChevronDown, Palette } from 'lucide-react';
 import { set } from 'idb-keyval';
 import { MAP_STYLE_OPTIONS } from '../constants';
-import type { Project } from '../types';
-import { GraphStyleSettingsBlock } from './GraphStyleSettingsBlock';
 import { ThemeColorPicker } from './ThemeColorPicker';
 import { HelpHint } from './ui/HelpHint';
 import { SettingsCompactSlider } from './ui/SettingsCompactSlider';
@@ -26,7 +24,7 @@ import { ExportResolutionDialog } from './ExportResolutionDialog';
 import { AppearanceSettingsBlock } from './AppearanceSettingsBlock';
 
 /** 由打开设置时所在的视图决定只展示哪一块 */
-export type SettingsContextView = 'map' | 'board' | 'graph' | 'table';
+export type SettingsContextView = 'map' | 'board' | 'table';
 
 const PANEL_WIDTH = 320;
 const PANEL_GAP = 8;
@@ -60,9 +58,6 @@ interface SettingsPanelProps {
   /** 地图：是否显示便签文字标签 */
   showTextLabels?: boolean;
   onShowTextLabelsChange?: (show: boolean) => void;
-  /** 有则展示 Graph Style，并写入项目 */
-  graphProject?: Project;
-  onGraphProjectPatch?: (patch: Partial<Project>) => void | Promise<void>;
   boardVariantToggles?: {
     primary: boolean;
     image: boolean;
@@ -100,8 +95,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onLabelSizeChange,
   showTextLabels,
   onShowTextLabelsChange,
-  graphProject,
-  onGraphProjectPatch,
   boardVariantToggles,
   onExportHtml,
   shell = true,
@@ -209,7 +202,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     settingsAppearance
   );
   const snapshotElementId = `${settingsContextView}-view-container`;
-  const snapshotFileName = `${graphProject?.name || 'project'}-${settingsContextView}`;
+  const snapshotFileName = `project-${settingsContextView}`;
   const openSnapshotExport = () => {
     const rect = document.getElementById(snapshotElementId)?.getBoundingClientRect();
     setSnapshotDimensions({
@@ -387,20 +380,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </div>
             ) : (
               <p className="py-2 text-xs leading-relaxed text-gray-500">看板视图相关样式将放在此处，敬请期待。</p>
-            )
-          ) : null}
-
-          {settingsContextView === 'graph' ? (
-            graphProject && onGraphProjectPatch ? (
-              <GraphStyleSettingsBlock
-                themeColor={themeColor}
-                project={graphProject}
-                onPatch={(patch) => void onGraphProjectPatch(patch)}
-              />
-            ) : (
-              <p className="py-2 text-xs leading-relaxed text-gray-500">
-                当前无法写入图谱样式（未打开项目或缺少保存接口）。
-              </p>
             )
           ) : null}
 

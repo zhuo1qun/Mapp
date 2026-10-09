@@ -8,6 +8,7 @@ import {
   loadProject,
   cleanBrokenReferences,
   flushPendingConnectionMigrationSave,
+  purgeLegacyGraphProjects,
   ProjectSummary
 } from '../../utils/persistence/storage';
 import { syncNoteImageRefs } from '../../utils/persistence/imageAssetStore';
@@ -115,6 +116,8 @@ export const useProjectState = (): UseProjectStateReturn => {
   const loadProjects = useCallback(async () => {
     try {
       setIsLoading(true);
+      // 用户已确认：Mapping 直接移除旧 Graph 项目，不保留迁移入口。
+      await purgeLegacyGraphProjects();
       const summaries = await loadProjectSummaries();
       setProjectSummaries(summaries);
       setProjects(summariesToProjects(summaries));

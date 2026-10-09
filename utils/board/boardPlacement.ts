@@ -3,12 +3,12 @@
  *
  * 对外暴露三类接口：
  *  - 常量（PLACEMENT_*）
- *  - nextSequentialSlot：按行优先顺序分配第 N 个便签的坐标（"+" 按钮用）
  *  - createGridAllocator：基于细粒度 cell 占用的任意位置分配器（双击指定位置 / 批量导入用）
  *  - 辅助函数：boardNoteDimensions / computeBoardBounds
  */
 
 import type { Note } from '../../types';
+import { isNoteBoardPlaced } from '../note/notePlacement';
 import { noteRendersAsBoardSticker } from '../persistence/mediaDisplay';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────────
@@ -20,8 +20,6 @@ export const PLACEMENT_WRAP_COLS = 6;
 
 export const PLACEMENT_NOTE_W = 256;
 export const PLACEMENT_NOTE_H = 256;
-export const PLACEMENT_SLOT_W = PLACEMENT_NOTE_W + PLACEMENT_GAP;
-export const PLACEMENT_SLOT_H = PLACEMENT_NOTE_H + PLACEMENT_GAP;
 
 /** 媒体贴纸保持完整比例，并以便签的最长边作为默认显示尺度。 */
 export function fitBoardMediaDimensions(
@@ -84,25 +82,6 @@ export function computeBoardBounds(boardNotes: Note[]): BoardBounds | null {
   return { minX, minY, maxX, maxY };
 }
 
-// ── 顺序定位（"+" 按钮） ───────────────────────────────────────────────────────
-
-/**
- * 纯计数定位：第 boardNoteCount 个便签放在第 `row` 行、第 `col` 列。
- *
- * 不依赖任何 cell 扫描，不随视口/缩放变化，保证严格按行从左到右递增。
- * 适用于 "+" 按钮连续创建便签场景。
- *
- * @param boardNoteCount 当前已有有效便签（boardX !== undefined）的数量
- */
-export function nextSequentialSlot(boardNoteCount: number): { boardX: number; boardY: number } {
-  const col = boardNoteCount % PLACEMENT_WRAP_COLS;
-  const row = Math.floor(boardNoteCount / PLACEMENT_WRAP_COLS);
-  return {
-    boardX: PLACEMENT_PADDING + col * PLACEMENT_SLOT_W,
-    boardY: PLACEMENT_PADDING + row * PLACEMENT_SLOT_H
-  };
-}
-
 // ── 网格分配器（双击指定位置 / 批量导入） ──────────────────────────────────────
 
 /**
@@ -156,7 +135,7 @@ export function createGridAllocator(params: {
 
   // 将现有便签写入占用集
   existingNotes.forEach((note) => {
-    if (note.boardX === undefined || note.boardY === undefined) return;
+    if (!isNoteBoardPlaced(note)) return;
     const { width, height } = boardNoteDimensions(note);
     occupy(note.boardX, note.boardY, width, height);
   });

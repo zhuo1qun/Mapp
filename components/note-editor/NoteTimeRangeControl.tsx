@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { Calendar, Check, X } from 'lucide-react';
 import { computeAnchoredPanelPlacement } from '../ui/anchoredPanelPlacement';
 import {
@@ -10,6 +9,9 @@ import {
 } from './addPillStyles';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../ui/chromeAppearanceContext';
+import { ChromeTextField } from '../ui/ChromeTextField';
+import { ChromeActionButton } from '../ui/ChromeActionButton';
+import { ChromePropertyPopover } from '../ui/ChromePropertyPopover';
 
 export interface NoteTimeRangeChange {
   startYear?: number;
@@ -203,37 +205,27 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
         <Calendar size={14} strokeWidth={2} className="shrink-0" aria-hidden />
       </button>
 
-      {isEditingTime &&
-        timePanelPlacement &&
-        createPortal(
-          <div data-note-time-range-panel data-chrome-window-nested="">
-            <div
-              className="fixed inset-0"
-              style={{ zIndex: 9999 }}
-              onClick={closeTimeEdit}
-            />
-            <div
-              ref={timePanelRef}
-              className={`map-chrome-content-${chromeAppearance} flex max-w-[calc(100vw-16px)] flex-nowrap items-center gap-1.5 overflow-x-auto rounded-xl border border-gray-100/80 p-2 shadow-lg whitespace-nowrap ${panelChromeStyle ? '' : 'bg-white'}`}
-              style={{
-                ...(panelChromeStyle || {}),
-                position: 'fixed',
-                top: timePanelPlacement.top,
-                left: timePanelPlacement.left,
-                maxHeight: timePanelPlacement.maxHeight,
-                zIndex: 10000
-              }}
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-            <input
+      <ChromePropertyPopover
+        open={isEditingTime}
+        onClose={closeTimeEdit}
+        placement={timePanelPlacement}
+        panelRef={timePanelRef}
+        panelChromeStyle={panelChromeStyle}
+        chromeAppearance={chromeAppearance}
+        width={TIME_PANEL_EST_W}
+        maxWidth="calc(100vw - 16px)"
+        className="flex max-h-full flex-nowrap items-center gap-1.5 overflow-x-auto p-2 whitespace-nowrap"
+        surface="time"
+      >
+            <ChromeTextField
               type="number"
               min={1}
               max={9999}
               value={editingStartYear}
               onChange={(e) => setEditingStartYear(e.target.value)}
-              className="w-14 shrink-0 px-1.5 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-offset-0"
-              style={{ ['--tw-ring-color' as string]: themeColor }}
+              themeColor={themeColor}
+              containerClassName="h-8 w-14 shrink-0 sm:h-8"
+              className="px-1.5 text-xs"
               autoFocus
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
@@ -242,46 +234,43 @@ export const NoteTimeRangeControl: React.FC<NoteTimeRangeControlProps> = ({
               }}
             />
             <span className="text-gray-400 text-xs shrink-0">–</span>
-            <input
+            <ChromeTextField
               type="number"
               min={1}
               max={9999}
               value={editingEndYear}
               onChange={(e) => setEditingEndYear(e.target.value)}
-              className="w-14 shrink-0 px-1.5 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-offset-0"
-              style={{ ['--tw-ring-color' as string]: themeColor }}
+              themeColor={themeColor}
+              containerClassName="h-8 w-14 shrink-0 sm:h-8"
+              className="px-1.5 text-xs"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') closeTimeEdit();
                 if (e.key === 'Enter') saveTimeEdit();
               }}
             />
-            <button
-              type="button"
+            <ChromeActionButton
+              themeColor={themeColor}
               onClick={(e) => {
                 e.stopPropagation();
                 saveTimeEdit();
               }}
-              className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors shrink-0 border-0 cursor-pointer"
+              className="shrink-0 p-1.5"
               title="保存起止时间"
             >
               <Check size={16} className="text-green-600" />
-            </button>
-            <button
-              type="button"
+            </ChromeActionButton>
+            <ChromeActionButton
               onClick={(e) => {
                 e.stopPropagation();
                 closeTimeEdit();
               }}
-              className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors shrink-0 border-0 cursor-pointer"
+              className="shrink-0 p-1.5"
               title="取消"
             >
               <X size={16} />
-            </button>
-            </div>
-          </div>,
-          document.body
-        )}
+            </ChromeActionButton>
+      </ChromePropertyPopover>
     </>
   );
 };

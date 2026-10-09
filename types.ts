@@ -146,7 +146,16 @@ export interface NoteMediaItem {
   variantEnabled?: boolean;
 }
 
-export interface Note {
+/**
+ * 本地优先同步元数据。实体仍可离线使用；后续共享地图只同步发生变化的实体。
+ * `deletedAt` 不放进活跃 Project 的数组，删除事件由本地 outbox 保留为 tombstone。
+ */
+export interface SyncEntityMetadata {
+  updatedAt?: number;
+  revision?: number;
+}
+
+export interface Note extends SyncEntityMetadata {
   id: string;
   createdAt: number;
   coords: Coordinates;
@@ -186,7 +195,10 @@ export interface Note {
   // Board View Position
   boardX: number;
   boardY: number;
-  isInitialPosition?: boolean; // 是否处于初始自动分配位置（用于重排）
+  /** 尚未投放到 Board：保留 0,0 仅为兼容旧数据结构，由 Board 侧栏接收。 */
+  isInitialPosition?: boolean;
+  /** 最近一次进入待定箱的顺序；只影响待定箱排列，不随普通编辑更新。 */
+  unplacedOrder?: number;
   
   // Type of note（仅 standard 文本便签与 image 图片便签；旧数据中的 compact 在加载时迁移为 standard）
   variant: 'standard' | 'image';
@@ -212,7 +224,25 @@ export interface Note {
   layerStackOrder?: number;
 }
 
-export interface Connection {
+/**
+ * 公共 Playground 中的一条临时地图记录。
+ *
+ * `ownerToken` 从不出现在这个公开模型里；浏览器仅把它保存到本机，用来证明
+ * 自己仍是发布者。服务端只保存该令牌的哈希。
+ */
+export interface PlaygroundEntry {
+  id: string;
+  note: Pick<
+    Note,
+    'coords' | 'emoji' | 'text' | 'tags' | 'color' | 'createdAt' | 'variant'
+  >;
+  imageUrls: string[];
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+}
+
+export interface Connection extends SyncEntityMetadata {
   id: string;
   fromNoteId: string;
   toNoteId: string;
@@ -235,7 +265,7 @@ export interface Connection {
   weight?: number;
 }
 
-export interface Frame {
+export interface Frame extends SyncEntityMetadata {
   id: string;
   title: string;
   description?: string; // 图层描述
@@ -262,15 +292,15 @@ export interface GraphLayerState {
   tagVisibilityLogic?: TagVisibilityLogic;
 }
 
-export interface Project {
+export interface Project extends SyncEntityMetadata {
   id: string;
   name: string;
   /** 内置示例的稳定来源标识；普通项目和用户导入项目不会保留此字段。 */
   builtinExampleId?: string;
-  /** 历史字段：图片背景模式已移除，固定为 map；业务类型见 projectKind */
+  /** 历史字段：图片背景模式已移除，固定为 map。 */
   type: 'map';
   /**
-   * 项目工作流类型：mapping=地图+看板；graph=关系图谱+看板。
+   * 项目工作流固定为 Mapping；保留该字段只为兼容旧导入文件。
    * 缺失时视为旧项目，打开时询问归类。
    */
   projectKind?: ProjectKind;
@@ -351,7 +381,7 @@ export interface Project {
   graphNewConnectionToArrow?: 'arrow' | 'none';
 }
 
-/** 项目工作流：mapping=地图+看板；graph=关系图谱+看板 */
-export type ProjectKind = 'mapping' | 'graph';
+/** 项目工作流：Mapping。 */
+export type ProjectKind = 'mapping';
 
-export type ViewMode = 'map' | 'board' | 'table' | 'graph';
+export type ViewMode = 'map' | 'board' | 'table';

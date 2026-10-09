@@ -23,9 +23,6 @@ interface NoteHeaderProps {
   showNavigateGo?: boolean;
   onNavigateGo?: () => void;
 
-  showLocateGraph?: boolean;
-  onLocateGraph?: () => void;
-
   onSave: () => void;
   /** 当前内容为空即显示取消；已落盘的空便签也走删除路径。 */
   discardDraft?: boolean;
@@ -46,8 +43,6 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   onLocateMap,
   showNavigateGo = false,
   onNavigateGo,
-  showLocateGraph = false,
-  onLocateGraph,
   onSave,
   discardDraft = false,
   onDiscardDraft,
@@ -99,12 +94,6 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
         {showNavigateGo && onNavigateGo && (
           <NoteIconButton onClick={onNavigateGo} variant="neutral" label="导航" title="Go · 外部导航">
             <Navigation size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
-          </NoteIconButton>
-        )}
-
-        {showLocateGraph && onLocateGraph && (
-          <NoteIconButton onClick={onLocateGraph} variant="neutral" label="图谱" title="定位到图谱">
-            <Locate size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}
 

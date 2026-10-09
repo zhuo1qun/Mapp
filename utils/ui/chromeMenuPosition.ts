@@ -1,20 +1,5 @@
 import { useLayoutEffect, useState, type RefObject } from 'react';
 
-/** 与顶栏 `right-2 sm:right-4` / 编辑栏 `lg:right-[calc(20rem+0.75rem)]` 一致 */
-export const WORKSPACE_INSPECTOR_RIGHT_EDGE = 'calc(20rem + 0.75rem)';
-
-/**
- * 编辑属性侧栏可见时，同步顶栏右侧菜单的 page-right 对齐边距。
- */
-export function applyWorkspaceRightEdgeForInspector(active: boolean) {
-  const root = document.documentElement;
-  if (active && window.matchMedia('(min-width: 1024px)').matches) {
-    root.style.setProperty('--workspace-ui-right-edge', WORKSPACE_INSPECTOR_RIGHT_EDGE);
-  } else {
-    root.style.removeProperty('--workspace-ui-right-edge');
-  }
-}
-
 /** 固定定位菜单：仅取锚点下方 top，左右由 `.ui-chrome-menu-page-left/right` 决定 */
 export function useChromeMenuTop(
   open: boolean,

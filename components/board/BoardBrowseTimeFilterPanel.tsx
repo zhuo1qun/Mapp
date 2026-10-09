@@ -2,6 +2,8 @@ import React, { CSSProperties, RefObject } from 'react';
 import { Clock } from 'lucide-react';
 import { BoardYearRangeSlider } from '../ui/BoardYearRangeSlider';
 import { ChromeWindow } from '../ui/ChromeWindow';
+import { ChromeTextField } from '../ui/ChromeTextField';
+import { ChromeActionButton } from '../ui/ChromeActionButton';
 import { useFixedAnchorPosition } from '../ui/useFixedAnchorPosition';
 import { useCompactViewport } from '../../utils/ui/useCompactViewport';
 
@@ -76,7 +78,7 @@ export const BoardBrowseTimeFilterPanel: React.FC<BoardBrowseTimeFilterPanelProp
           <div className="flex w-full items-start justify-between gap-3 px-3 pb-1 pt-2">
             <div className="flex min-w-0 flex-col items-start gap-0.5">
               <span className="text-xs text-gray-500">起年</span>
-              <input
+              <ChromeTextField
                 type="number"
                 min={sliderMinBound}
                 max={sliderMaxBound}
@@ -87,13 +89,14 @@ export const BoardBrowseTimeFilterPanel: React.FC<BoardBrowseTimeFilterPanelProp
                   const c = Math.max(sliderMinBound, Math.min(sliderMaxBound, v));
                   onPendingMinChange(Math.min(c, pendingMax));
                 }}
-                className="w-[4.5rem] rounded-lg border border-gray-200 px-1.5 py-1 text-left text-xs outline-none focus:ring-2 focus:ring-offset-0"
-                style={{ ['--tw-ring-color' as string]: themeColor }}
+                themeColor={themeColor}
+                containerClassName="h-7 w-[4.5rem] shrink-0 sm:h-7"
+                className="px-1.5 text-left text-xs"
               />
             </div>
             <div className="flex min-w-0 flex-col items-end gap-0.5">
               <span className="text-xs text-gray-500">止年</span>
-              <input
+              <ChromeTextField
                 type="number"
                 min={sliderMinBound}
                 max={sliderMaxBound}
@@ -104,8 +107,9 @@ export const BoardBrowseTimeFilterPanel: React.FC<BoardBrowseTimeFilterPanelProp
                   const c = Math.max(sliderMinBound, Math.min(sliderMaxBound, v));
                   onPendingMaxChange(Math.max(c, pendingMin));
                 }}
-                className="w-[4.5rem] rounded-lg border border-gray-200 px-1.5 py-1 text-right text-xs outline-none focus:ring-2 focus:ring-offset-0"
-                style={{ ['--tw-ring-color' as string]: themeColor }}
+                themeColor={themeColor}
+                containerClassName="h-7 w-[4.5rem] shrink-0 sm:h-7"
+                className="px-1.5 text-right text-xs"
               />
             </div>
           </div>
@@ -113,29 +117,28 @@ export const BoardBrowseTimeFilterPanel: React.FC<BoardBrowseTimeFilterPanelProp
       ) : null}
       <div className="my-2 h-px bg-gray-100" />
       <div className="flex items-center justify-end gap-2 px-3">
-        <button
-          type="button"
+        <ChromeActionButton
           onClick={(ev) => {
             ev.stopPropagation();
             onCancel();
           }}
           onPointerDown={(ev) => ev.stopPropagation()}
-          className="cursor-pointer rounded-lg border-0 px-2.5 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+          className="px-2.5 py-1.5 text-sm"
         >
           取消
-        </button>
-        <button
-          type="button"
+        </ChromeActionButton>
+        <ChromeActionButton
+          tone="primary"
+          themeColor={themeColor}
           onClick={(ev) => {
             ev.stopPropagation();
             onApply();
           }}
           onPointerDown={(ev) => ev.stopPropagation()}
-          className="text-theme-chrome-fg cursor-pointer rounded-lg border-0 px-2.5 py-1.5 text-sm"
-          style={{ backgroundColor: themeColor }}
+          className="px-2.5 py-1.5 text-sm"
         >
           确定
-        </button>
+        </ChromeActionButton>
       </div>
     </>
   );

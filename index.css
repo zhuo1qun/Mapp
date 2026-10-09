@@ -60,8 +60,14 @@
   bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
 }
 
+/* 待定位箱在窄屏停靠左下时，新建按钮始终在它上方留出一段触控间距。 */
+.ui-map-compact-create-control--tray-open {
+  bottom: calc(max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem)) + 13.75rem);
+}
+
 .ui-board-compact-edit-control {
-  bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
+  top: max(0.5rem, calc(env(safe-area-inset-top, 0px) + 0.5rem));
+  right: 0.5rem;
 }
 
 /* 窄屏地图的扇形新建菜单在支持 hover 的设备上，沿用工具栏按钮原有的文字展开反馈。 */
@@ -593,7 +599,7 @@ body {
   --chrome-fg: rgb(0 0 0 / 0.7);
   --chrome-fg-muted: rgb(0 0 0 / 0.52);
   --chrome-fg-faint: rgb(0 0 0 / 0.36);
-  --chrome-border: rgb(0 0 0 / 0.12);
+  --chrome-border: rgb(255 255 255 / 0.08);
   color: var(--chrome-fg);
   border-color: var(--chrome-border) !important;
 }
@@ -603,9 +609,18 @@ body {
   --chrome-fg: rgb(255 255 255 / 0.72);
   --chrome-fg-muted: rgb(255 255 255 / 0.56);
   --chrome-fg-faint: rgb(255 255 255 / 0.4);
-  --chrome-border: rgb(255 255 255 / 0.16);
+  --chrome-border: rgb(0 0 0 / 0.08);
   color: var(--chrome-fg);
   border-color: var(--chrome-border) !important;
+}
+
+/* 淡轮廓与面板材质分开绘制：渐变止于描边内侧，不再叠到半透明外圈下面。
+ * 内缘的亮白 / 暗黑来自面板自身，不另加上下高光；保留原有投影与焦点 ring。 */
+.chrome-glass-edge,
+.map-chrome-content-light.border,
+.map-chrome-content-dark.border {
+  border-color: var(--chrome-border, rgb(255 255 255 / 0.08));
+  background-clip: padding-box;
 }
 
 /* 主题色页面上的卡片与按钮只使用这一套交互状态：
@@ -619,7 +634,7 @@ body {
   --theme-chrome-interactive-fg: rgb(0 0 0 / 0.7);
   --theme-chrome-interactive-fg-strong: rgb(0 0 0 / 0.9);
   --theme-chrome-interactive-fg-muted: rgb(0 0 0 / 0.45);
-  --theme-chrome-interactive-border: rgb(0 0 0 / 0.12);
+  --theme-chrome-interactive-border: rgb(255 255 255 / 0.08);
   position: relative;
   isolation: isolate;
   background-color: transparent !important;
@@ -641,7 +656,7 @@ body {
   --theme-chrome-interactive-fg: rgb(255 255 255 / 0.72);
   --theme-chrome-interactive-fg-strong: rgb(255 255 255 / 0.92);
   --theme-chrome-interactive-fg-muted: rgb(255 255 255 / 0.5);
-  --theme-chrome-interactive-border: rgb(255 255 255 / 0.16);
+  --theme-chrome-interactive-border: rgb(0 0 0 / 0.08);
 }
 
 .theme-chrome-interactive::before {
@@ -650,11 +665,11 @@ body {
   z-index: -1;
   inset: 0;
   border-radius: inherit;
+  border: 1px solid var(--theme-chrome-interactive-border);
   pointer-events: none;
   background-image: var(--theme-chrome-interactive-surface);
-  box-shadow:
-    inset 0 0 0 1px var(--theme-chrome-interactive-border),
-    0 8px 20px -14px rgb(0 0 0 / 0.45);
+  background-clip: padding-box;
+  box-shadow: 0 8px 20px -14px rgb(0 0 0 / 0.45);
   opacity: 0;
   transform: scale(1);
   transition:
@@ -686,9 +701,7 @@ body {
 .theme-chrome-interactive[aria-pressed='true']::before,
 .theme-chrome-interactive[aria-expanded='true']::before {
   opacity: 0.94;
-  box-shadow:
-    inset 0 0 0 1px var(--theme-chrome-interactive-border),
-    0 6px 16px -14px rgb(0 0 0 / 0.4);
+  box-shadow: 0 6px 16px -14px rgb(0 0 0 / 0.4);
 }
 
 .theme-chrome-interactive:active::before {
@@ -975,8 +988,9 @@ body {
     calc(var(--note-editor-anchor-y) - var(--note-slot-top, 0px));
 }
 
-/* Tiptap 会在显示时把这些菜单直接挂到 body；层级须落在该挂载节点本身，
+/* Tiptap 会在显示时把这些菜单直接挂到 body；层级须落在其实际定位的外层节点，
  * 不能只依赖内部按钮的 z-index。 */
+.note-editor-transient-root,
 .note-editor-transient-layer {
   z-index: var(--z-note-editor-transient) !important;
 }
@@ -1722,6 +1736,210 @@ body {
   will-change: opacity, scale, translate;
 }
 
+/* Board 和待定箱使用同一套对象投影：便签是纸片，图片是脱离底板的贴纸。 */
+.board-note-elevation {
+  box-shadow: var(--workspace-object-shadow, 0 12px 28px rgb(15 23 42 / 0.1), 0 2px 8px rgb(15 23 42 / 0.045));
+  transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.board-sticker-elevation {
+  filter: var(--workspace-object-sticker-shadow, drop-shadow(0 10px 28px rgb(15 23 42 / 0.18)));
+  transition: filter 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 这是对象“被拿起”的唯一状态组件。它不直接画投影，而是把同一套当前投影
+ * 传给内部的纸片或贴纸：hover、选中、拖动始终复用同一个放大后的 blur。 */
+.workspace-object-elevation {
+  --workspace-object-shadow-base:
+    0 12px 28px rgb(15 23 42 / 0.1),
+    0 2px 8px rgb(15 23 42 / 0.045);
+  --workspace-object-shadow-lifted:
+    0 12px 64px rgb(15 23 42 / 0.075),
+    0 2px 24px rgb(15 23 42 / 0.035);
+  --workspace-object-sticker-shadow-base: drop-shadow(0 10px 28px rgb(15 23 42 / 0.18));
+  --workspace-object-sticker-shadow-lifted: drop-shadow(0 10px 64px rgb(15 23 42 / 0.12));
+  --workspace-object-shadow: var(--workspace-object-shadow-base);
+  --workspace-object-sticker-shadow: var(--workspace-object-sticker-shadow-base);
+}
+
+.workspace-object-elevation--interactive:hover,
+.workspace-object-elevation--active {
+  --workspace-object-shadow: var(--workspace-object-shadow-lifted);
+  --workspace-object-sticker-shadow: var(--workspace-object-sticker-shadow-lifted);
+}
+
+.workspace-transient-elevation {
+  filter: drop-shadow(0 8px 14px rgb(15 23 42 / 0.12));
+  animation: workspace-transient-elevation-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 临时窗口应高于画布，但不应以厚重投影抢过内容本身。 */
+.workspace-transient-elevation.shadow-xl,
+.workspace-transient-elevation .shadow-xl,
+.workspace-transient-elevation .shadow-lg {
+  box-shadow: 0 8px 18px -12px rgb(15 23 42 / 0.26), 0 2px 6px -4px rgb(15 23 42 / 0.14) !important;
+}
+
+/* 临时浮层的入场只淡入其轻投影；不要沿用“对象被拿起”的重阴影动画。 */
+@keyframes workspace-transient-elevation-enter {
+  from {
+    opacity: 0.96;
+    filter: drop-shadow(0 3px 6px rgb(15 23 42 / 0.06));
+  }
+  to {
+    opacity: 1;
+    filter: drop-shadow(0 8px 14px rgb(15 23 42 / 0.12));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-note-elevation,
+  .board-sticker-elevation,
+  .workspace-transient-elevation {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* 标题只在已按长度回退字号后仍放不下时省略；正文让出空间给标题与标签。 */
+.note-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.note-card-content {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: rgb(31 41 55);
+}
+
+.note-card-detail {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--note-detail-lines, 3);
+  /* ReactMarkdown 会生成段落等块元素；仅靠 line-clamp 时个别浏览器会在省略号后露出下一行。 */
+  max-height: calc(var(--note-detail-lines, 3) * 1.35em);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.note-card-detail > * {
+  margin: 0;
+}
+
+.note-card-detail > * + * {
+  margin-top: 0.35em;
+}
+
+/* Board 与待定箱共用的 Markdown 正文；不再依赖 Board 实例注入样式。 */
+.markdown-board-preview {
+  line-height: 1.35;
+}
+
+.markdown-board-preview p {
+  margin: 0 0 0.45em;
+}
+
+.markdown-board-preview p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-board-preview h1,
+.markdown-board-preview h2,
+.markdown-board-preview h3,
+.markdown-board-preview h4,
+.markdown-board-preview h5,
+.markdown-board-preview h6 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: bold;
+}
+
+.markdown-board-preview ul,
+.markdown-board-preview ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.markdown-board-preview blockquote {
+  margin: 0;
+  border-left: 2px solid #ccc;
+  padding-left: 0.5rem;
+  font-style: italic;
+}
+
+.markdown-board-preview code {
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0.05);
+  padding: 0.1rem 0.2rem;
+  font-size: 0.9em;
+}
+
+.markdown-board-preview pre {
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.05);
+  padding: 0.5rem;
+}
+
+.markdown-board-preview pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.unplaced-notes-panel--drop-target {
+  animation: unplaced-panel-drop-target 720ms ease-in-out infinite alternate;
+  scale: 1.025;
+}
+
+.unplaced-note-card {
+  will-change: transform, opacity;
+}
+
+.unplaced-note-card--departing {
+  transform-origin: top left;
+  animation: unplaced-card-take 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.unplaced-note-card--dragging {
+  opacity: 0.38;
+  scale: 0.96;
+  transition: opacity 120ms ease, scale 120ms ease;
+}
+
+@keyframes unplaced-panel-drop-target {
+  from {
+    box-shadow: inset 0 0 0 3px var(--unplaced-drop-color, currentColor);
+    scale: 1.012;
+  }
+  to {
+    box-shadow: inset 0 0 0 5px var(--unplaced-drop-color, currentColor);
+    scale: 1.025;
+  }
+}
+
+@keyframes unplaced-card-take {
+  from {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    translate: -16px -26px;
+    scale: 0.9;
+  }
+}
+
 .board-note-motion--enter {
   animation: board-note-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1730,6 +1948,7 @@ body {
   pointer-events: none;
   animation: board-note-exit 220ms cubic-bezier(0.4, 0, 1, 1) both;
 }
+
 
 @keyframes board-note-enter {
   from {
@@ -1757,9 +1976,19 @@ body {
   }
 }
 
+
 @media (prefers-reduced-motion: reduce) {
   .board-note-motion--enter,
-  .board-note-motion--exit {
+  .board-note-motion--exit,
+  .unplaced-notes-panel--drop-target {
+    animation-duration: 1ms;
+  }
+
+  .unplaced-note-card {
+    transition-duration: 1ms;
+  }
+
+  .unplaced-note-card--departing {
     animation-duration: 1ms;
   }
 }

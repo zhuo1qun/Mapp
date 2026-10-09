@@ -17,9 +17,9 @@ import {
 import { TAG_COLORS } from '../../constants';
 import type { Frame, GraphLayerState, Note } from '../../types';
 import {
-  GRAPH_UNTAGGED_TAG_GROUP,
-  type GraphLayerGroupStandard
-} from '../../utils/graph/graphRuntimeCore';
+  UNTYPED_NOTE_LAYER_GROUP,
+  type NoteLayerGroupStandard
+} from '../../utils/layer/noteLayerState';
 import {
   groupDisplayLabel,
   noteBelongsToLayerGroupKey,
@@ -27,7 +27,6 @@ import {
   truncateRawTextLabel
 } from '../../utils/layer/unifiedNoteLayer';
 import { TagAddPanel } from '../ui/TagAddPanel';
-import { NoteTimeRangeControl } from '../note-editor/NoteTimeRangeControl';
 import { TagLayerHierarchyList } from './TagLayerHierarchyList';
 import { ChromeSegmentedControl } from '../ui/ChromeSegmentedControl';
 import { PortalTooltip } from '../ui/PortalTooltip';
@@ -45,7 +44,7 @@ function normalizeTagLabel(v: string | undefined | null): string {
   return String(v ?? '').trim();
 }
 
-function accordionStorageKey(projectId: string, standard: GraphLayerGroupStandard): string {
+function accordionStorageKey(projectId: string, standard: NoteLayerGroupStandard): string {
   return `unifiedNotesLayerAccordion:v1:${projectId}:${standard}`;
 }
 
@@ -56,8 +55,8 @@ export interface ProjectNotesLayerPanelProps {
   variant?: 'graph' | 'dock';
   projectId: string;
   merged: GraphLayerState;
-  layerGroupStandard: GraphLayerGroupStandard;
-  onLayerGroupStandardChange: (standard: GraphLayerGroupStandard) => void;
+  layerGroupStandard: NoteLayerGroupStandard;
+  onLayerGroupStandardChange: (standard: NoteLayerGroupStandard) => void;
   onStateChange: (next: GraphLayerState) => void;
   notes: Note[];
   onUpdateNote: (note: Note) => void;
@@ -359,7 +358,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   const toTagGroupKey = useCallback(
     (label: string | undefined) => {
       const s = String(label ?? '').trim();
-      return s === '' ? GRAPH_UNTAGGED_TAG_GROUP : s;
+      return s === '' ? UNTYPED_NOTE_LAYER_GROUP : s;
     },
     []
   );
@@ -447,8 +446,8 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
       const oldK = String(oldKey).trim();
       const newK = String(nextKey).trim();
       if (!newK || oldK === newK) return;
-      if (oldK === '' || oldK === GRAPH_UNTAGGED_TAG_GROUP) return;
-      if (newK === '' || newK === GRAPH_UNTAGGED_TAG_GROUP) return;
+      if (oldK === '' || oldK === UNTYPED_NOTE_LAYER_GROUP) return;
+      if (newK === '' || newK === UNTYPED_NOTE_LAYER_GROUP) return;
 
       const updatedNotes: Note[] = [];
       for (const note of notes) {
@@ -1024,17 +1023,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                                         {hasEmoji ? <Smile size={14} strokeWidth={2} aria-label="含 Emoji" /> : null}
                                         {hasLocation ? <MapPin size={14} strokeWidth={2} aria-label="含地点" /> : null}
                                       </div>
-                                    ) : null}
-                                    {layerGroupStandard === 'tag' ? (
-                                      <NoteTimeRangeControl
-                                        startYear={note.startYear}
-                                        endYear={note.endYear}
-                                        themeColor={themeColor}
-                                        panelChromeStyle={panelChromeStyle}
-                                        onChange={(next) => {
-                                          onUpdateNote({ ...note, startYear: next.startYear, endYear: next.endYear });
-                                        }}
-                                      />
                                     ) : null}
                                   </div>
                                 </div>

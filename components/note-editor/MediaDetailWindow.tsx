@@ -5,6 +5,7 @@ import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 import { ChromePresence } from '../ui/ChromeSheetPresence';
 import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from '../ui/ChromeDialogSurface';
+import { ChromeToggle } from '../ui/ChromeToggle';
 import { LassoStickerEditor } from './LassoStickerEditor';
 
 interface MediaDetailWindowProps {
@@ -111,24 +112,13 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
                   <span className="hidden text-xs font-medium text-gray-500 min-[380px]:inline">
                     套索裁剪
                   </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={cropEnabled}
-                    aria-label="套索裁剪"
+                  <ChromeToggle
+                    checked={cropEnabled}
+                    onCheckedChange={(next) => onCropEnabledChange?.(next)}
+                    themeColor={themeColor}
+                    label="套索裁剪"
                     disabled={cropBusy}
-                    onClick={() => onCropEnabledChange?.(!cropEnabled)}
-                    className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border-0 transition-colors disabled:opacity-40 ${
-                      cropEnabled ? '' : 'bg-gray-300/70'
-                    }`}
-                    style={cropEnabled ? { backgroundColor: themeColor } : undefined}
-                  >
-                    <span
-                      className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                        cropEnabled ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+                  />
                   {cropEnabled && onStartLasso ? (
                     <button
                       type="button"

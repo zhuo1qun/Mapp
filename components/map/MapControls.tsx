@@ -38,6 +38,10 @@ interface MapControlsProps {
   hostedWindow?: boolean;
   /** 紧凑视口的新建操作改为贴近按钮展开的扇形菜单。 */
   compactViewport?: boolean;
+  /** 窄屏待定位箱可见时，把新建按钮上移到箱体上方，避免两个底部操作区重叠。 */
+  compactUnplacedTrayOpen?: boolean;
+  /** Playground 不支持把一批本地照片直接写进项目，保留取景器新建。 */
+  allowPhotoImport?: boolean;
 }
 
 export const MapControls: React.FC<MapControlsProps> = ({
@@ -54,6 +58,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
   settingsButtonRef,
   onCreateAtCurrentLocation,
   onImportFromPhotos,
+  allowPhotoImport = true,
   onImportFromCamera,
   isCreatingAtLocation = false,
   showLocateMenu,
@@ -62,7 +67,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
   onToggleCreateMenu,
   onCloseMenus,
   hostedWindow = false,
-  compactViewport = false
+  compactViewport = false,
+  compactUnplacedTrayOpen = false
 }) => {
   const neutralStyle = chromeSurfaceStyle;
   const neutralHover = chromeHoverBackground;
@@ -166,7 +172,11 @@ export const MapControls: React.FC<MapControlsProps> = ({
         </ChromeIconButton>
       </div>
 
-      <div className="ui-map-compact-create-control fixed ui-workspace-left z-10 h-14 w-14 sm:hidden">
+      <div
+        className={`ui-map-compact-create-control fixed ui-workspace-left z-10 h-14 w-14 sm:hidden ${
+          compactUnplacedTrayOpen ? 'ui-map-compact-create-control--tray-open' : ''
+        }`}
+      >
         <ChromeIconButton
           className="relative z-10 !h-14 !w-14 !rounded-2xl group"
           themeColor={themeColor}
@@ -191,7 +201,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           className="pointer-events-none absolute left-2 top-2 z-0 h-10 w-10"
           aria-hidden={!showCreateMenu}
         >
-          <div
+          {allowPhotoImport ? <div
             className="absolute inset-0"
             style={{
               transform: showCreateMenu ? 'translate3d(0, -78px, 0) scale(1)' : 'scale(0.66)',
@@ -214,7 +224,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
             >
               {isCreatingAtLocation ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
             </ChromeIconButton>
-          </div>
+          </div> : null}
 
           <div
             className="absolute inset-0"
@@ -305,6 +315,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           onLocateCurrentPosition={onLocateCurrentPosition}
           onCreateAtCurrentLocation={onCreateAtCurrentLocation}
           onImportFromPhotos={onImportFromPhotos}
+          allowPhotoImport={allowPhotoImport}
           onCloseMenus={onCloseMenus}
           mapNotes={mapNotes}
         />
@@ -322,6 +333,7 @@ export function MapLocateCreateMenu({
   onLocateCurrentPosition,
   onCreateAtCurrentLocation,
   onImportFromPhotos,
+  allowPhotoImport = true,
   onCloseMenus,
   mapNotes
 }: {
@@ -332,6 +344,7 @@ export function MapLocateCreateMenu({
   onLocateCurrentPosition: () => void;
   onCreateAtCurrentLocation: () => void;
   onImportFromPhotos: () => void;
+  allowPhotoImport?: boolean;
   onCloseMenus: () => void;
   mapNotes: Note[];
 }) {
@@ -350,7 +363,7 @@ export function MapLocateCreateMenu({
       </div>
       {kind === 'create' ? (
         <>
-          <ChromeMenuItem
+          {allowPhotoImport ? <ChromeMenuItem
             className="group"
             hoverBackground={chromeHoverBackground}
             icon={
@@ -370,7 +383,7 @@ export function MapLocateCreateMenu({
             disabled={isCreatingAtLocation}
           >
             在当前位置添加
-          </ChromeMenuItem>
+          </ChromeMenuItem> : null}
           <ChromeMenuItem
             className="group"
             hoverBackground={chromeHoverBackground}

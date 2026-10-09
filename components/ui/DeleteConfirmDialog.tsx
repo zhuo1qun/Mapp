@@ -3,7 +3,7 @@ import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY, mapChrome
 import { ChromeDialogSurface } from './ChromeDialogSurface';
 import { ChromePresence } from './ChromeSheetPresence';
 
-export type DeleteConfirmVariant = 'note' | 'connection' | 'notes-batch';
+export type DeleteConfirmVariant = 'note' | 'connection' | 'notes-batch' | 'unplaced-notes';
 
 export interface DeleteConfirmDialogProps {
   open: boolean;
@@ -69,6 +69,12 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
           ) : variant === 'notes-batch' ? (
             <>
               确定要删除已选中的 {batchCount ?? 0} 个便签吗？
+              <span className="text-red-600 font-semibold"> 此操作无法撤回</span>
+              ，相关连线也会被移除。
+            </>
+          ) : variant === 'unplaced-notes' ? (
+            <>
+              确定要永久删除待定位箱中的 {batchCount ?? 0} 个项目吗？
               <span className="text-red-600 font-semibold"> 此操作无法撤回</span>
               ，相关连线也会被移除。
             </>

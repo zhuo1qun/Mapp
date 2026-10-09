@@ -143,11 +143,11 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
         </div>
       </div> : null}
 
-      {/* 窄屏与 Mapping 相同：左下角主按钮展开 90° / 45° / 0° 三项工具。 */}
+      {/* 窄屏 Board：右上角编辑入口，工具向左下扇出，避开画布的主要操作区。 */}
       <div
         data-allow-context-menu
         data-mapp-chrome-ui=""
-        className="ui-board-compact-edit-control fixed ui-workspace-left z-[500] h-14 w-14 pointer-events-auto sm:hidden"
+        className="ui-board-compact-edit-control fixed z-[500] h-14 w-14 pointer-events-auto sm:hidden"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
@@ -175,7 +175,7 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
           <div
             className="absolute inset-0"
             style={{
-              transform: isCompactMenuOpen ? 'translate3d(0, -78px, 0) scale(1)' : 'scale(0.66)',
+              transform: isCompactMenuOpen ? 'translate3d(0, 78px, 0) scale(1)' : 'scale(0.66)',
               opacity: isCompactMenuOpen ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${isCompactMenuOpen ? '0ms' : '45ms'}, opacity 150ms ease ${isCompactMenuOpen ? '0ms' : '45ms'}`
             }}
@@ -203,7 +203,7 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
           <div
             className="absolute inset-0"
             style={{
-              transform: isCompactMenuOpen ? 'translate3d(55px, -55px, 0) scale(1)' : 'scale(0.66)',
+              transform: isCompactMenuOpen ? 'translate3d(-55px, 55px, 0) scale(1)' : 'scale(0.66)',
               opacity: isCompactMenuOpen ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${isCompactMenuOpen ? '35ms' : '0ms'}, opacity 150ms ease ${isCompactMenuOpen ? '35ms' : '0ms'}`
             }}
@@ -231,7 +231,7 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
           <div
             className="absolute inset-0"
             style={{
-              transform: isCompactMenuOpen ? 'translate3d(78px, 0, 0) scale(1)' : 'scale(0.66)',
+              transform: isCompactMenuOpen ? 'translate3d(-78px, 0, 0) scale(1)' : 'scale(0.66)',
               opacity: isCompactMenuOpen ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${isCompactMenuOpen ? '70ms' : '0ms'}, opacity 150ms ease ${isCompactMenuOpen ? '70ms' : '0ms'}`
             }}

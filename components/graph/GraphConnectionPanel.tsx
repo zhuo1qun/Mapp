@@ -4,7 +4,7 @@ import type { Connection, Note } from '../../types';
 import {
   clampConnectionWeight,
   DEFAULT_CONNECTION_WEIGHT
-} from '../../utils/graph/graphData';
+} from '../../utils/connections/connectionData';
 import { AnchoredWorkspaceWindow } from '../ui/AnchoredWorkspaceWindow';
 
 export interface ConnectionDraft {
@@ -69,7 +69,7 @@ interface GraphConnectionPanelProps {
   showClearSelection?: boolean;
   /** 点击已选便签标题时在图中定位该节点 */
   onFocusNoteOnGraph?: (noteId: string) => void;
-  /** GraphView：图中单击选中的节点；仅在「非点选状态」下点选按钮可一键填入 */
+  /** 可选画布：单击选中的节点；仅在「非点选状态」下可一键填入。 */
   graphFocusedNoteId?: string | null;
   /** 一键写入起点/终点（与图中点节点后的副作用一致） */
   onAddEndpointFromGraph?: (which: 'from' | 'to', noteId: string) => void;
@@ -77,7 +77,7 @@ interface GraphConnectionPanelProps {
   disableGraphPick?: boolean;
   /** 禁用点选时的提示文案 */
   graphPickDisabledHint?: string;
-  /** 保存成功后递增，触发一次面板成功动效（GraphView 保存不关面板时传入） */
+  /** 保存成功后递增，触发一次面板成功动效。 */
   saveSuccessNonce?: number;
   /** 保存成功后的动效/重置草稿期间，禁止再次提交 */
   commitDisabled?: boolean;
@@ -107,7 +107,7 @@ export const GraphConnectionPanel: React.FC<GraphConnectionPanelProps> = ({
   graphFocusedNoteId = null,
   onAddEndpointFromGraph,
   disableGraphPick = false,
-  graphPickDisabledHint = '请到 GraphView 选点',
+  graphPickDisabledHint = '请通过搜索选择点位',
   saveSuccessNonce,
   commitDisabled = false
 }) => {

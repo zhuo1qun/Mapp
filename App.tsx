@@ -1,10 +1,10 @@
 
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Map as MapIcon, Grid, Menu, Loader2, Table2, GitBranch, Cloud, CloudOff, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
+import { Map as MapIcon, Grid, Menu, Loader2, Table2, Cloud, CloudOff, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv } from './components/ui/MotionDiv';
 import { WorkspaceChromePresence } from './components/ui/WorkspaceChromePresence';
-import { Note, ViewMode, Project, ProjectKind } from './types';
+import { Note, ViewMode, Project } from './types';
 import { get, set } from 'idb-keyval';
 import {
   MAP_STYLE_OPTIONS,
@@ -22,14 +22,6 @@ import {
 import { useProjectState } from './components/hooks/useProjectState';
 import { useViewState } from './components/hooks/useViewState';
 import { useAppState } from './components/hooks/useAppState';
-import { ProjectKindPromptDialog } from './components/ProjectKindPromptDialog';
-import {
-  needsProjectKindPrompt,
-  defaultViewModeForKind,
-  isViewModeAllowedForKind,
-  resolveProjectKind,
-  isProjectKind
-} from './utils/projectKind';
 import { 
   syncProjectsToCloud, 
   loadProjectsFromCloud, 
@@ -77,12 +69,50 @@ import { useFileDrop } from './components/hooks/useFileDrop';
 import { ChromeDropOverlay } from './components/ui/ChromeDropOverlay';
 import { ModuleLoadProgress } from './components/ui/ModuleLoadProgress';
 import { WorkspaceErrorBoundary } from './components/ui/WorkspaceErrorBoundary';
-import { EditInspectorProvider } from './components/editInspector/EditInspectorProvider';
 import { installBuiltinExamples } from './utils/builtinExamples/install';
 import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
 import { dismissWorkspaceTransients } from './utils/ui/workspaceTransientDismiss';
 
 type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
+
+type NoteMediaAssets = {
+  images: Set<string>;
+  sketches: Set<string>;
+};
+
+/** 同一资产可被多个便签复用；删除记录时必须按剩余引用决定是否回收。 */
+function collectNoteMediaAssets(notes: Note[]): NoteMediaAssets {
+  const images = new Set<string>();
+  const sketches = new Set<string>();
+  notes.forEach((note) => {
+    note.images?.forEach((assetId) => {
+      if (assetId.startsWith('img-')) images.add(assetId);
+    });
+    note.imageRefs?.forEach((ref) => {
+      if (ref.assetId.startsWith('img-')) images.add(ref.assetId);
+    });
+    note.media?.forEach((item) => {
+      if (!item.assetId.startsWith('img-')) return;
+      if (item.kind === 'sketch') sketches.add(item.assetId);
+      else images.add(item.assetId);
+    });
+    if (note.sketch?.startsWith('img-')) sketches.add(note.sketch);
+  });
+  return { images, sketches };
+}
+
+async function deleteUnreferencedNoteMedia(removedNotes: Note[], remainingNotes: Note[]): Promise<void> {
+  const removed = collectNoteMediaAssets(removedNotes);
+  const remaining = collectNoteMediaAssets(remainingNotes);
+  await Promise.all([
+    ...[...removed.images]
+      .filter((assetId) => !remaining.images.has(assetId))
+      .map((assetId) => deleteImage(assetId)),
+    ...[...removed.sketches]
+      .filter((assetId) => !remaining.sketches.has(assetId))
+      .map((assetId) => deleteSketch(assetId))
+  ]);
+}
 
 // These workspaces have independent, sizeable dependency trees (Leaflet, Cytoscape,
 // Matter.js, editors, and export helpers). Loading them only when their surface is
@@ -96,9 +126,6 @@ const BoardView = lazy(() =>
 const TableView = lazy(() =>
   import('./components/TableView').then(({ TableView }) => ({ default: TableView }))
 );
-const GraphView = lazy(() =>
-  import('./components/GraphView').then(({ GraphView }) => ({ default: GraphView }))
-);
 const ProjectManager = lazy(() =>
   import('./components/ProjectManager').then(({ ProjectManager }) => ({ default: ProjectManager }))
 );
@@ -106,6 +133,9 @@ const HomePhysicsPlayground = lazy(() =>
   import('./components/HomePhysicsPlayground').then(({ HomePhysicsPlayground }) => ({
     default: HomePhysicsPlayground
   }))
+);
+const Playground = lazy(() =>
+  import('./components/Playground').then(({ Playground }) => ({ default: Playground }))
 );
 
 export default function App() {
@@ -131,6 +161,9 @@ export default function App() {
   const [homeEasterEggMouseConstraintStiffness, setHomeEasterEggMouseConstraintStiffness] = useState(0.18);
   /** 仅开发者维护内置示例项目（增删/列表显示等）；默认对普通用户隐藏 */
   const [exampleDevMaintenanceMode, setExampleDevMaintenanceMode] = useState(false);
+  const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(
+    () => typeof window !== 'undefined' && window.location.pathname === '/playground'
+  );
   const expandToHomeProjectIdRef = useRef<string | null>(null);
   /**
    * 窄屏主页→项目：进入/收束全程留在 docked，结束后再交接 overlay。
@@ -165,22 +198,16 @@ export default function App() {
     mappingWorkspaceEditMode,
     navigateToMapCoords,
     navigateToBoardCoords,
-    navigateToGraphNoteId,
     setViewMode,
     setIsEditorOpen,
     setMappingWorkspaceEditMode,
     navigateToMap,
     navigateToBoard,
-    navigateToGraphNote,
     clearMapNavigation,
     clearBoardNavigation,
-    clearGraphNavigation,
     saveMapPosition,
     saveBoardPosition
   } = viewState;
-
-  const projectKind = resolveProjectKind(activeProject);
-  const [kindPromptProject, setKindPromptProject] = useState<Project | null>(null);
 
   /**
    * selectProject 会先 setCurrentProjectId(新 id)、异步 load 完成后再 setActiveProject。
@@ -192,51 +219,6 @@ export default function App() {
     !!activeProject &&
     !!currentProjectId &&
     activeProject.id !== currentProjectId;
-
-  /** 打开已加载项目：未分型则询问；已分型则校正默认/非法视图 */
-  useEffect(() => {
-    if (!activeProject || !currentProjectId) {
-      setKindPromptProject(null);
-      return;
-    }
-    if (activeProject.id !== currentProjectId) return;
-    if (isLoadingProject) return;
-
-    if (needsProjectKindPrompt(activeProject)) {
-      setKindPromptProject((prev) => (prev?.id === activeProject.id ? prev : activeProject));
-      return;
-    }
-
-    setKindPromptProject(null);
-    const kind = resolveProjectKind(activeProject);
-    if (!kind) return;
-    if (!isViewModeAllowedForKind(kind, viewMode)) {
-      setViewMode(defaultViewModeForKind(kind));
-    }
-  }, [activeProject, currentProjectId, isLoadingProject, viewMode, setViewMode]);
-
-  const handleConfirmProjectKind = useCallback(
-    async (kind: ProjectKind) => {
-      const target = kindPromptProject;
-      if (!target) return;
-      const next = { ...target, projectKind: kind };
-      await projectState.updateProject(next);
-      setKindPromptProject(null);
-      setViewMode(defaultViewModeForKind(kind));
-    },
-    [kindPromptProject, projectState, setViewMode]
-  );
-
-  const handleCancelProjectKind = useCallback(() => {
-    setKindPromptProject(null);
-    setCurrentProjectId(null);
-    setActiveProject(null);
-    setPendingEnterWorkspaceFromHome(false);
-    setSidebarDockedInline(false);
-    setIsSidebarOpen(false);
-    setSidebarExpandForProjectSwitch(false);
-    setProjectEnterCollapsing(false);
-  }, [setCurrentProjectId, setActiveProject]);
 
   // 安装内置示例项目。正常已安装场景只读本地标记，不会阻塞项目列表加载。
   useEffect(() => {
@@ -641,7 +623,6 @@ export default function App() {
 
     clearMapNavigation();
     clearBoardNavigation();
-    clearGraphNavigation();
 
     // —— 1) 先切到全屏中间态（此时还不加载）——
     await beginProjectEnter({
@@ -676,7 +657,6 @@ export default function App() {
     projectState,
     clearMapNavigation,
     clearBoardNavigation,
-    clearGraphNavigation,
     closeProjectSidebar,
     beginProjectEnter,
     completeProjectEnter
@@ -771,7 +751,6 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncError, setSyncError] = useState<string | null>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
 
   // UI Visibility State (Tab key toggle)
@@ -792,11 +771,10 @@ export default function App() {
 
   const handleWorkspaceViewTabClick = useCallback(
     (nextViewMode: ViewMode) => {
-      if (isImportDialogOpen) return;
       setViewMode(nextViewMode);
       setIsMobileViewSwitcherExpanded(true);
     },
-    [isImportDialogOpen, setViewMode]
+    [setViewMode]
   );
 
   /** 侧栏打开且非全宽时，工作区 UI 以侧栏右缘为左界（CSS --workspace-ui-left-inset） */
@@ -857,21 +835,18 @@ export default function App() {
   );
 
   const workspaceModuleMeta = useMemo(() => {
-    if (viewMode === 'map' && projectKind === 'mapping') {
+    if (viewMode === 'map') {
       return { title: '正在加载地图模块', icon: <MapIcon size={22} aria-hidden /> };
     }
-    if (viewMode === 'board' && (projectKind === 'mapping' || projectKind === 'graph')) {
+    if (viewMode === 'board') {
       return { title: '正在加载画布模块', icon: <Grid size={22} aria-hidden /> };
     }
-    if (viewMode === 'graph' && projectKind === 'graph') {
-      return { title: '正在加载图谱模块', icon: <GitBranch size={22} aria-hidden /> };
-    }
     return { title: '正在加载表格模块', icon: <Table2 size={22} aria-hidden /> };
-  }, [projectKind, viewMode]);
+  }, [viewMode]);
 
   const workspaceModuleLoadingFallback = (
     <ModuleLoadProgress
-      key={`${projectKind ?? 'unknown'}-${viewMode}`}
+      key={`mapping-${viewMode}`}
       title={workspaceModuleMeta.title}
       icon={workspaceModuleMeta.icon}
       themeColor={themeColor}
@@ -892,7 +867,7 @@ export default function App() {
   const [mapUiChromeBlurPx, setMapUiChromeBlurPx] = useState(DEFAULT_MAP_UI_CHROME_BLUR_PX);
   const [uiDarkMode, setUiDarkMode] = useState(false);
 
-  const forceSatelliteDark = projectKind === 'mapping' && viewMode === 'map';
+  const forceSatelliteDark = viewMode === 'map';
   const chromeAppearance = useMemo(
     () =>
       resolveChromeAppearance({
@@ -1106,10 +1081,14 @@ export default function App() {
             const cloudResult = await loadProjectsFromCloud();
             
             if (cloudResult.success && cloudResult.projects) {
+              // 旧图谱项目已迁出；不要在云端合并时重新带回 Mapping，下一次同步会覆盖云端旧列表。
+              const cloudMappingProjects = cloudResult.projects.filter(
+                (project) => (project as { projectKind?: unknown }).projectKind !== 'graph'
+              );
                   // 获取完整的本地项目数据用于合并
                   const fullLocalProjects = await loadAllProjects(true);
               // 合并本地和云端数据
-                  const merged = mergeProjects(fullLocalProjects, cloudResult.projects);
+                  const merged = mergeProjects(fullLocalProjects, cloudMappingProjects);
               
               // 如果合并后的数据与本地不同，更新本地
                   const localIds = new Set(fullLocalProjects.map(p => p.id));
@@ -1174,13 +1153,11 @@ export default function App() {
   }, []);
 
 
-  // 禁止浏览器页面双指/捏合缩放；画布（地图/看板/图谱）自行处理 pinch。
+  // 禁止浏览器页面双指/捏合缩放；画布（地图/看板）自行处理 pinch。
   useEffect(() => {
     const CANVAS_PINCH_SELECTOR = [
       '.leaflet-container',
       '#board-view-container',
-      '#graph-view-container',
-      '.workspace-canvas--graph',
       '[data-mapp-canvas-pinch]'
     ].join(',');
 
@@ -1374,39 +1351,16 @@ export default function App() {
 
   const deleteNote = async (noteId: string) => {
     if (!currentProjectId) return;
-    
-    // Find the note to delete (to get its images)
-    const noteToDelete = activeProject?.notes.find(n => n.id === noteId);
-    
-    // Delete note's images if they are stored separately
-    if (noteToDelete) {
-      // Delete images
-      if (noteToDelete.images && noteToDelete.images.length > 0) {
-        for (const imageData of noteToDelete.images) {
-          if (imageData.startsWith('img-')) {
-            // It's an image ID, delete it
-            try {
-              await deleteImage(imageData);
-            } catch (error) {
-              console.error('Failed to delete image:', error);
-            }
-          }
-          // If it's Base64 (legacy), no need to delete
-        }
-      }
-      
-      // Delete sketch
-      if (noteToDelete.sketch && noteToDelete.sketch.startsWith('img-')) {
-        try {
-          await deleteSketch(noteToDelete.sketch);
-        } catch (error) {
-          console.error('Failed to delete sketch:', error);
-        }
-      }
-    }
-    
-    // Delete note from project (this will also update connections)
+    const removedNotes = activeProject?.notes.filter((note) => note.id === noteId) || [];
+    const remainingNotes = activeProject?.notes.filter((note) => note.id !== noteId) || [];
+
+    // 先写入项目，再回收最后一个引用消失的资产；共享图片不会被提前删掉。
     await projectState.deleteNoteFromProject(currentProjectId, noteId);
+    try {
+      await deleteUnreferencedNoteMedia(removedNotes, remainingNotes);
+    } catch (error) {
+      console.error('Failed to clean unreferenced note media:', error);
+    }
   };
 
   // 批量删除便签 - 优化版本，一次性处理多个便签
@@ -1417,31 +1371,6 @@ export default function App() {
 
     // 收集所有要删除的便签
     const notesToDelete = activeProject?.notes.filter(n => noteIds.includes(n.id)) || [];
-
-    // 批量删除资源
-    for (const noteToDelete of notesToDelete) {
-      // Delete images
-      if (noteToDelete.images && noteToDelete.images.length > 0) {
-        for (const imageData of noteToDelete.images) {
-          if (imageData.startsWith('img-')) {
-            try {
-              await deleteImage(imageData);
-            } catch (error) {
-              console.error('Failed to delete image:', error);
-            }
-          }
-        }
-      }
-
-      // Delete sketch
-      if (noteToDelete.sketch && noteToDelete.sketch.startsWith('img-')) {
-        try {
-          await deleteSketch(noteToDelete.sketch);
-        } catch (error) {
-          console.error('Failed to delete sketch:', error);
-        }
-      }
-    }
 
     // 清理相关的连接
     const remainingConnections = activeProject.connections?.filter(conn =>
@@ -1456,6 +1385,11 @@ export default function App() {
     };
 
     await projectState.updateProject(updatedProject);
+    try {
+      await deleteUnreferencedNoteMedia(notesToDelete, updatedProject.notes);
+    } catch (error) {
+      console.error('Failed to clean unreferenced note media:', error);
+    }
   };
 
   const handleExportCSV = (project: Project) => {
@@ -1534,13 +1468,12 @@ export default function App() {
       return;
     }
 
-    const kind: ProjectKind = isProjectKind(project.projectKind) ? project.projectKind : 'mapping';
     const projectId = await projectState.createProject({
       name: project.name,
-      projectKind: kind
+      projectKind: 'mapping'
     });
 
-    setViewMode(defaultViewModeForKind(kind));
+    setViewMode('map');
     await runEnterRhythm(projectId);
   };
 
@@ -1620,6 +1553,22 @@ export default function App() {
     await set('mapp-ui-dark-mode', dark);
   };
 
+  const openPlayground = useCallback(() => {
+    window.history.pushState({}, '', '/playground');
+    setIsPlaygroundOpen(true);
+  }, []);
+
+  const closePlayground = useCallback(() => {
+    window.history.pushState({}, '', '/');
+    setIsPlaygroundOpen(false);
+  }, []);
+
+  useEffect(() => {
+    const syncRoute = () => setIsPlaygroundOpen(window.location.pathname === '/playground');
+    window.addEventListener('popstate', syncRoute);
+    return () => window.removeEventListener('popstate', syncRoute);
+  }, []);
+
   if (isLoading) {
     return (
       <>
@@ -1634,18 +1583,37 @@ export default function App() {
     );
   }
 
-  return (
-    <EditInspectorProvider>
+  if (isPlaygroundOpen) {
+    return (
       <ChromeAppearanceContext.Provider value={chromeAppearance}>
-      {kindPromptProject ? (
-        <ProjectKindPromptDialog
-          projectName={kindPromptProject.name}
-          themeColor={themeColor}
-          chromeSurfaceStyle={panelChromeStyle}
-          onConfirm={(kind) => void handleConfirmProjectKind(kind)}
-          onCancel={handleCancelProjectKind}
-        />
-      ) : null}
+        <Suspense fallback={<div className="flex h-dvh items-center justify-center bg-gray-100"><Loader2 className="animate-spin" style={{ color: themeColor }} /></div>}>
+          <Playground
+            onBack={closePlayground}
+            themeColor={themeColor}
+            onThemeColorChange={handleThemeColorChange}
+            uiDarkMode={uiDarkMode}
+            onUiDarkModeChange={handleUiDarkModeChange}
+            initialMapStyle={mapStyle}
+            mapUiChromeOpacity={mapUiChromeOpacity}
+            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
+            mapUiChromeBlurPx={mapUiChromeBlurPx}
+            onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
+            onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
+            onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
+            onSaveAsProject={async (project) => {
+              await saveProject(project);
+              await projectState.loadProjects();
+              closePlayground();
+              await handleCreateProject(project);
+            }}
+          />
+        </Suspense>
+      </ChromeAppearanceContext.Provider>
+    );
+  }
+
+  return (
+    <ChromeAppearanceContext.Provider value={chromeAppearance}>
     <div
       className={`app-root w-full h-dvh max-h-dvh flex flex-col overflow-hidden relative ${
         uiDarkMode ? 'bg-zinc-800' : 'bg-gray-50'
@@ -1748,6 +1716,7 @@ export default function App() {
                   onDuplicateProject={handleDuplicateProject}
                   onCloseSidebar={closeProjectSidebar}
                   onBackToHome={handleBackToHome}
+                  onOpenPlayground={openPlayground}
                   viewMode={viewMode}
                   activeProject={activeProject}
                   onExportCSV={handleExportCSV}
@@ -1803,24 +1772,24 @@ export default function App() {
       </AnimatePresence>
 
       <div
-        className={`relative z-0 min-h-0 flex-1 overflow-hidden${viewMode === 'table' || viewMode === 'graph' ? ` ${tableGraphDataFileDrop.rootProps.className}` : ''}`}
-        style={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.style : undefined}
-        onDragEnter={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragEnter : undefined}
-        onDragOver={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragOver : undefined}
-        onDragLeave={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragLeave : undefined}
-        onDrop={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDrop : undefined}
-        onDragEnd={viewMode === 'table' || viewMode === 'graph' ? tableGraphDataFileDrop.rootProps.onDragEnd : undefined}
+        className={`relative z-0 min-h-0 flex-1 overflow-hidden${viewMode === 'table' ? ` ${tableGraphDataFileDrop.rootProps.className}` : ''}`}
+        style={viewMode === 'table' ? tableGraphDataFileDrop.rootProps.style : undefined}
+        onDragEnter={viewMode === 'table' ? tableGraphDataFileDrop.rootProps.onDragEnter : undefined}
+        onDragOver={viewMode === 'table' ? tableGraphDataFileDrop.rootProps.onDragOver : undefined}
+        onDragLeave={viewMode === 'table' ? tableGraphDataFileDrop.rootProps.onDragLeave : undefined}
+        onDrop={viewMode === 'table' ? tableGraphDataFileDrop.rootProps.onDrop : undefined}
+        onDragEnd={viewMode === 'table' ? tableGraphDataFileDrop.rootProps.onDragEnd : undefined}
         onPointerDownCapture={handleWorkspaceTransientDismiss}
       >
         <ChromeDropOverlay
           open={
-            (viewMode === 'table' || viewMode === 'graph') && tableGraphDataFileDrop.isDragging
+            viewMode === 'table' && tableGraphDataFileDrop.isDragging
           }
           themeColor={themeColor}
           chromeOpacity={mapUiChromeOpacity}
           chromeBlurPx={mapUiChromeBlurPx}
           title="拖入 JSON 或 CSV 以导入"
-          description={viewMode === 'graph' ? '数据会导入当前图谱项目' : '数据会导入当前表格项目'}
+          description="数据会导入当前表格项目"
           onDismiss={tableGraphDataFileDrop.dismissDrag}
         />
         <Suspense fallback={workspaceModuleLoadingFallback}>
@@ -1911,7 +1880,7 @@ export default function App() {
           </button>
         </WorkspaceChromePresence>
 
-        {viewMode === 'map' && projectKind === 'mapping' ? (
+        {viewMode === 'map' ? (
           isWorkspaceProjectDataStale ? (
           workspaceProjectPendingPlaceholder
           ) : (
@@ -1923,7 +1892,6 @@ export default function App() {
             onUpdateNote={updateNote}
             onDeleteNote={deleteNote}
             onToggleEditor={setIsEditorOpen}
-            onImportDialogChange={setIsImportDialogOpen}
             onUpdateProject={async (project) => {
               await projectState.updateProject(project);
             }}
@@ -1983,7 +1951,7 @@ export default function App() {
             }}
           />
           )
-        ) : viewMode === 'board' && (projectKind === 'mapping' || projectKind === 'graph') ? (
+        ) : viewMode === 'board' ? (
           isWorkspaceProjectDataStale ? (
           workspaceProjectPendingPlaceholder
           ) : (
@@ -2013,9 +1981,7 @@ export default function App() {
                 saveBoardPositionDirect(currentProjectId, x, y, scale);
               }
             }}
-            onSwitchToMapView={
-              projectKind === 'mapping'
-                ? (coords?: { lat: number; lng: number; zoom?: number }) => {
+            onSwitchToMapView={(coords?: { lat: number; lng: number; zoom?: number }) => {
                     // Close editor first to ensure UI state is correct
                     setIsEditorOpen(false);
 
@@ -2052,16 +2018,6 @@ export default function App() {
                     navigateToMap(navigationCoords || undefined);
                     setViewMode('map');
                   }
-                : undefined
-            }
-            onSwitchToGraphView={
-              projectKind === 'graph'
-                ? (noteId: string) => {
-                    setIsEditorOpen(false);
-                    navigateToGraphNote(noteId);
-                    setViewMode('graph');
-                  }
-                : undefined
             }
             themeColor={themeColor}
             panelChromeStyle={panelChromeStyle}
@@ -2084,54 +2040,10 @@ export default function App() {
             }}
           />
           )
-        ) : viewMode === 'graph' && projectKind === 'graph' ? (
-          isWorkspaceProjectDataStale ? (
-          workspaceProjectPendingPlaceholder
-          ) : (
-          <GraphView
-            projectId={currentProjectId ?? ''}
-            project={activeProject}
-            workspaceEditMode={mappingWorkspaceEditMode}
-            onWorkspaceEditModeChange={setMappingWorkspaceEditMode}
-            themeColor={themeColor}
-            isUIVisible={isUIVisible}
-            onUpdateNote={updateNote}
-            onDeleteNote={deleteNote}
-            onToggleEditor={setIsEditorOpen}
-            onUpdateConnections={async (connections) => {
-              if (!currentProjectId || !activeProject) return;
-              await projectState.updateProject({ ...activeProject, connections });
-            }}
-            onSwitchToBoardView={(coords?: { x: number; y: number }) => {
-              setIsEditorOpen(false);
-              if (coords) {
-                navigateToBoard(coords);
-              }
-              setViewMode('board');
-            }}
-            onSwitchToMapView={undefined}
-            navigateToGraphNoteId={navigateToGraphNoteId}
-            onClearGraphNavigation={clearGraphNavigation}
-            panelChromeStyle={panelChromeStyle}
-            chromeHoverBackground={mapChromeHoverBg}
-            onThemeColorChange={handleThemeColorChange}
-            uiDarkMode={uiDarkMode}
-            onUiDarkModeChange={handleUiDarkModeChange}
-            mapUiChromeOpacity={mapUiChromeOpacity}
-            onMapUiChromeOpacityChange={handleMapUiChromeOpacityChange}
-            mapUiChromeOpacityBottom={mapUiChromeOpacityBottom}
-            onMapUiChromeOpacityBottomChange={handleMapUiChromeOpacityBottomChange}
-            mapUiChromeBlurPx={mapUiChromeBlurPx}
-            onMapUiChromeBlurPxChange={handleMapUiChromeBlurPxChange}
-            mapStyleId={mapStyle}
-            onMapStyleChange={setMapStyle}
-            onUpdateProject={handleUpdateProject}
-          />
-          )
         ) : (
           isWorkspaceProjectDataStale ? (
           workspaceProjectPendingPlaceholder
-          ) : projectKind ? (
+          ) : (
           <TableView 
             project={activeProject}
             onUpdateNote={updateNote}
@@ -2152,24 +2064,12 @@ export default function App() {
               }
               setViewMode('board');
             }}
-            onSwitchToMapView={
-              projectKind === 'mapping'
-                ? (coords?: { lat: number; lng: number; zoom?: number }) => {
+            onSwitchToMapView={(coords?: { lat: number; lng: number; zoom?: number }) => {
                     setIsEditorOpen(false);
                     if (coords && currentProjectId) cancelPendingMapLocate(currentProjectId);
                     navigateToMap(coords);
                     setViewMode('map');
                   }
-                : undefined
-            }
-            onSwitchToGraphView={
-              projectKind === 'graph'
-                ? (noteId: string) => {
-                    setIsEditorOpen(false);
-                    navigateToGraphNote(noteId);
-                    setViewMode('graph');
-                  }
-                : undefined
             }
             themeColor={themeColor}
             panelChromeStyle={panelChromeStyle}
@@ -2189,10 +2089,6 @@ export default function App() {
             projectId={currentProjectId ?? ''}
             onUpdateProject={handleUpdateProject}
           />
-          ) : (
-            <div className="flex h-full w-full min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-gray-100 text-gray-600">
-              <span className="text-sm font-medium">请选择项目类型…</span>
-            </div>
           )
         )}
           </>
@@ -2206,7 +2102,7 @@ export default function App() {
       </div>
 
       <WorkspaceChromePresence
-        visible={!isEditorOpen && !!activeProject && !mappingWorkspaceEditMode && isUIVisible && !!projectKind}
+        visible={!isEditorOpen && !!activeProject && !mappingWorkspaceEditMode && isUIVisible}
         motion="slide-up"
         className="ui-workspace-view-switcher fixed bottom-4 ui-workspace-center-x -translate-x-1/2 z-[var(--z-workspace-tabs)]"
       >
@@ -2220,52 +2116,28 @@ export default function App() {
           }`}
           style={mapViewSwitcherStyle}
         >
-          {projectKind === 'mapping' ? (
-            <button
+          <button
               onClick={() => handleWorkspaceViewTabClick('map')}
-              disabled={isImportDialogOpen}
               data-active={viewMode === 'map' ? 'true' : 'false'}
               className={`
               flex items-center gap-2 ${viewMode === 'map' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'map' 
                 ? 'text-theme-chrome-fg shadow-md scale-105' 
                 : `${mapViewSwitcherInactiveClass} text-gray-500`}
-              ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
               style={viewMode === 'map' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
             >
               <MapIcon size={20} />
               <span className="ui-workspace-view-tab-label">Mapping</span>
             </button>
-          ) : null}
-          {projectKind === 'graph' ? (
-          <button
-            onClick={() => handleWorkspaceViewTabClick('graph')}
-            disabled={isImportDialogOpen}
-            data-active={viewMode === 'graph' ? 'true' : 'false'}
-            className={`
-              flex items-center gap-2 ${viewMode === 'graph' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
-              ${viewMode === 'graph' 
-                ? 'text-theme-chrome-fg shadow-md scale-105' 
-                : `${mapViewSwitcherInactiveClass} text-gray-500`}
-              ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
-            `}
-            style={viewMode === 'graph' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
-          >
-            <GitBranch size={20} />
-            <span className="ui-workspace-view-tab-label">Graph</span>
-          </button>
-          ) : null}
           <button
             onClick={() => handleWorkspaceViewTabClick('board')}
-            disabled={isImportDialogOpen}
             data-active={viewMode === 'board' ? 'true' : 'false'}
             className={`
               flex items-center gap-2 ${viewMode === 'board' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'board' 
                 ? 'text-theme-chrome-fg shadow-md scale-105' 
                 : `${mapViewSwitcherInactiveClass} text-gray-500`}
-              ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             style={viewMode === 'board' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
           >
@@ -2274,14 +2146,12 @@ export default function App() {
           </button>
           <button
             onClick={() => handleWorkspaceViewTabClick('table')}
-            disabled={isImportDialogOpen}
             data-active={viewMode === 'table' ? 'true' : 'false'}
             className={`
               flex items-center gap-2 ${viewMode === 'table' ? 'px-4' : 'px-3'} py-2 rounded-xl transition-all font-bold text-sm
               ${viewMode === 'table' 
                 ? 'text-theme-chrome-fg shadow-md scale-105' 
                 : `${mapViewSwitcherInactiveClass} text-gray-500`}
-              ${isImportDialogOpen ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             style={viewMode === 'table' ? { backgroundColor: themeColor } : mapViewSwitcherInactiveStyle}
           >
@@ -2295,7 +2165,6 @@ export default function App() {
       </div>
 
     </div>
-      </ChromeAppearanceContext.Provider>
-    </EditInspectorProvider>
+    </ChromeAppearanceContext.Provider>
   );
 }

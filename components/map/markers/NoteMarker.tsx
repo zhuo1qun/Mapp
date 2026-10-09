@@ -52,8 +52,8 @@ interface NoteMarkerProps {
   /** 浏览态的已选图钉：长按后切入编辑并由同一次手势继续拖动。 */
   longPressDragEnabled?: boolean;
   onLongPressDragStart?: () => void;
-  onLongPressDrag?: (latLng: L.LatLng) => void;
-  onLongPressDragEnd?: (latLng: L.LatLng) => void;
+  onLongPressDrag?: (latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => void;
+  onLongPressDragEnd?: (latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => void;
 }
 
 export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
@@ -210,7 +210,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       lastLatLng = latLngAt(event.clientX, event.clientY);
       // 先直接移动 Leaflet 实例，再让 React 的乐观坐标接管，避免手指下落后一帧。
       marker.setLatLng(lastLatLng);
-      longPressDragRef.current.onDrag?.(lastLatLng);
+      longPressDragRef.current.onDrag?.(lastLatLng, { clientX: event.clientX, clientY: event.clientY });
     };
 
     const finishPointer = (event: PointerEvent) => {
@@ -221,7 +221,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
         event.stopPropagation();
         // 只长按、未移动时保持原坐标；不能把手指按在图钉图形内的位置误当成新锚点。
         const finalLatLng = lastLatLng ?? marker.getLatLng();
-        longPressDragRef.current.onEnd?.(finalLatLng);
+        longPressDragRef.current.onEnd?.(finalLatLng, { clientX: event.clientX, clientY: event.clientY });
         try {
           element.releasePointerCapture(event.pointerId);
         } catch {

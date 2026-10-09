@@ -11,9 +11,7 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
-        // 手机用局域网 IP 访问时必须是 HTTPS，否则 Geolocation 会静默失败且不弹权限窗。
-        // localhost 本身是安全上下文；启用 basic-ssl 后手机请打开 https://<电脑IP>:3000
-        https: true,
+        // basicSsl 在未显式配置时注入证书并启用 HTTPS；手机请打开 https://<电脑IP>:3000。
       },
       plugins: [
         basicSsl(),

@@ -23,7 +23,7 @@ export interface ChromeIconButtonProps
 }
 
 const baseClass =
-  'p-2 sm:p-3 rounded-xl shadow-lg transition-colors transition-transform transform-gpu hover:scale-[1.04] motion-reduce:hover:scale-100 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center border border-gray-100/80';
+  'chrome-glass-edge p-2 sm:p-3 rounded-xl shadow-lg transition-colors transition-transform transform-gpu hover:scale-[1.04] motion-reduce:hover:scale-100 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center border border-gray-100/80';
 
 /**
  * 地图 / Board 顶栏共用的「玻璃或白底 + 细边框」图标按钮，悬停与主题态与 MapLayerControl 一致。
@@ -80,7 +80,10 @@ export const ChromeIconButton = React.forwardRef<HTMLButtonElement, ChromeIconBu
       ? {
           backgroundColor: themeColor,
           // 保留深色地图工具栏传入的低对比描边，避免选中后露出默认的亮白边框。
-          ...(ch?.borderColor ? { borderColor: ch.borderColor } : {})
+          ...(ch?.borderColor ? {
+            borderColor: ch.borderColor,
+            ['--chrome-border' as string]: ch.borderColor
+          } : {})
         }
       : activeMuted
         ? undefined

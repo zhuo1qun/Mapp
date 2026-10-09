@@ -1,14 +1,14 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import {
   listExternalMapApps,
   openExternalMapApp,
   type ExternalMapAppId
 } from '../../../utils/map/openExternalNavigation';
-import { MODAL_BACKDROP_MASK_STYLE, type MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
-import { ChromePresence } from '../../ui/ChromeSheetPresence';
+import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../../ui/chromeAppearanceContext';
+import { ChromeWindow } from '../../ui/ChromeWindow';
+import { ChromeActionButton } from '../../ui/ChromeActionButton';
 
 type Props = {
   open: boolean;
@@ -37,8 +37,6 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
   chromeAppearance: chromeAppearanceProp
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
-  if (typeof document === 'undefined') return null;
-
   const apps = listExternalMapApps();
 
   const pick = (id: ExternalMapAppId) => {
@@ -46,30 +44,21 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
     onClose();
   };
 
-  return createPortal(
-    <ChromePresence open={open} kind="sheet">
-      {(phase) => (
-        <div
-          className={`fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-0 sm:p-4 chrome-dialog-backdrop-${phase}`}
-          style={MODAL_BACKDROP_MASK_STYLE}
-          role="dialog"
-          aria-modal="true"
-          aria-label="选择地图应用"
-        >
-      <button
-        type="button"
-        className="absolute inset-0 border-0 cursor-default"
-        aria-label="关闭"
-        onClick={onClose}
-      />
-      <div
-        className={`map-chrome-content-${chromeAppearance} relative w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-100/80 overflow-hidden chrome-responsive-sheet-${phase} ${
-          panelChromeStyle ? '' : 'bg-white'
-        }`}
-        style={panelChromeStyle}
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
+  return (
+    <ChromeWindow
+      open={open}
+      onClose={onClose}
+      backdropLabel="关闭地图应用选择"
+      placement="center"
+      surface="window"
+      appearance={chromeAppearance}
+      compactBehavior="sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label="选择地图应用"
+      className={`w-full sm:max-w-sm ${panelChromeStyle ? '' : 'bg-white'}`}
+      style={panelChromeStyle}
+    >
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div>
             <div className="text-base font-bold text-gray-900">导航到此点</div>
@@ -103,19 +92,15 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
           ))}
         </ul>
         <div className="px-4 pb-4 pt-1 safe-area-pb">
-          <button
-            type="button"
+          <ChromeActionButton
+            tone="primary"
+            themeColor={themeColor}
             onClick={onClose}
-            className="w-full py-2.5 rounded-xl text-sm font-bold text-theme-chrome-fg border-0"
-            style={{ backgroundColor: themeColor }}
+            className="w-full rounded-xl py-2.5 text-sm"
           >
             取消
-          </button>
+          </ChromeActionButton>
         </div>
-      </div>
-        </div>
-      )}
-    </ChromePresence>,
-    document.body
+    </ChromeWindow>
   );
 };

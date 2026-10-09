@@ -1,16 +1,18 @@
 import React, { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { Tag as TagIcon } from 'lucide-react';
 import { TAG_COLORS } from '../../constants';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './chromeAppearanceContext';
+import { ChromeTextField } from './ChromeTextField';
+import { ChromeActionButton } from './ChromeActionButton';
+import { ChromePropertyPopover } from './ChromePropertyPopover';
 
 export interface TagAddPanelProps {
   themeColor: string;
   panelChromeStyle?: React.CSSProperties;
   chromeAppearance?: MapChromeAppearance;
-  /** 标题说明（如「为 3 个便签添加标签」或「添加标签」） */
-  title: string;
+  /** 标题说明（如「为 3 个便签添加标签」）；编辑器内可省略以避免重复层级。 */
+  title?: string;
   label: string;
   onLabelChange: (v: string) => void;
   selectedColor: string;
@@ -95,27 +97,30 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
     return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
   }, [closeOnInteractOutside]);
 
-  const shellClass = `map-chrome-content-${chromeAppearance} rounded-xl border border-gray-100/80 p-2.5 shadow-lg ${panelChromeStyle ? '' : 'bg-white'} ${className}`;
+  const shellClass = `map-chrome-content-${chromeAppearance} rounded-xl border border-gray-100/80 p-2 shadow-lg ${panelChromeStyle ? '' : 'bg-white'} ${className}`;
   const panelRef = portalPanelRef ?? rootRef;
 
   const body = (
     <>
-      <div className="flex items-start gap-2 mb-1.5">
-        <TagIcon size={16} className="text-gray-500 shrink-0 mt-0.5" aria-hidden />
-        <div className="text-xs text-gray-500 min-w-0 flex-1 leading-snug">{title}</div>
-      </div>
+      {title ? (
+        <div className="mb-1.5 flex items-start gap-2">
+          <TagIcon size={16} className="mt-0.5 shrink-0 text-gray-500" aria-hidden />
+          <div className="min-w-0 flex-1 text-xs leading-snug text-gray-500">{title}</div>
+        </div>
+      ) : null}
       {!hideLabelInput && (
-        <input
+        <ChromeTextField
           type="text"
           value={label}
           onChange={(e) => onLabelChange(e.target.value)}
           placeholder={placeholder}
           autoFocus={autoFocus}
           readOnly={labelReadOnly}
-          className={`w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-offset-0 mb-2 ${
+          containerClassName={`mb-2 h-8 w-full ${
             labelReadOnly ? 'bg-gray-50 cursor-not-allowed text-gray-600' : ''
           }`}
-          style={{ ['--tw-ring-color' as string]: themeColor }}
+          className="px-2 text-sm"
+          themeColor={themeColor}
           onKeyDown={onInputKeyDown}
         />
       )}
@@ -137,50 +142,38 @@ export const TagAddPanel: React.FC<TagAddPanelProps> = ({
           />
         ))}
       </div>
-      <button
-        type="button"
+      <ChromeActionButton
+        themeColor={themeColor}
+        tone="primary"
         onClick={(e) => {
           e.stopPropagation();
           void onApply();
         }}
-        className="w-full py-1.5 text-sm rounded-lg text-theme-chrome-fg border-0 cursor-pointer"
-        style={{ backgroundColor: themeColor }}
+        className="w-full py-1.5 text-sm"
       >
         {applyLabel}
-      </button>
+      </ChromeActionButton>
     </>
   );
 
   if (portalPlacement != null) {
-    return createPortal(
-      <div data-chrome-window-nested={portalBackdrop || undefined}>
-        {portalBackdrop ? (
-          <div
-            className="fixed inset-0"
-            style={{ zIndex: portalZIndex - 1 }}
-            onClick={() => void outsideRef.current()}
-          />
-        ) : null}
-        <div
-          ref={panelRef}
-          data-tag-add-panel
-          className={`w-[min(100vw-16px,260px)] max-w-[min(100vw-16px,260px)] overflow-y-auto ${shellClass}`}
-          style={{
-            ...(panelChromeStyle || {}),
-            position: 'fixed',
-            top: portalPlacement.top,
-            left: portalPlacement.left,
-            maxHeight: portalPlacement.maxHeight,
-            zIndex: portalZIndex,
-            pointerEvents: 'auto',
-          }}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {body}
-        </div>
-      </div>,
-      document.body
+    return (
+      <ChromePropertyPopover
+        open
+        onClose={() => void outsideRef.current()}
+        placement={portalPlacement}
+        panelRef={panelRef}
+        panelChromeStyle={panelChromeStyle}
+        chromeAppearance={chromeAppearance}
+        width="min(100vw - 16px, 260px)"
+        maxWidth="min(100vw - 16px, 260px)"
+        zIndex={portalZIndex}
+        backdrop={portalBackdrop}
+        surface="tag"
+        className={`overflow-y-auto p-2 ${className}`}
+      >
+        {body}
+      </ChromePropertyPopover>
     );
   }
 

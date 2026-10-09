@@ -133,8 +133,9 @@ export function mapChromeControlStyle(
     '--map-chrome-surface-opacity': o,
     // 内联 color 覆盖图标按钮的默认 Tailwind 前景色，让 SVG 图标与文字一同继承。
     color: dark ? 'rgba(255, 255, 255, 0.92)' : '#374151',
-    // 深色玻璃保留一丝高光即可；默认 gray-100/80 在暗底上会显得像实线白框。
-    borderColor: dark ? 'rgba(255, 255, 255, 0.18)' : undefined
+    // 外轮廓取与面板明暗相反的低对比线，避免暗底上出现白色亮框。
+    '--chrome-border': dark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)',
+    borderColor: dark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)'
   } as CSSProperties;
   if (b > 0) {
     const f = `blur(${b}px)`;
@@ -171,7 +172,8 @@ export function mapChromeContentStyle(
     '--map-chrome-surface-opacity': o,
     color: dark ? 'rgba(255, 255, 255, 0.92)' : '#1f2937',
     // 面板根节点本身也必须覆盖原本的 gray-100 描边，不能只处理内部子元素。
-    borderColor: dark ? 'rgba(255, 255, 255, 0.16)' : undefined
+    '--chrome-border': dark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)',
+    borderColor: dark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)'
   } as CSSProperties;
   if (b > 0) {
     const f = `blur(${b}px)`;
@@ -182,10 +184,10 @@ export function mapChromeContentStyle(
 }
 
 /**
- * 全局玻璃浮层描边：只用这一条细灰边，不要再叠 `ring-*`，否则会出现两种描边色。
- * gray-100/80 ≈ #f3f4f6 @ 80%，与 ChromeIconButton / canvas paint 一致。
+ * 全局玻璃浮层边缘：完整淡轮廓，面板渐变只绘制在轮廓内侧。
+ * chrome-glass-edge 保留既有投影和键盘焦点 ring，不额外叠加高光线。
  */
-export const MAP_CHROME_SURFACE_BORDER_CLASS = 'border border-gray-100/80';
+export const MAP_CHROME_SURFACE_BORDER_CLASS = 'chrome-glass-edge border border-gray-100/80';
 
 /**
  * 全局玻璃浮层外壳 class（圆角 / 阴影 / 描边）。
@@ -209,7 +211,8 @@ export function mapChromeSurfaceStyle(
     backgroundImage: chromeGradientBackground(dark, o),
     '--map-chrome-surface-opacity': o,
     color: dark ? 'rgba(255, 255, 255, 0.92)' : undefined,
-    borderColor: dark ? 'rgba(255, 255, 255, 0.16)' : undefined
+    '--chrome-border': dark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)',
+    borderColor: dark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)'
   } as CSSProperties;
   if (b > 0) {
     const f = `blur(${b}px)`;

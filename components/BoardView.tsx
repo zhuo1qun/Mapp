@@ -1,70 +1,53 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { Note, Frame, Connection, type GraphLayerState, type Project } from '../types';
-import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
+import { mergeNoteLayerState, type NoteLayerGroupStandard } from '../utils/layer/noteLayerState';
 import {
   emojiLayerStateFromLegacyTagState,
   isNoteVisibleInUnifiedLayer,
-  noteHasRenderableMapPosition,
-  noteTagLabels
+  noteHasRenderableMapPosition
 } from '../utils/layer/unifiedNoteLayer';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { NoteEditor } from './NoteEditor';
+import { BoardPaperNoteContent } from './note/BoardPaperNoteContent';
 import { Check, Minus, Settings } from 'lucide-react';
-import { generateId, fileToBase64, parseNoteContent } from '../utils';
-import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
-import { readImageGpsMetadata } from '../utils/media/imageFileProcessing';
+import { generateId } from '../utils';
 import { DEFAULT_THEME_COLOR, TAG_COLORS } from '../constants';
 import { mapChromeContentStyle, mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
-import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
-import { isFileDragLeavingViewport } from '../utils/ui/fileDrag';
 import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
 import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
-import { saveImage, saveSketch, loadImage, loadNoteImages, getViewPositionCache } from '../utils/persistence/storage';
+import { loadNoteImages, getViewPositionCache } from '../utils/persistence/storage';
 import { useNotesWithResolvedMedia } from '../utils/persistence/useNotesWithResolvedMedia';
 import { noteRendersAsBoardSticker } from '../utils/persistence/mediaDisplay';
-import { compressImageToBase64 } from '../utils/board/board-utils';
 import { useBoardNoteDrag } from './hooks/useBoardNoteDrag';
 import { useBoardNoteInteraction } from './hooks/useBoardNoteInteraction';
 import { useBoardInteractionMachine } from './hooks/useBoardInteractionMachine';
 import { useBoardPointerCapture } from './hooks/useBoardPointerCapture';
 import {
-  PLACEMENT_PADDING,
-  PLACEMENT_GAP,
-  PLACEMENT_GRID_CELL,
   boardNoteDimensions,
-  computeBoardBounds,
-  createGridAllocator,
-  fitBoardMediaDimensions,
-  nextSequentialSlot
 } from '../utils/board/boardPlacement';
 import { TagAddPanel } from './ui/TagAddPanel';
 import { SettingsPanel } from './SettingsPanel';
-import { BoardImportPreviewDialog } from './board/BoardImportPreviewDialog';
 import { useCsvImport } from '@/components/hooks/useCsvImport';
-import { buildNewNotesFromProjectJsonRaws, parseProjectJsonNotesPayloadResult } from '../utils/import/projectDataImport';
-import {
-  formatImportErrorMessage,
-  formatUnexpectedImportError
-} from '../utils/import/importErrorFormat';
 import { BoardImageLightbox } from './board/BoardImageLightbox';
+import { BoardCanvasFeedback } from './board/BoardCanvasFeedback';
+import { BoardFrameBodies } from './board/BoardFrameBodies';
+import { BoardSelectionOverlay } from './board/BoardSelectionOverlay';
+import { useBoardNoteMotion } from './board/useBoardNoteMotion';
+import { useBoardImportController } from './board/useBoardImportController';
+import { useBoardUnplacedNotes } from './board/useBoardUnplacedNotes';
+import { UnplacedNotesSidebar } from './map/overlays/MapUnplacedNotesPanel';
 import { BoardBrowseTagFilterPanel } from './board/BoardBrowseTagFilterPanel';
 import { BoardBrowseTimeFilterPanel } from './board/BoardBrowseTimeFilterPanel';
 import { BoardBatchTimePanel } from './board/BoardBatchTimePanel';
 import { BoardMultiSelectToolbar } from './board/BoardMultiSelectToolbar';
 import { BoardTopRightEditToggle } from './board/BoardTopRightEditToggle';
-import { type EditInspectorPanelProps, type InspectorGroupContext } from './map/overlays/MapEditInspectorPanel';
-import { useRegisterEditInspector } from './editInspector/EditInspectorProvider';
 import { GraphConnectionPanel } from './graph/GraphConnectionPanel';
 import { useSimpleConnectionPanel } from './hooks/useSimpleConnectionPanel';
 import { BoardTopCenterEditToolbar } from './board/BoardTopCenterEditToolbar';
-import {
-  BoardFrameControls,
-  type BoardFrameResizeCorner
-} from './board/BoardFrameControls';
-import { BoardSelectionScaleHandles } from './board/BoardSelectionScaleHandles';
+import type { BoardFrameResizeCorner } from './board/BoardFrameControls';
 import {
   applySelectionScaleToNotes,
   computeSelectionContentBounds,
@@ -76,12 +59,12 @@ import {
   type SelectionScaleCorner
 } from '../utils/board/boardSelectionScale';
 import { resizeBoardImageFromPointer } from '../utils/board/boardImageResize';
+import { resolveBoardFrameLayout } from '../utils/board/boardFrameLayout';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { LayerToolbarIcon } from './ui/LayerToolbarIcon';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
 import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolbarSlot';
 import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
-import ReactMarkdown from 'react-markdown';
 import { VIBRATION_MEDIUM } from './board-constants';
 import {
   clientPoint,
@@ -90,141 +73,21 @@ import {
   distanceBetween,
   transformAroundViewPoint
 } from '../utils/board/boardCoordinates';
+import {
+  isNoteBoardPlaced,
+} from '../utils/note/notePlacement';
+import {
+  collectSortedUniqueTagLabelsFromSelection,
+  computeTimeRangeFromAllNotes,
+  computeTimeRangeFromSelection,
+  noteMatchesBoardTagFilter,
+  noteTimeRangeFullyContainedInFilter,
+  selectionHasTimedNotesInSelection,
+  selectionHasUntaggedNotes
+} from '../utils/board/boardSelectionFilters';
 
-const BOARD_NOTE_INTRO_MS = 280;
 const BOARD_NOTE_INTRO_DISMISS_DELAY_MS = 560;
-const BOARD_NOTE_EXIT_MS = 220;
 
-
-function imageRefLooksLikeImageId(imageRef: string): boolean {
-  return imageRef.startsWith('img-');
-}
-
-function loadImageElementDimensions(src: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
-    img.onerror = (e) => reject(e);
-    img.src = src;
-  });
-}
-
-async function resolveImageRefToRenderableSrc(imageRef: string): Promise<string | null> {
-  if (!imageRef) return null;
-  if (imageRefLooksLikeImageId(imageRef)) {
-    try {
-      return await loadImage(imageRef);
-    } catch (error) {
-      console.warn('Failed to load image by ID for dimensions:', error);
-      return null;
-    }
-  }
-  return imageRef;
-}
-
-async function detectImageDimensionsFromRefs(imageRefs: string[]): Promise<{ width: number; height: number } | null> {
-  for (const imageRef of imageRefs) {
-    const src = await resolveImageRefToRenderableSrc(imageRef);
-    if (!src) continue;
-    try {
-      const dims = await loadImageElementDimensions(src);
-      if (dims.width > 0 && dims.height > 0) {
-        return dims;
-      }
-    } catch (error) {
-      console.warn('Failed to detect image dimensions:', error);
-    }
-  }
-  return null;
-}
-
-
-/** 便签年份区间（无时间则 null） */
-function getNoteYearSpan(note: Note): { min: number; max: number } | null {
-  if (note.startYear == null) return null;
-  const s = note.startYear;
-  const e = note.endYear != null && note.endYear !== s ? note.endYear : s;
-  return { min: Math.min(s, e), max: Math.max(s, e) };
-}
-
-/** 便签起止年区间完全落在筛选区间内（非交集） */
-function noteTimeRangeFullyContainedInFilter(
-  note: Note,
-  range: { min: number; max: number }
-): boolean {
-  const span = getNoteYearSpan(note);
-  if (!span) return false;
-  return span.min >= range.min && span.max <= range.max;
-}
-
-function computeTimeRangeFromSelection(
-  ids: Set<string>,
-  allNotes: Note[]
-): { min: number; max: number } | null {
-  let min = Infinity;
-  let max = -Infinity;
-  allNotes.forEach((n) => {
-    if (!ids.has(n.id)) return;
-    const span = getNoteYearSpan(n);
-    if (!span) return;
-    min = Math.min(min, span.min);
-    max = Math.max(max, span.max);
-  });
-  if (min === Infinity) return null;
-  return { min, max };
-}
-
-function computeTimeRangeFromAllNotes(allNotes: Note[]): { min: number; max: number } | null {
-  let min = Infinity;
-  let max = -Infinity;
-  allNotes.forEach((n) => {
-    const span = getNoteYearSpan(n);
-    if (!span) return;
-    min = Math.min(min, span.min);
-    max = Math.max(max, span.max);
-  });
-  if (min === Infinity) return null;
-  return { min, max };
-}
-
-function selectionHasTimedNotesInSelection(ids: Set<string>, allNotes: Note[]): boolean {
-  return allNotes.some((n) => ids.has(n.id) && getNoteYearSpan(n) != null);
-}
-
-function collectTagLabelsFromSelection(ids: Set<string>, allNotes: Note[]): Set<string> {
-  const labels = new Set<string>();
-  allNotes.forEach((n) => {
-    if (!ids.has(n.id)) return;
-    noteTagLabels(n).forEach((l) => labels.add(l));
-  });
-  return labels;
-}
-
-/** 多选框内出现的标签文案，去重后按文本排序（与颜色无关） */
-function collectSortedUniqueTagLabelsFromSelection(
-  ids: Set<string>,
-  allNotes: Note[]
-): string[] {
-  const s = collectTagLabelsFromSelection(ids, allNotes);
-  return Array.from(s).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-}
-
-function selectionHasUntaggedNotes(ids: Set<string>, allNotes: Note[]): boolean {
-  return allNotes.some((n) => ids.has(n.id) && noteTagLabels(n).length === 0);
-}
-
-/** 勾选「无标签」或任一 label（并集；含 emoji） */
-function noteMatchesBoardTagFilter(
-  note: Note,
-  labels: Set<string>,
-  includeUntagged: boolean
-): boolean {
-  const noteLabels = noteTagLabels(note);
-  const untagged = noteLabels.length === 0;
-  if (includeUntagged && untagged) return true;
-  if (labels.size > 0 && noteLabels.some((l) => labels.has(l))) return true;
-  return false;
-}
 
 /** Frame 叠在玻璃底上的主题色/分组色（hex → rgba） */
 function frameTintFromHex(hex: string, alpha: number): string {
@@ -252,7 +115,6 @@ interface BoardViewProps {
     updates?: Partial<Project>
   ) => void | Promise<void>;
   onSwitchToMapView?: (coords?: { lat: number; lng: number }) => void;
-  onSwitchToGraphView?: (noteId: string) => void;
   navigateToCoords?: { x: number; y: number } | null;
   projectId?: string;
   onNavigateComplete?: () => void;
@@ -292,7 +154,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   project,
   onUpdateProject,
   onSwitchToMapView,
-  onSwitchToGraphView,
   navigateToCoords,
   projectId,
   onNavigateComplete,
@@ -361,137 +222,49 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     interactionState.kind === 'resizing-frame' ? interactionState : null;
   const resizingImage =
     interactionState.kind === 'resizing-image' ? interactionState : null;
-  const [editingNote, setEditingNote] = useState<Note | null>(null);
-  // New text notes briefly live here before their editor opens, so their
-  // creation has a visible anchor instead of appearing as an abrupt modal.
-  const [introNote, setIntroNote] = useState<Note | null>(null);
-  const [isIntroPending, setIsIntroPending] = useState(false);
-  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'exit'>('enter');
-  const [enteringNoteIds, setEnteringNoteIds] = useState<Set<string>>(() => new Set());
-  const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
-  const introTimerRef = useRef<number | null>(null);
   const introDismissTimerRef = useRef<number | null>(null);
   const introExitTimerRef = useRef<number | null>(null);
-  const introStartedAtRef = useRef(0);
   const boardLongPressPreviewNoteRef = useRef<Note | null>(null);
-  const noteMotionTimersRef = useRef<Set<number>>(new Set());
-  const deletingNoteIdsRef = useRef<Set<string>>(new Set());
-
-  const boardDisplayNotes = useMemo(() => {
-    if (!introNote) return displayNotes;
-    // 保存后仍先保留临时卡作为过渡层，待它淡出后再露出正式卡，避免
-    // 同一个便签在编辑器收场时突然换成另一张卡片。
-    return [...displayNotes.filter((note) => note.id !== introNote.id), introNote];
-  }, [displayNotes, introNote]);
-
-  const markBoardNoteEntering = useCallback((noteId: string) => {
-    setEnteringNoteIds((current) => new Set(current).add(noteId));
-    const timer = window.setTimeout(() => {
-      noteMotionTimersRef.current.delete(timer);
-      setEnteringNoteIds((current) => {
-        if (!current.has(noteId)) return current;
-        const next = new Set(current);
-        next.delete(noteId);
-        return next;
-      });
-    }, BOARD_NOTE_INTRO_MS);
-    noteMotionTimersRef.current.add(timer);
-  }, []);
-
-  const addBoardNoteWithEnter = useCallback(
-    (note: Note) => {
-      markBoardNoteEntering(note.id);
-      onAddNote?.(note);
-    },
-    [markBoardNoteEntering, onAddNote]
-  );
-
-  const beginNewBoardNoteIntro = useCallback(
-    (note: Note) => {
-      if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
+  const {
+    editingNote,
+    setEditingNote,
+    introNote,
+    setIntroNote,
+    isIntroPending,
+    setIsIntroPending,
+    introNoteMotion,
+    setIntroNoteMotion,
+    enteringNoteIds,
+    deletingNoteIds,
+    introTimerRef,
+    introStartedAtRef,
+    boardDisplayNotes,
+    addBoardNoteWithEnter,
+    beginNewBoardNoteIntro,
+    openNewBoardNoteEditorAfterIntro,
+    deleteBoardNotesWithExit
+  } = useBoardNoteMotion({
+    notes,
+    displayNotes,
+    onAddNote,
+    onDeleteNote,
+    onDeleteNotesBatch,
+    onToggleEditor,
+    setSelectedNoteId,
+    setSelectedNoteIds,
+    onBeginIntro: () => {
       if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
       if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
-      setIntroNote(note);
-      setIsIntroPending(true);
-      setIntroNoteMotion('enter');
-      markBoardNoteEntering(note.id);
-      setEditingNote(note);
-      introStartedAtRef.current = Date.now();
-    },
-    [markBoardNoteEntering]
-  );
-
-  const openNewBoardNoteEditorAfterIntro = useCallback(
-    (elapsedMs = 0) => {
-      if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
-      const remainingIntroMs = Math.max(120, BOARD_NOTE_INTRO_MS - elapsedMs);
-      introTimerRef.current = window.setTimeout(() => {
-        introTimerRef.current = null;
-        setIsIntroPending(false);
-        onToggleEditor(true);
-      }, remainingIntroMs);
-    },
-    [onToggleEditor]
-  );
-
-  const deleteBoardNotesWithExit = useCallback(
-    (noteIds: string[]) => {
-      const ids = [...new Set(noteIds)].filter((id) => !deletingNoteIdsRef.current.has(id));
-      if (ids.length === 0 || (!onDeleteNote && !onDeleteNotesBatch)) return;
-
-      // 尚未保存的新便签由编辑器关闭后的统一退场流程接手，避免卡片在
-      // 编辑器仍在收场时提前消失。
-      const idsToDelete = ids.filter(
-        (id) => id !== introNote?.id || notes.some((note) => note.id === id)
-      );
-      if (idsToDelete.length === 0) return;
-
-      idsToDelete.forEach((id) => deletingNoteIdsRef.current.add(id));
-      setDeletingNoteIds((current) => {
-        const next = new Set(current);
-        idsToDelete.forEach((id) => next.add(id));
-        return next;
-      });
-      setSelectedNoteIds((current) => {
-        const next = new Set(current);
-        idsToDelete.forEach((id) => next.delete(id));
-        return next;
-      });
-      setSelectedNoteId((current) => (current && idsToDelete.includes(current) ? null : current));
-
-      const timer = window.setTimeout(() => {
-        noteMotionTimersRef.current.delete(timer);
-        const removeExitState = () => {
-          idsToDelete.forEach((id) => deletingNoteIdsRef.current.delete(id));
-          setDeletingNoteIds((current) => {
-            const next = new Set(current);
-            idsToDelete.forEach((id) => next.delete(id));
-            return next;
-          });
-          setIntroNote((current) => (current && idsToDelete.includes(current.id) ? null : current));
-        };
-
-        if (idsToDelete.length > 1 && onDeleteNotesBatch) {
-          Promise.resolve(onDeleteNotesBatch(idsToDelete)).finally(removeExitState);
-        } else {
-          Promise.all(idsToDelete.map((id) => Promise.resolve(onDeleteNote?.(id)))).finally(removeExitState);
-        }
-      }, BOARD_NOTE_EXIT_MS);
-      noteMotionTimersRef.current.add(timer);
-    },
-    [introNote?.id, notes, onDeleteNote, onDeleteNotesBatch]
-  );
+    }
+  });
 
   useEffect(() => () => {
-    if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
     if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
     if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
-    noteMotionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
   }, []);
   
-  // 标记是否已经执行过重排
-  const [hasRearranged, setHasRearranged] = useState(false);
-
   // 缩放保存的防抖定时器
   const zoomSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -508,9 +281,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
     
     // 2. Calculate to fit all objects
-    if (notes.length > 0) {
+    const placedNotes = notes.filter(isNoteBoardPlaced);
+    if (placedNotes.length > 0) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      notes.forEach(note => {
+      placedNotes.forEach(note => {
         minX = Math.min(minX, note.boardX);
         minY = Math.min(minY, note.boardY);
         const { width: w, height: h } = boardNoteDimensions(note);
@@ -617,19 +391,19 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     [projectFull?.connections, connections]
   );
   const graphLayerGroupStandard = useMemo(
-    () => (projectFull?.graphLayerStandard ?? 'tag') as GraphLayerGroupStandard,
+    () => (projectFull?.graphLayerStandard ?? 'tag') as NoteLayerGroupStandard,
     [projectFull?.graphLayerStandard]
   );
   const mergedTagBoardLayers = useMemo(
-    () => mergeGraphLayerState(notes, projectFull?.graphLayers ?? null, 'tag'),
+    () => mergeNoteLayerState(notes, projectFull?.graphLayers ?? null, 'tag'),
     [notes, projectFull?.graphLayers]
   );
   const mergedFrameBoardLayers = useMemo(
-    () => mergeGraphLayerState(notes, projectFull?.graphFrameLayers ?? null, 'frame'),
+    () => mergeNoteLayerState(notes, projectFull?.graphFrameLayers ?? null, 'frame'),
     [notes, projectFull?.graphFrameLayers]
   );
   const mergedEmojiBoardLayers = useMemo(
-    () => mergeGraphLayerState(notes, projectFull?.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(projectFull?.graphLayers), 'emoji'),
+    () => mergeNoteLayerState(notes, projectFull?.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(projectFull?.graphLayers), 'emoji'),
     [notes, projectFull?.graphEmojiLayers, projectFull?.graphLayers]
   );
   const mergedProjectBoardLayers =
@@ -654,7 +428,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   );
 
   const handleBoardLayerStandardChange = useCallback(
-    (standard: GraphLayerGroupStandard) => {
+    (standard: NoteLayerGroupStandard) => {
       if (!onUpdateProject || !projectFull) return;
       onUpdateProject({ ...projectFull, graphLayerStandard: standard });
     },
@@ -721,10 +495,33 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   }, []);
   
   // Connection state
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set()); // Multi-select state
+  const [selectionOverlayElement, setSelectionOverlayElement] = useState<HTMLDivElement | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [multiBatchPanel, setMultiBatchPanel] = useState<'none' | 'tag' | 'time'>('none');
 
+  const {
+    panelRef: unplacedBoardSidebarRef,
+    isDropTarget: isUnplacedBoardSidebarDropTarget,
+    leavingNoteIds: leavingBoardNoteIds,
+    unplacedNotes: unplacedBoardNotes,
+    deleteUnplacedNotes: deleteUnplacedBoardNotes,
+    onDragPointerMove: handleBoardNoteDragPointerMove,
+    onDropToPanel: handleBoardNoteDropToSidebar
+  } = useBoardUnplacedNotes({
+    notes,
+    displayNotes,
+    project,
+    onUpdateProject,
+    onUpdateNote,
+    containerRef,
+    transform,
+    enabled: isUIVisible && workspaceEditMode,
+    selectedNoteIds,
+    setSelectedNoteId,
+    setSelectedNoteIds,
+    setMultiBatchPanel,
+    deleteNotesWithExit: deleteBoardNotesWithExit
+  });
   // Multi-select state
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   
@@ -734,7 +531,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [boxSelectEnd, setBoxSelectEnd] = useState<{ x: number; y: number } | null>(null);
 
   /** 多选批量工具栏：标签 / 时间子面板 */
-  const [multiBatchPanel, setMultiBatchPanel] = useState<'none' | 'tag' | 'time'>('none');
   const [batchTagLabel, setBatchTagLabel] = useState('');
   const [batchTagColorIndex, setBatchTagColorIndex] = useState(0);
   const [batchTimeStartStr, setBatchTimeStartStr] = useState('');
@@ -757,33 +553,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     if (selectedNoteIds.size === 1) return Array.from(selectedNoteIds)[0];
     return null;
   }, [selectedNoteId, selectedNoteIds]);
-  const boardInspectorNote = useMemo(
-    () => (boardInspectorNoteId ? notes.find((n) => n.id === boardInspectorNoteId) ?? null : null),
-    [boardInspectorNoteId, notes]
-  );
-
-  const boardInspectorGroupContext = useMemo((): InspectorGroupContext | null => {
-    if (selectedNoteIds.size <= 1) return null;
-    const members = notes.filter((n) => selectedNoteIds.has(n.id));
-    if (members.length === 0) return null;
-    let x = 0;
-    let y = 0;
-    members.forEach((n) => {
-      x += n.boardX ?? 0;
-      y += n.boardY ?? 0;
-    });
-    const centroidBoard = { x: x / members.length, y: y / members.length };
-    const firstG = members[0]?.noteGroupId;
-    const isObjectGroup =
-      !!firstG && members.every((m) => m.noteGroupId === firstG);
-    return {
-      kind: 'multi',
-      title: isObjectGroup ? `对象组 · ${members.length} 个` : `多选 · ${members.length} 个`,
-      members,
-      centroidBoard
-    };
-  }, [selectedNoteIds, notes]);
-
   const {
     showConnectionPanel: showBoardInsConnPanel,
     setShowConnectionPanel: setShowBoardInsConnPanel,
@@ -812,27 +581,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [drawingFrameStart, setDrawingFrameStart] = useState<{ x: number; y: number } | null>(null);
   const [drawingFrameEnd, setDrawingFrameEnd] = useState<{ x: number; y: number } | null>(null);
   const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
-
-  const boardInspectorFrame = useMemo(() => {
-    if (boardInspectorNote) return null;
-    if (boardInspectorGroupContext) return null;
-    if (!selectedFrameId) return null;
-    return frames.find((f) => f.id === selectedFrameId) ?? null;
-  }, [boardInspectorNote, boardInspectorGroupContext, selectedFrameId, frames]);
-
-  const boardInspectorConnection = useMemo(() => {
-    if (boardInspectorNote) return null;
-    if (boardInspectorGroupContext) return null;
-    if (boardInspectorFrame) return null;
-    if (!selectedConnectionId) return null;
-    return effectiveConnections.find((c) => c.id === selectedConnectionId) ?? null;
-  }, [
-    boardInspectorNote,
-    boardInspectorGroupContext,
-    boardInspectorFrame,
-    selectedConnectionId,
-    effectiveConnections
-  ]);
 
   // 在非编辑模式下选中的frames用于过滤显示（支持多frame）
   const [filterFrameIds, setFilterFrameIds] = useState<Set<string>>(new Set());
@@ -949,32 +697,22 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   }, []);
   
-  // Import state
-  const [showImportMenu, setShowImportMenu] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const dataImportInputRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Image import preview state
-  const [importPreview, setImportPreview] = useState<Array<{
-    file: File;
-    imageUrl: string;
-    lat: number;
-    lng: number;
-    error?: string;
-    isDuplicate?: boolean;
-    imageFingerprint?: string;
-  }>>([]);
-  
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const imageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const boardImport = useBoardImportController({
+    notes,
+    transform,
+    containerRef,
+    editingNote,
+    setEditingNote,
+    onUpdateNote,
+    onAddNote: addBoardNoteWithEnter,
+    onCsvImport: handleCsvDataImport
+  });
 
   useEffect(() => {
     const dismiss = () => {
       setShowLayerPanel(false);
       setShowSettingsPanel(false);
-      setShowImportMenu(false);
       setBrowseTagFilterPanelOpen(false);
       setBrowseTimeFilterPanelOpen(false);
       setShowBoardInsConnPanel(false);
@@ -987,6 +725,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const openBoardNoteEditor = useCallback(
     (note: Note) => {
       void (async () => {
+        // 编辑器接管注意力时，收起选中对象下方的标签/时间临时面板；
+        // 选中对象工具栏本身仍保留，供定位和取消选择使用。
+        setMultiBatchPanel('none');
+        setBrowseTagFilterPanelOpen(false);
+        setBrowseTimeFilterPanelOpen(false);
         let loaded = note;
         const hasLoadedImages =
           !!note.images?.length && note.images.some((img) => img.startsWith('data:'));
@@ -1061,7 +804,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       setSelectedNoteIds(new Set([noteId]));
       setSelectedConnectionId(null);
       setSelectedFrameId(null);
-    }
+    },
+    onNoteDragPointerMove: handleBoardNoteDragPointerMove,
+    onDropNoteToExternalTarget: handleBoardNoteDropToSidebar
   });
 
   const { handleNoteClick, handleNoteDoubleClick, clearDeferredClick } = useBoardNoteInteraction({
@@ -1242,10 +987,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       if (e.key === 'Shift') {
         setIsShiftPressed(true);
       }
-      // Close import dialog on ESC key
-      if (e.key === 'Escape' && showImportDialog) {
-        handleCancelImport();
-      }
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -1261,7 +1002,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [workspaceEditMode, showImportDialog]);
+  }, []);
 
   // Keyboard shortcuts for note grouping: Cmd/Ctrl+G (group) and Cmd/Ctrl+Shift+G (ungroup)
   useEffect(() => {
@@ -1365,27 +1106,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   };
 
-  // 确保便签图片数据已加载
-  const ensureNoteImagesLoaded = async (note: Note): Promise<Note> => {
-    // 检查便签是否已经有加载的图片数据
-    const hasImages = note.images && note.images.length > 0;
-    const hasLoadedImages = hasImages && note.images!.some(img => img.startsWith('data:'));
-
-    // 如果已经有加载的图片数据，直接返回
-    if (hasLoadedImages) {
-      return note;
-    }
-
-    // 否则从 IndexedDB 加载图片数据
-    try {
-      const loadedNote = await loadNoteImages(note);
-      return loadedNote;
-    } catch (error) {
-      console.error('Failed to load note images:', error);
-      return note; // 返回原始便签，如果加载失败
-    }
-  };
-
   // 当Frame变化时更新分组
   useEffect(() => {
     // 只有在非拖拽/调整大小时才自动更新分组，避免冲突
@@ -1393,42 +1113,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       updateNoteGroups();
     }
   }, [frames, draggingFrameId, resizingFrame, draggingNoteId, isMultiSelectDragging]);
-
-  // 重排处于初始位置的便签
-  const rearrangeInitialNotes = useCallback(() => {
-    // 如果已经重排过或者没有初始便签，跳过
-    if (hasRearranged) return;
-
-    const initialNotes = notes.filter(note => note.isInitialPosition);
-    if (initialNotes.length === 0) return;
-
-    console.log('开始重排初始便签:', initialNotes.length);
-
-    const updatedNotes = notes.map(note => {
-      if (!note.isInitialPosition) return note;
-      const index = initialNotes.indexOf(note);
-      if (index === -1) return note;
-      return { ...note, ...nextSequentialSlot(index), isInitialPosition: false };
-    });
-
-    // 批量更新便签
-    updatedNotes.forEach(note => {
-      onUpdateNote(note);
-    });
-
-    // 标记已重排
-    setHasRearranged(true);
-    console.log('重排完成，已更新', initialNotes.length, '个便签');
-  }, [notes, onUpdateNote, hasRearranged]);
-
-  // 当进入board视图时重排初始位置的便签
-  useEffect(() => {
-    // 延迟执行，确保数据完全加载和DOM渲染完成
-    const timer = setTimeout(() => {
-      rearrangeInitialNotes();
-    }, 500); // 增加延迟时间
-    return () => clearTimeout(timer);
-  }, [notes.length]); // 当notes数量改变时重新执行
 
   // Apply initial transform when project changes or container is ready
   const lastProjectIdRef = useRef<string | null>(null);
@@ -1455,7 +1139,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
   // Zoom to Fit on Enter Edit Mode with animation
   useEffect(() => {
-    if (workspaceEditMode && notes.length > 0 && containerRef.current) {
+    const placedNotes = notes.filter(isNoteBoardPlaced);
+    if (workspaceEditMode && placedNotes.length > 0 && containerRef.current) {
         if (skipNextEditModeZoomRef.current) {
             skipNextEditModeZoomRef.current = false;
             return;
@@ -1463,7 +1148,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         // Wait for DOM to render and measure text notes
         const calculateBounds = () => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            notes.forEach(note => {
+            placedNotes.forEach(note => {
                 const { width: w, height: h } = boardNoteDimensions(note);
                 minX = Math.min(minX, note.boardX);
                 minY = Math.min(minY, note.boardY);
@@ -1525,9 +1210,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceEditMode]);
 
-  // Track transform changes for restoration detection only (position saving moved to pointer up)
-  const isRestoringRef = useRef(false);
-
   // Navigate to specific coordinates when navigateToCoords is set, or restore saved transform
   useEffect(() => {
     if (!containerRef.current || !projectId) return;
@@ -1541,7 +1223,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         if (Math.abs(initial.x - transform.x) > 0.1 ||
             Math.abs(initial.y - transform.y) > 0.1 ||
             Math.abs(initial.scale - transform.scale) > 0.01) {
-          isRestoringRef.current = true;
           setTransform(initial);
           onNavigateComplete?.();
         }
@@ -1573,516 +1254,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       }, BOARD_NOTE_INTRO_DISMISS_DELAY_MS);
       }
     }
-    // Delay clearing editingNote to ensure any pending state updates are processed
-    setTimeout(() => {
     setEditingNote(null);
-    }, 100);
     onToggleEditor(false);
-  };
-
-  // Handle image import (from photos with GPS) - show preview in BoardView
-  const handleImageImport = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    
-    const fileArray = Array.from(files); // No limit on number of images
-    
-    const previews: Array<{
-      file: File;
-      imageUrl: string;
-      lat: number;
-      lng: number;
-      error?: string;
-      isDuplicate?: boolean;
-      imageFingerprint?: string;
-    }> = [];
-    
-    for (const file of fileArray) {
-      try {
-        // EXIF 模块只在用户实际导入照片时加载；读取规则与 Mapping 共用。
-        const { lat, lng, output } = await readImageGpsMetadata(file);
-        
-        // Validate coordinates
-        if (lat === null || lng === null) {
-          console.warn('Could not extract GPS coordinates from:', file.name);
-          console.warn('Available EXIF keys:', output ? Object.keys(output) : 'No EXIF data');
-          console.warn('EXIF data sample:', output ? JSON.stringify(output, null, 2).substring(0, 500) : 'No data');
-          previews.push({
-            file,
-            imageUrl: URL.createObjectURL(file),
-            lat: 0,
-            lng: 0,
-            error: 'Missing location data'
-          });
-          continue;
-        }
-        
-        // Calculate image fingerprint
-        const imageUrl = URL.createObjectURL(file);
-        const imageFingerprint = await calculateImageFingerprint(file, imageUrl, lat, lng);
-        
-        // Check if this image has already been imported (lightweight comparison, no filename)
-        let isDuplicate = false;
-        
-        // Compare with existing images
-        for (const note of notes) {
-          if (!note.images || note.images.length === 0) continue;
-          
-          for (const existingImage of note.images) {
-            try {
-              // Calculate fingerprint for existing image (no filename)
-              const existingFingerprint = await calculateFingerprintFromBase64(existingImage);
-              
-              // Debug: log fingerprints for comparison
-              console.log('Comparing fingerprints:', {
-                new: imageFingerprint,
-                existing: existingFingerprint,
-                match: imageFingerprint === existingFingerprint
-              });
-              
-              // Compare fingerprints (exact match)
-              if (imageFingerprint === existingFingerprint) {
-                isDuplicate = true;
-                console.log('Duplicate detected: exact fingerprint match');
-                break;
-              }
-              
-              // Fallback: compare by width and height only (without pixel)
-              const currentParts = imageFingerprint.split('_');
-              const existingParts = existingFingerprint.split('_');
-              
-              // Fingerprint format: width_height_firstPixel
-              // So indices are: [0]=width, [1]=height, [2]=firstPixel
-              if (currentParts.length >= 2 && existingParts.length >= 2) {
-                // Compare width and height (first 2 parts)
-                const currentBase = currentParts.slice(0, 2).join('_');
-                const existingBase = existingParts.slice(0, 2).join('_');
-                
-                if (currentBase === existingBase) {
-                  isDuplicate = true;
-                  console.log('Duplicate detected: width and height match');
-                  break;
-                }
-              }
-            } catch (error) {
-              console.error('Error comparing fingerprints:', error);
-            }
-          }
-          if (isDuplicate) break;
-        }
-        
-        previews.push({
-          file,
-          imageUrl: imageUrl,
-          lat: lat,
-          lng: lng,
-          isDuplicate: isDuplicate,
-          imageFingerprint: imageFingerprint
-        });
-      } catch (error) {
-        console.error('Error reading EXIF data from:', file.name, error);
-        previews.push({
-          file,
-          imageUrl: URL.createObjectURL(file),
-          lat: 0,
-          lng: 0,
-          error: 'Unable to read image or location data'
-        });
-      }
-    }
-    
-    setImportPreview(previews);
-    setShowImportDialog(true);
-  };
-  
-  // Confirm import
-  const handleConfirmImport = async () => {
-    // Filter out errors and duplicates
-    const validPreviews = importPreview.filter(p => !p.error && !p.isDuplicate);
-    const duplicateCount = importPreview.filter(p => !p.error && p.isDuplicate).length;
-    
-    if (validPreviews.length === 0) {
-      if (duplicateCount > 0) {
-        alert(`All images have already been imported. ${duplicateCount} duplicate(s) skipped.`);
-      } else {
-        alert('No valid images to import');
-      }
-      return;
-    }
-    
-    const boardNotes = notes.filter(n => n.boardX !== undefined && n.boardY !== undefined);
-    const boardBounds = computeBoardBounds(boardNotes);
-    const allocator = createGridAllocator({
-      existingNotes: boardNotes,
-      padding: PLACEMENT_PADDING,
-      gap: PLACEMENT_GAP,
-      cellSize: PLACEMENT_GRID_CELL
-    });
-    const anchorX = boardBounds ? boardBounds.maxX + PLACEMENT_GAP : PLACEMENT_PADDING;
-    const anchorY = boardBounds ? boardBounds.minY : PLACEMENT_PADDING;
-
-    // 多张图片批量导入时自动成组
-    const importBatchGroupId = validPreviews.length > 1 ? generateId() : undefined;
-    
-    // Create notes for each valid preview
-    for (let i = 0; i < validPreviews.length; i++) {
-      const preview = validPreviews[i];
-      const detected = await detectImageDimensionsFromRefs([preview.imageUrl]);
-      const { width: imageWidth, height: imageHeight } = fitBoardMediaDimensions(
-        detected?.width || 256,
-        detected?.height || 256
-      );
-      const placement = allocator.findAndOccupy(imageWidth, imageHeight, anchorX, anchorY);
-      const newNote: Note = {
-        id: generateId(),
-        createdAt: Date.now() + i,
-        coords: {
-          lat: preview.lat,
-          lng: preview.lng
-        },
-        fontSize: 3,
-        emoji: '',
-        text: '',
-        images: [preview.imageUrl],
-        tags: [],
-        variant: 'image',
-        color: 'transparent',
-        imageWidth,
-        imageHeight,
-        boardX: placement.x,
-        boardY: placement.y,
-        noteGroupId: importBatchGroupId,
-      };
-      
-      addBoardNoteWithEnter(newNote);
-    }
-    
-    // Show message if there were duplicates
-    if (duplicateCount > 0) {
-      alert(`Successfully imported ${validPreviews.length} new image(s). ${duplicateCount} duplicate(s) were skipped.`);
-    }
-    
-    // Clean up
-    importPreview.forEach(p => URL.revokeObjectURL(p.imageUrl));
-    setImportPreview([]);
-    setShowImportDialog(false);
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-  
-  // Cancel import
-  const handleCancelImport = (e?: React.MouseEvent | React.KeyboardEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    // Clean up all preview URLs
-    importPreview.forEach(p => {
-      if (p.imageUrl) {
-        URL.revokeObjectURL(p.imageUrl);
-      }
-    });
-    setImportPreview([]);
-    setShowImportDialog(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Handle data import (JSON)：与地图/表格等一致，合并全部便签；无坐标用 0,0（地图不绘制）
-  const handleDataImport = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = parseProjectJsonNotesPayloadResult(text);
-      if (parsed.ok === false) {
-        alert(formatImportErrorMessage(parsed.error, file.name));
-        return;
-      }
-
-      const existingNotes = notes || [];
-      const uniqueImportedNotes = buildNewNotesFromProjectJsonRaws(parsed.rawNotes, existingNotes);
-
-      if (uniqueImportedNotes.length === 0) {
-        alert(
-          formatImportErrorMessage(
-            {
-              title: '没有可导入的新便签',
-              location: 'project.notes',
-              detail: '可能全部重复或文件为空'
-            },
-            file.name
-          )
-        );
-        return;
-      }
-
-      const boardNotes = existingNotes.filter((n) => n.boardX !== undefined && n.boardY !== undefined);
-      const boardBounds = computeBoardBounds(boardNotes);
-      const allocator = createGridAllocator({
-        existingNotes: boardNotes,
-        padding: PLACEMENT_PADDING,
-        gap: PLACEMENT_GAP,
-        cellSize: PLACEMENT_GRID_CELL
-      });
-      const anchorX = boardBounds ? boardBounds.maxX + PLACEMENT_GAP : PLACEMENT_PADDING;
-      const anchorY = boardBounds ? boardBounds.minY : PLACEMENT_PADDING;
-
-      const importBatchGroupId = uniqueImportedNotes.length > 1 ? generateId() : undefined;
-
-      const newNotes = await Promise.all(
-        uniqueImportedNotes.map(async (note) => {
-        const processedNote: Note = { ...note };
-
-        if (note.images && note.images.length > 0) {
-          const processedImages: string[] = [];
-          for (const imageData of note.images) {
-            if (imageData.startsWith('img-')) {
-              processedImages.push(imageData);
-            } else {
-              try {
-                const imageId = await saveImage(imageData);
-                processedImages.push(imageId);
-              } catch (error) {
-                console.error('Failed to save imported image:', error);
-                processedImages.push(imageData);
-              }
-            }
-          }
-          processedNote.images = processedImages;
-        }
-
-        if (note.sketch) {
-          if (note.sketch.startsWith('img-')) {
-            processedNote.sketch = note.sketch;
-          } else {
-            try {
-              const sketchId = await saveSketch(note.sketch);
-              processedNote.sketch = sketchId;
-            } catch (error) {
-              console.error('Failed to save imported sketch:', error);
-              processedNote.sketch = note.sketch;
-            }
-          }
-        }
-
-        if ((processedNote.images && processedNote.images.length > 0) || processedNote.variant === 'image') {
-          processedNote.variant = 'image';
-          const hasValidDims =
-            typeof processedNote.imageWidth === 'number' &&
-            processedNote.imageWidth > 0 &&
-            typeof processedNote.imageHeight === 'number' &&
-            processedNote.imageHeight > 0;
-          if (!hasValidDims) {
-            const detected = await detectImageDimensionsFromRefs(processedNote.images || []);
-            const fitted = fitBoardMediaDimensions(detected?.width || 256, detected?.height || 256);
-            processedNote.imageWidth = fitted.width;
-            processedNote.imageHeight = fitted.height;
-          }
-          processedNote.color = 'transparent';
-        }
-
-        const { width, height } = boardNoteDimensions(processedNote);
-        const placement = allocator.findAndOccupy(width, height, anchorX, anchorY);
-        processedNote.boardX = placement.x;
-        processedNote.boardY = placement.y;
-        if (importBatchGroupId) processedNote.noteGroupId = importBatchGroupId;
-
-        return processedNote;
-      })
-      );
-
-      newNotes.forEach(addBoardNoteWithEnter);
-
-      const duplicateCount = parsed.rawNotes.length - uniqueImportedNotes.length;
-      if (duplicateCount > 0) {
-        alert(`已导入 ${uniqueImportedNotes.length} 条便签，跳过 ${duplicateCount} 条（重复等）。`);
-      } else {
-        alert(`已成功导入 ${uniqueImportedNotes.length} 条便签。`);
-      }
-    } catch (error) {
-      console.error('Failed to import data:', error);
-      alert(formatUnexpectedImportError(error, file.name));
-    }
-  };
-
-  // Close import menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowImportMenu(false);
-      }
-    };
-    if (showImportMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showImportMenu]);
-
-  // Drag and drop handlers
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDragging(true);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
-      e.dataTransfer.dropEffect = 'copy';
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Check if we're actually leaving the container (not just moving to a child element)
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX;
-    const y = e.clientY;
-    
-    // If the mouse is outside the container bounds, hide the drag overlay
-    if (
-      isFileDragLeavingViewport(x, y) ||
-      x < rect.left ||
-      x > rect.right ||
-      y < rect.top ||
-      y > rect.bottom
-    ) {
-      setIsDragging(false);
-    }
-  };
-
-  const handleDragEnd = () => {
-    // Always hide drag overlay when drag ends (even if cancelled)
-    setIsDragging(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      // Filter image and JSON files
-      const imageFiles: File[] = Array.from(files as FileList).filter((file: File) => {
-        if (file.type && file.type.startsWith('image/')) return true;
-        const name = file.name.toLowerCase();
-        return (
-          name.endsWith('.jpg') || name.endsWith('.jpeg') ||
-          name.endsWith('.png') || name.endsWith('.webp') ||
-          name.endsWith('.gif') || name.endsWith('.bmp') ||
-          name.endsWith('.tif') || name.endsWith('.tiff') ||
-          name.endsWith('.heic') || name.endsWith('.heif')
-        );
-      });
-      const jsonFiles: File[] = Array.from(files as FileList).filter((file: File) => 
-        file.type === 'application/json' || file.name.endsWith('.json')
-      );
-      const csvFiles: File[] = Array.from(files as FileList).filter(
-        (file: File) => file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')
-      );
-
-      if (imageFiles.length > 0) {
-        // 编辑模式下（且未打开便签编辑器）拖入图片：新增图片对象
-        if (workspaceEditMode && !editingNote) {
-          try {
-            for (const file of imageFiles) {
-              const { base64, width, height } = await compressImageToBase64(file, 512);
-              // 计算投放位置（使用鼠标位置）
-              const rect = containerRef.current?.getBoundingClientRect();
-              let position;
-              if (rect) {
-                position = clientToBoardPoint(clientPoint(e.clientX, e.clientY), rect, transform);
-              }
-              createImageNote(base64, width, height, position);
-            }
-          } catch (error) {
-            console.error('Failed to add image note:', error);
-          }
-        } else if (editingNote && editingNote.variant !== 'image') {
-          // 如果正在编辑便签，仍然把图片加到当前便签
-          try {
-            const newImages: string[] = [];
-            for (const file of imageFiles) {
-              const base64 = await fileToBase64(file as File);
-              newImages.push(base64);
-            }
-            const updatedNote = {
-              ...editingNote,
-              images: [...(editingNote.images || []), ...newImages]
-            };
-            onUpdateNote(updatedNote);
-            setEditingNote(updatedNote);
-          } catch (error) {
-            console.error('Failed to add images to note:', error);
-          }
-        } else {
-          // 非编辑模式保持原有导入逻辑
-          const dataTransfer = new DataTransfer();
-          imageFiles.forEach((file) => {
-            dataTransfer.items.add(file as File);
-          });
-          handleImageImport(dataTransfer.files);
-        }
-      } else if (jsonFiles.length > 0 && jsonFiles[0]) {
-        handleDataImport(jsonFiles[0] as File);
-      } else if (csvFiles.length > 0 && csvFiles[0]) {
-        void handleCsvDataImport(csvFiles[0] as File);
-      }
-    }
-  };
-
-  const createImageNote = (base64: string, imgWidth: number, imgHeight: number, position?: { x: number; y: number }) => {
-    if (!containerRef.current) return;
-    const { width, height } = containerRef.current.getBoundingClientRect();
-    const centerX = position ? position.x : (width / 2 - transform.x) / transform.scale;
-    const centerY = position ? position.y : (height / 2 - transform.y) / transform.scale;
-
-    const { width: boardWidth, height: boardHeight } = fitBoardMediaDimensions(imgWidth, imgHeight);
-    const spawnX = centerX - boardWidth / 2;
-    const spawnY = centerY - boardHeight / 2;
-
-    const newNote: Note = {
-      id: generateId(),
-      createdAt: Date.now(),
-      coords: { lat: 0, lng: 0 },
-      emoji: '',
-      text: '',
-      fontSize: 3,
-      images: [base64],
-      tags: [],
-      boardX: spawnX,
-      boardY: spawnY,
-      variant: 'image',
-      color: 'transparent',
-      imageWidth: boardWidth,
-      imageHeight: boardHeight,
-    };
-    addBoardNoteWithEnter(newNote);
-  };
-
-  const handleImageInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const { base64, width, height } = await compressImageToBase64(file, 512);
-      createImageNote(base64, width, height);
-    } catch (error) {
-      console.error('Failed to add image note:', error);
-    } finally {
-      e.target.value = '';
-    }
-  };
-
-  const handleAddImageClick = () => {
-    if (imageFileInputRef.current) {
-      imageFileInputRef.current.click();
-    }
   };
 
   // 在指定位置创建便签（board 坐标；光标为中心，与预览框一致，不做网格吸附）
@@ -3155,63 +2328,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     ]
   );
 
-  const openInspectorNoteEditor = useCallback(
-    (noteId: string) => {
-      const n = notes.find((x) => x.id === noteId);
-      if (!n) return;
-      void ensureNoteImagesLoaded(n).then((loadedNote) => {
-        setEditingNote(loadedNote);
-        onToggleEditor(true);
-      });
-    },
-    [notes, onToggleEditor]
-  );
-
-  const boardEditInspectorPanelProps = useMemo(
-    (): EditInspectorPanelProps => ({
-      note: boardInspectorNote,
-      groupContext: boardInspectorNote ? null : boardInspectorGroupContext,
-      inspectorFrame: boardInspectorFrame,
-      onUpdateFrame: onUpdateFrames
-        ? (f) => onUpdateFrames(frames.map((x) => (x.id === f.id ? f : x)))
-        : undefined,
-      inspectorConnection: boardInspectorConnection,
-      coordMode: 'board',
-      themeColor,
-      panelChromeStyle: panelChromeStyle,
-      frames: frames ?? [],
-      connections: effectiveConnections,
-      notes,
-      hasConnectionWrite: !!onUpdateConnections,
-      onUpdateNote,
-      onEditConnection: handleEditBoardInsConn,
-      onNewConnection: handleNewConnectionFromBoardInspector,
-      onOpenFullNoteEditor: openInspectorNoteEditor,
-      onFocusPeerInView: (noteId) => {
-        const n = notes.find((x) => x.id === noteId);
-        if (n) panBoardToNoteCenter(n);
-      }
-    }),
-    [
-      boardInspectorNote,
-      boardInspectorGroupContext,
-      boardInspectorFrame,
-      boardInspectorConnection,
-      onUpdateFrames,
-      frames,
-      themeColor,
-      panelChromeStyle,
-      effectiveConnections,
-      notes,
-      onUpdateConnections,
-      onUpdateNote,
-      handleEditBoardInsConn,
-      handleNewConnectionFromBoardInspector,
-      openInspectorNoteEditor,
-      panBoardToNoteCenter
-    ]
-  );
-
   const enterBoardEditMode = useCallback(() => {
     if (isSelectingNotePosition) setIsSelectingNotePosition(false);
     onWorkspaceEditModeChange(true);
@@ -3235,8 +2351,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setEditingFrameId(null);
   }, [isSelectingNotePosition, onWorkspaceEditModeChange, resetInteraction]);
 
-  useRegisterEditInspector(isUIVisible && workspaceEditMode, boardEditInspectorPanelProps);
-
   return (
     <div
         id="board-view-container"
@@ -3247,26 +2361,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                 : 'none'
         }}
     >
-      <style>{`
-        .markdown-board-preview { line-height: 1.35; }
-        .markdown-board-preview p { margin: 0 0 0.45em 0; }
-        .markdown-board-preview p:last-child { margin-bottom: 0; }
-        .markdown-board-preview h1, 
-        .markdown-board-preview h2, 
-        .markdown-board-preview h3, 
-        .markdown-board-preview h4, 
-        .markdown-board-preview h5, 
-        .markdown-board-preview h6 { 
-          margin: 0; 
-          font-size: inherit; 
-          font-weight: bold;
-        }
-        .markdown-board-preview ul, .markdown-board-preview ol { margin: 0; padding-left: 1.2rem; }
-        .markdown-board-preview blockquote { border-left: 2px solid #ccc; padding-left: 0.5rem; margin: 0; font-style: italic; }
-        .markdown-board-preview code { background: rgba(0,0,0,0.05); padding: 0.1rem 0.2rem; border-radius: 3px; font-size: 0.9em; }
-        .markdown-board-preview pre { background: rgba(0,0,0,0.05); padding: 0.5rem; border-radius: 5px; overflow-x: auto; margin: 0.5rem 0; }
-        .markdown-board-preview pre code { background: transparent; padding: 0; }
-      `}</style>
       <div 
         ref={containerRef}
         className={`workspace-canvas workspace-canvas--dots w-full h-full overflow-hidden relative touch-none select-none ${
@@ -3276,9 +2370,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             ? 'cursor-grabbing' 
             : 'cursor-grab'
         }`}
-        style={{
-          ...(isDragging ? { boxShadow: `0 0 0 4px ${themeColor}` } : {})
-        }}
         onPointerDown={handleBoardPointerDown}
         onPointerMove={handleBoardPointerMove}
         onPointerLeave={() => {
@@ -3288,184 +2379,69 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                 setNotePositionPreview(null);
             }
         }}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onDragEnd={handleDragEnd}
+        onDragEnter={boardImport.handleDragEnter}
+        onDragOver={boardImport.handleDragOver}
+        onDrop={boardImport.handleDrop}
         onPointerUp={handleBoardPointerUp}
         onPointerCancel={(event) => cancelTransientBoardInteraction(event.pointerId)}
         onDoubleClick={handleBoardDoubleClick}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <ChromeDropOverlay
-          open={isDragging}
-          themeColor={themeColor}
-          chromeOpacity={mapUiChromeOpacity}
-          chromeBlurPx={mapUiChromeBlurPx}
-          title="拖入图片、JSON 或 CSV 以导入"
-          description="文件会添加到当前看板项目"
-          onDismiss={() => setIsDragging(false)}
-        />
         <input
           type="file"
           accept="image/*"
-          ref={imageFileInputRef}
+          ref={boardImport.imageFileInputRef}
           className="hidden"
-          onChange={handleImageInputChange}
+          onChange={boardImport.handleImageInputChange}
         />
         {/* Canvas Content */}
         <div 
           className="absolute top-0 left-0 w-full h-full origin-top-left pointer-events-none"
-          style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
+          style={{
+            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            // transform 会形成新的层叠上下文；拖动时需抬升整层，子卡片的 z-index 才能越过待定箱。
+            zIndex: draggingNoteId || isMultiSelectDragging ? 1200 : undefined
+          }}
         >
-          {/* Note Position Preview - Theme color box indicator */}
-          {isSelectingNotePosition && notePositionPreview && (
-            <div
-              className="absolute pointer-events-none z-[3000]"
-              style={{
-                left: `${notePositionPreview.x - 128}px`,
-                top: `${notePositionPreview.y - 128}px`,
-                width: '256px',
-                height: '256px',
-                border: `4px solid ${themeColor}`,
-                borderRadius: '4px',
-                boxShadow: `0 0 0 1px ${themeColor}4D`,
-              }}
-            />
-          )}
+          <BoardCanvasFeedback
+            themeColor={themeColor}
+            frameChromeStyle={frameChromeStyle}
+            isSelectingNotePosition={isSelectingNotePosition}
+            notePositionPreview={notePositionPreview}
+            boxSelectStart={boxSelectStart}
+            boxSelectEnd={boxSelectEnd}
+            isDrawingFrame={isDrawingFrame}
+            drawingFrameStart={drawingFrameStart}
+            drawingFrameEnd={drawingFrameEnd}
+          />
           
-          {/* Render connections */}
-          {/* Frames Layer - Below everything */}
-          {/* Box Selection Preview */}
-          {boxSelectStart && boxSelectEnd && (
-            <div
-              className="absolute pointer-events-none z-[3000]"
-              style={{
-                left: `${Math.min(boxSelectStart.x, boxSelectEnd.x)}px`,
-                top: `${Math.min(boxSelectStart.y, boxSelectEnd.y)}px`,
-                width: `${Math.abs(boxSelectEnd.x - boxSelectStart.x)}px`,
-                height: `${Math.abs(boxSelectEnd.y - boxSelectStart.y)}px`,
-                backgroundColor: `${themeColor}20`,
-                border: `2px solid ${themeColor}`,
-                borderRadius: '4px'
-              }}
-            />
-          )}
-          
-          {/* Drawing Frame Preview */}
-          {isDrawingFrame && drawingFrameStart && drawingFrameEnd && (
-            <div
-              className="absolute pointer-events-none overflow-hidden"
-              style={{
-                left: `${Math.min(drawingFrameStart.x, drawingFrameEnd.x)}px`,
-                top: `${Math.min(drawingFrameStart.y, drawingFrameEnd.y)}px`,
-                width: `${Math.abs(drawingFrameEnd.x - drawingFrameStart.x)}px`,
-                height: `${Math.abs(drawingFrameEnd.y - drawingFrameStart.y)}px`,
-                borderRadius: '12px',
-                zIndex: 10,
-                border: '2px dashed rgba(156, 163, 175, 0.8)',
-                ...frameChromeStyle,
-              }}
-            />
-          )}
-          
-          {layerVisibility.frame && frames.map((frame) => {
-              // 如果有过滤，只显示选中的frames的框体，但标题始终显示
-              const shouldShowFrame = filterFrameIds.size === 0 || filterFrameIds.has(frame.id);
-              if (!shouldShowFrame) return null;
-              
-              // 使用本地拖拽/缩放位置，避免全局状态更新带来的延迟和抖动
-              let displayX = frame.x;
-              let displayY = frame.y;
-              let displayWidth = frame.width;
-              let displayHeight = frame.height;
-              
-              if (draggingFrameId === frame.id && localDraggingFramePos) {
-                  displayX = localDraggingFramePos.x;
-                  displayY = localDraggingFramePos.y;
-              } else if (resizingFrame?.id === frame.id && localResizingFrameSize) {
-                  displayX = localResizingFrameSize.x;
-                  displayY = localResizingFrameSize.y;
-                  displayWidth = localResizingFrameSize.width;
-                  displayHeight = localResizingFrameSize.height;
-              }
-              
-              return (
-                <div
-                  key={frame.id}
-                  data-board-export-frame=""
-                  className="absolute overflow-visible"
-                  style={{
-                    left: `${displayX}px`,
-                    top: `${displayY}px`,
-                    width: `${displayWidth}px`,
-                    height: `${displayHeight}px`,
-                    zIndex: selectedFrameId === frame.id ? 1000 : 10,
-                    pointerEvents: 'none',
-                  }}
-                >
-                  {/* 仅玻璃+叠色+内描边做圆角裁剪；外层不 overflow:hidden，避免四角缩放手柄被裁切 */}
-                  <div className="absolute inset-0 overflow-hidden rounded-[12px] pointer-events-none">
-                    <div className="absolute inset-0" style={frameChromeStyle} />
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        backgroundColor:
-                          selectedFrameId === frame.id
-                            ? 'rgba(255, 221, 0, 0.22)'
-                            : frameTintFromHex(frame.color, 0.22),
-                      }}
-                    />
-                    <div
-                      className="absolute inset-0 rounded-[12px]"
-                      style={{
-                        boxShadow:
-                          selectedFrameId === frame.id
-                            ? `inset 0 0 0 2px ${themeColor}`
-                            : 'inset 0 0 0 2px rgba(156, 163, 175, 0.35)',
-                      }}
-                    />
-                  </div>
-              {/* Frame中间区域，也当作空白处 - 让事件冒泡到背景 */}
-              <div
-                className="absolute pointer-events-auto"
-                style={{
-                  left: '10px',
-                  top: '10px',
-                  right: '10px',
-                  bottom: '10px',
-                  cursor: 'default',
-                }}
-              />
-              <BoardFrameControls
-                frameId={frame.id}
-                isDragging={draggingFrameId === frame.id}
-                showResizeHandles={workspaceEditMode && selectedFrameId === frame.id}
-                scale={transform.scale}
-                themeColor={themeColor}
-                chromeStyle={frameChromeStyle}
-                onSelect={handleFrameSelect}
-                onDragStart={(event) => handleFrameDragStart(event, frame)}
-                onResizeStart={(event, corner) => handleFrameResizeStart(event, frame, corner)}
-              />
-            </div>
-              );
-            })}
+          <BoardFrameBodies
+            frames={frames}
+            visible={layerVisibility.frame}
+            filterFrameIds={filterFrameIds}
+            selectedFrameId={selectedFrameId}
+            draggingFrameId={draggingFrameId}
+            draggingPreview={localDraggingFramePos}
+            resizingFrameId={resizingFrame?.id}
+            resizingPreview={localResizingFrameSize}
+            workspaceEditMode={workspaceEditMode}
+            canvasScale={transform.scale}
+            themeColor={themeColor}
+            chromeStyle={frameChromeStyle}
+            frameTint={frameTintFromHex}
+            onSelect={handleFrameSelect}
+            onDragStart={handleFrameDragStart}
+            onResizeStart={handleFrameResizeStart}
+          />
           
           {/* Frame Titles Layer - Above Notes - 标题始终显示以便多选 */}
           {layerVisibility.frame && frames.map((frame) => {
-            // 使用本地拖拽/缩放位置，避免全局状态更新带来的延迟和抖动
-            let displayX = frame.x;
-            let displayY = frame.y;
-            
-            if (draggingFrameId === frame.id && localDraggingFramePos) {
-                displayX = localDraggingFramePos.x;
-                displayY = localDraggingFramePos.y;
-            } else if (resizingFrame?.id === frame.id && localResizingFrameSize) {
-                displayX = localResizingFrameSize.x;
-                displayY = localResizingFrameSize.y;
-            }
+            const display = resolveBoardFrameLayout(frame, {
+              draggingFrameId,
+              draggingPreview: localDraggingFramePos,
+              resizingFrameId: resizingFrame?.id,
+              resizingPreview: localResizingFrameSize
+            });
 
             const filterActive = filterFrameIds.size > 0;
             const inFilter = filterFrameIds.has(frame.id);
@@ -3487,8 +2463,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   ch ? 'border-gray-200/70' : 'border-white/45'
                 }`}
                 style={{
-                  left: `${displayX}px`,
-                  top: `${displayY - 32}px`,
+                  left: `${display.x}px`,
+                  top: `${display.y - 32}px`,
                   zIndex: selectedFrameId === frame.id ? 1500 : 201,
                   cursor: draggingFrameId === frame.id ? 'grabbing' : 'grab',
                   transform: `scale(${1 / transform.scale})`,
@@ -3658,6 +2634,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           {/* Board 视图不渲染连线（连线仅在 Graph 等视图展示） */}
 
           {boardDisplayNotes
+            .filter(isNoteBoardPlaced)
+            .filter((note) => !leavingBoardNoteIds.has(note.id))
             .filter((note) => notePassesBoardVisibilityFilters(note))
             .filter((note) =>
               isNoteVisibleInUnifiedLayer(note, mergedProjectBoardLayers, graphLayerGroupStandard)
@@ -3716,14 +2694,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               const noteWidth = imageResizePreview?.width ?? baseNoteWidth;
               const noteHeight = imageResizePreview?.height ?? baseNoteHeight;
 
-              let clampClass = '';
-              if (!isImage) {
-                  if (note.fontSize >= 4) clampClass = 'line-clamp-3';
-                  else if (note.fontSize === 3) clampClass = 'line-clamp-4';
-                  else if (note.fontSize === 2) clampClass = 'line-clamp-5';
-                  else clampClass = 'line-clamp-6';
-              }
-
               // Get global standard size scale, default to 1
               const standardSizeScale = project?.standardSizeScale || 1;
 
@@ -3737,15 +2707,17 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                       position: 'absolute', 
                       left: currentX, 
                       top: currentY,
-                        zIndex: (selectedNoteId === note.id || selectedNoteIds.has(note.id) || isDragging || (isMultiSelectDragging && isInMultiSelect))
-                          ? 1000
+                        zIndex: (isDragging || (isMultiSelectDragging && isInMultiSelect))
+                          ? 1200
+                          : (selectedNoteId === note.id || selectedNoteIds.has(note.id))
+                            ? 1000
                           : 55,
                       width: noteWidth,
                       height: noteHeight,
                         transform: `scale(${standardSizeScale})`,
                         transformOrigin: 'center',
                   }}
-                  className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'} ${imageResizePreview ? 'transition-none' : ''}`}
+                  className={`workspace-object-elevation workspace-object-elevation--interactive pointer-events-auto group ${noteMotionClass} ${(isDragging || isInMultiSelect) ? 'workspace-object-elevation--active' : ''} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'} ${imageResizePreview ? 'transition-none' : ''}`}
                     onPointerDown={(e) => handleNotePointerDown(e, note.id, note)}
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={(e) => handleNotePointerUp(e, note)}
@@ -3779,7 +2751,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                             return (
                             <img
                               src={stickerSrc}
-                              className="w-full h-full object-contain pointer-events-none drop-shadow-[0_10px_22px_rgba(15,23,42,0.32)]"
+                              className="board-sticker-elevation h-full w-full object-contain pointer-events-none"
                               alt="board-image"
                             />
                             );
@@ -3798,8 +2770,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                       position: 'absolute', 
                       left: currentX, 
                       top: currentY,
-                      zIndex: (selectedNoteId === note.id || selectedNoteIds.has(note.id) || isDragging || (isMultiSelectDragging && isInMultiSelect))
-                        ? 1000
+                      zIndex: (isDragging || (isMultiSelectDragging && isInMultiSelect))
+                        ? 1200
+                        : (selectedNoteId === note.id || selectedNoteIds.has(note.id))
+                          ? 1000
                         : isImage
                           ? 55
                           : 50,
@@ -3808,7 +2782,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                       transform: `scale(${standardSizeScale})`,
                       transformOrigin: 'center',
                   }}
-                  className={`pointer-events-auto group ${noteMotionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
+                  className={`workspace-object-elevation workspace-object-elevation--interactive pointer-events-auto group ${noteMotionClass} ${(isDragging || isInMultiSelect) ? 'workspace-object-elevation--active' : ''} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
                   onPointerDown={(e) => handleNotePointerDown(e, note.id, note)}
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={(e) => handleNotePointerUp(e, note)}
@@ -3825,80 +2799,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                 >
 
                   <div 
-                          className={`w-full h-full shadow-xl flex flex-col overflow-hidden group rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
+                          className={`board-note-elevation flex h-full w-full flex-col overflow-hidden rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
                           style={{
                               transform: `rotate(${(parseInt(note.id.slice(-2), 36) % 6) - 3}deg)`,
                               backgroundColor: boardCardBackground
                           }}
                       >
-                          <div className="w-full h-full flex flex-col relative p-6 gap-2">
-                              {(note.sketch && note.sketch !== '') && (note.images && note.images.length > 0) && (
-                                  <div className="absolute inset-0 opacity-35 pointer-events-none z-0">
-                                      <img 
-                                          src={note.sketch || note.images[0]} 
-                                          className="w-full h-full object-cover grayscale opacity-50" 
-                                          alt="bg" 
-                                      />
-                                  </div>
-                              )}
-                              {(note.sketch && note.sketch !== '') && (!note.images || note.images.length === 0) && (
-                                  <div className="absolute inset-0 opacity-35 pointer-events-none z-0">
-                                      <img 
-                                          src={note.sketch} 
-                                          className="w-full h-full object-cover grayscale opacity-50" 
-                                          alt="bg" 
-                                      />
-                                  </div>
-                              )}
-                              {!note.sketch && (note.images && note.images.length > 0) && (
-                                  <div className="absolute inset-0 opacity-35 pointer-events-none z-0">
-                                      <img 
-                                          src={note.images[0]} 
-                                          className="w-full h-full object-cover grayscale opacity-50" 
-                                          alt="bg" 
-                                      />
-                                  </div>
-                              )}
-                              <div className="relative z-10 pointer-events-none flex flex-col h-full">
-                                  <div className="text-3xl mb-2 drop-shadow-sm">{note.emoji}</div>
-                                  <div 
-                                    className={`text-gray-800 leading-none flex-1 overflow-hidden break-words whitespace-pre-wrap ${clampClass} ${note.isBold ? 'font-bold' : 'font-medium'}`} 
-                                  >
-                                      {note.text ? (() => {
-                                          const { title, detail } = parseNoteContent(note.text);
-                                          
-                                          const getBoardFontSize = (size: number) => {
-                                              const sizes: Record<number, string> = {
-                                                  '-1': '0.8rem',
-                                                  '0': '1.0rem',
-                                                  '1': '1.2rem',
-                                                  '2': '1.6rem',
-                                                  '3': '2.2rem',
-                                                  '4': '2.4rem',
-                                                  '5': '3.0rem'
-                                              };
-                                              return sizes[size] || sizes[3];
-                                          };
-
-                                          return (
-                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                  <span style={{ fontSize: getBoardFontSize(note.fontSize || 3) }}>{title}</span>
-                                                  <div className="markdown-board-preview" style={{ fontSize: getBoardFontSize((note.fontSize || 3) - 2), opacity: 0.9 }}>
-                                                      <ReactMarkdown>{detail || ' '}</ReactMarkdown>
-                                                  </div>
-                                              </div>
-                                          );
-                                      })() : <span className="text-gray-400 italic font-normal text-base">Empty...</span>}
-                                  </div>
-                                    <div className="mt-auto flex flex-wrap gap-1 items-center justify-between">
-                                        <div className="flex flex-wrap gap-1" style={{ position: 'relative', zIndex: 70 }}>
-                                        {note.tags.map(t => (
-                                                <span key={t.id} className="flex-shrink-0 h-6 px-2.5 rounded-full text-xs font-bold text-white shadow-sm flex items-center gap-1" style={{ backgroundColor: t.color }}>{t.label}</span>
-                                        ))}
-                                    </div>
-                                    </div>
-                              </div>
-                          </div>
+                          <BoardPaperNoteContent note={note} contentWidth={noteWidth - 48} />
                       </div>
                 </div>
               );
@@ -3906,7 +2813,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
           {/* 选中包围盒：单选与多选同一套虚线描边 + 工具栏（编辑 / 浏览 Shift 共用） */}
           {selectedNoteIds.size >= 1 && (() => {
-            const selectedNotes = notes.filter(n => selectedNoteIds.has(n.id));
+            // 被移进待定箱的记录即使父级项目更新尚未回写，也不能继续留在 Board 的选中框里。
+            const selectedNotes = notes.filter(
+              (note) =>
+                selectedNoteIds.has(note.id) &&
+                isNoteBoardPlaced(note)
+            );
             if (selectedNotes.length === 0) return null;
             
             // Calculate bounding box
@@ -4073,39 +2985,40 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             };
 
             return (
-              <div
-                className="absolute z-[2100]"
-                style={{
-                  left: minX - padding,
-                  top: minY - padding,
+              <BoardSelectionOverlay
+                bounds={{
+                  x: minX - padding,
+                  y: minY - padding,
                   width: maxX - minX + padding * 2,
-                  height: maxY - minY + padding * 2,
-                  border: `6px dashed ${themeColor}`,
-                  borderRadius: '8px',
-                  pointerEvents: 'none',
+                  height: maxY - minY + padding * 2
                 }}
+                themeColor={themeColor}
+                canvasScale={transform.scale}
+                showBoundary={workspaceEditMode && selectedNoteIds.size > 1}
+                showScaleHandles={
+                  workspaceEditMode &&
+                  (selectedNoteIds.size > 1 ||
+                    (selectedNotes.length === 1 && noteRendersAsBoardSticker(selectedNotes[0])))
+                }
+                scaleHandleTitle={
+                  selectedNoteIds.size > 1
+                    ? '拖动以聚散选中卡片'
+                    : '拖动缩放，按住 Shift 可自由变形'
+                }
+                onScaleStart={handleSelectionChromeHandleStart}
+                onElementChange={setSelectionOverlayElement}
               >
-                {workspaceEditMode &&
-                (selectedNoteIds.size > 1 ||
-                  (selectedNotes.length === 1 &&
-                    noteRendersAsBoardSticker(selectedNotes[0]))) ? (
-                  <BoardSelectionScaleHandles
-                    themeColor={themeColor}
-                    canvasScale={transform.scale}
-                    handleTitle={
-                      selectedNoteIds.size > 1
-                        ? '拖动以聚散选中卡片'
-                        : '拖动缩放，按住 Shift 可自由变形'
-                    }
-                    onResizeStart={handleSelectionChromeHandleStart}
-                  />
-                ) : null}
                 <BoardMultiSelectToolbar
                   themeColor={themeColor}
                   panelChromeStyle={panelChromeStyle}
-                  inverseCanvasScale={1 / transform.scale}
+                  isDark={chromeAppearance === 'dark'}
+                  inverseCanvasScale={1}
                   isEditMode={workspaceEditMode}
                   placeBelow={minY - padding < 80 / Math.max(0.05, transform.scale)}
+                  portal
+                  portalAnchorElement={selectionOverlayElement}
+                  portalScope="board-selection"
+                  portalZIndex={9000}
                   multiBatchPanel={multiBatchPanel}
                   onExitMultiSelectToolbar={exitMultiSelectToolbar}
                   onToggleBatchTagPanel={() =>
@@ -4122,11 +3035,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                     if (!n.coords || (n.coords.lat === 0 && n.coords.lng === 0)) return undefined;
                     return () => onSwitchToMapView(n.coords);
                   })()}
-                  onLocateOnGraph={
-                    selectedNotes.length === 1 && onSwitchToGraphView
-                      ? () => onSwitchToGraphView(selectedNotes[0].id)
-                      : undefined
-                  }
                   canGroup={canGroup}
                   canUngroup={canUngroup}
                   onRunGroup={runGroupSelected}
@@ -4221,7 +3129,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                     </>
                   }
                 />
-              </div>
+              </BoardSelectionOverlay>
             );
           })()}
         </div>
@@ -4313,24 +3221,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                               onChange: (next) =>
                                 setLayerVisibility((prev) => ({ ...prev, ...next }))
                             }}
-                            graphProject={project as Project | undefined}
-                            onGraphProjectPatch={
-                              onUpdateProject && project
-                                ? projectId
-                                  ? (patch) =>
-                                      void (
-                                        onUpdateProject as (
-                                          a: string | Project,
-                                          b?: Partial<Project>
-                                        ) => void
-                                      )(projectId, patch)
-                                  : (patch) =>
-                                      void onUpdateProject({
-                                        ...project,
-                                        ...patch
-                                      } as Project)
-                                : undefined
-                            }
                           />
                         )
                       };
@@ -4386,13 +3276,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             themeColor={themeColor}
             chromeSurfaceStyle={panelChromeStyle}
             chromeHoverBackground={chHover}
-            reserveRightForInspector={workspaceEditMode}
             onEnterEditMode={enterBoardEditMode}
             onExitEditMode={exitBoardEditMode}
           />
         )}
 
-        {/* 窄屏左下角编辑入口始终可用；宽屏仅在编辑模式显示顶部工具。 */}
+        {/* 窄屏编辑入口位于右上；宽屏仅在编辑模式显示顶部工具。 */}
         {isUIVisible && (
           <BoardTopCenterEditToolbar
             isEditMode={workspaceEditMode}
@@ -4420,7 +3309,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             }}
             onAddImage={() => {
               if (isSelectingNotePosition) setIsSelectingNotePosition(false);
-              handleAddImageClick();
+              boardImport.handleAddImageClick();
             }}
             onEnableDrawFrame={() => {
               if (isSelectingNotePosition) setIsSelectingNotePosition(false);
@@ -4450,14 +3339,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         
         {/* Hidden file inputs */}
         <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            style={{ display: 'none' }}
-            onChange={(e) => handleImageImport(e.target.files)}
-        />
-        <input
             ref={dataImportInputRef}
             type="file"
             accept=".json,application/json,.csv,text/csv"
@@ -4469,7 +3350,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                 if (name.endsWith('.csv') || f.type === 'text/csv') {
                   void handleCsvDataImport(f);
                 } else {
-                  void handleDataImport(f);
+                  void boardImport.handleDataImport(f);
                 }
             }}
         />
@@ -4523,7 +3404,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
               onDelete={(noteId) => deleteBoardNotesWithExit([noteId])}
               onSwitchToMapView={onSwitchToMapView}
-              onSwitchToGraphView={onSwitchToGraphView}
               themeColor={themeColor}
               mapUiChromeOpacity={mapUiChromeOpacity}
               mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -4547,10 +3427,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                           // This ensures new sketches are saved, not reverted to old sketch
                           sketch: 'sketch' in updated ? updated.sketch : existingNote!.sketch
                       };
-                      onUpdateNote(fullNote);
-                      // Update editingNote state to reflect the saved changes
-                      // This ensures that if the editor is reopened, it will use the updated data
-                      setEditingNote(fullNote);
+                      // 先让项目态接收保存结果。编辑器随后会立即关闭，不能再把同一条
+                      // 记录写回 editingNote，否则已保存便签会和关闭动作竞争、重新占住槽位。
+                      return onUpdateNote(fullNote);
                   } else if (onAddNote && updated.id) {
                       // 新便签：必须先以 editingNote 为底（保留 boardX/boardY/coords 等位置字段），
                       // 再覆盖编辑器返回的内容字段。
@@ -4574,19 +3453,23 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           }}
         />
 
-        <BoardImportPreviewDialog
-          open={showImportDialog}
-          importPreview={importPreview}
-          themeColor={themeColor}
-          panelChromeStyle={panelChromeStyle}
-          mapUiChromeOpacity={mapUiChromeOpacity}
-          mapUiChromeBlurPx={mapUiChromeBlurPx}
-          onCancel={handleCancelImport}
-          onConfirm={handleConfirmImport}
-        />
-
         <BoardImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />
       </div>
+
+      {/* 必须位于画布容器之外：Board 的原生双指/滚轮监听只属于画布，不能截获待定箱滚动。 */}
+      <UnplacedNotesSidebar
+        open={isUIVisible && workspaceEditMode}
+        notes={unplacedBoardNotes}
+        themeColor={themeColor}
+        chromeSurfaceStyle={frameChromeStyle}
+        isDark={chromeAppearance === 'dark'}
+        panelRef={unplacedBoardSidebarRef}
+        isDropTarget={isUnplacedBoardSidebarDropTarget}
+        placementDragMime="application/x-mapp-unplaced-board-note"
+        boardDragPreviewScale={transform.scale * (project?.standardSizeScale || 1)}
+        onDeleteSelected={deleteUnplacedBoardNotes}
+        onDropFiles={boardImport.handleUnplacedBoardFiles}
+      />
 
       <BoardBrowseTagFilterPanel
         open={browseTagFilterPanelOpen}

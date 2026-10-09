@@ -1,12 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { Note, Project } from '../../types';
+import type { Coordinates, Note, Project } from '../../types';
 import { saveImage } from '../../utils/persistence/storage';
 import { blobToDataUrl } from '../../utils/persistence/imageAssetStore';
 import { convertHeicImageIfNeeded, readImageGpsMetadata } from '../../utils/media/imageFileProcessing';
 import { fingerprintImageBlob, fingerprintStoredImage } from '../../utils/media/imageImportContent';
-import {
-  createGridAllocator, PLACEMENT_PADDING, PLACEMENT_GAP, PLACEMENT_GRID_CELL
-} from '../../utils/board/boardPlacement';
+import { isNoteMapPlaced, unplacedMapCoordinates } from '../../utils/note/notePlacement';
 
 export interface ImportPreview {
   file: File;
@@ -18,21 +16,39 @@ export interface ImportPreview {
   errorKind?: 'gps-missing' | 'gps-read' | 'image';
   saveError?: string;
   isDuplicate?: boolean;
+  /** 用户主动不导入此照片；仍留在预览中方便重新加入。 */
+  excluded?: boolean;
   imageFingerprint?: string;
+  /** 投放目标决定建点时是否写入照片 EXIF 坐标。 */
+  target?: ImageImportTargetKind;
+  targetCoords?: Coordinates;
+}
+
+export type ImageImportTargetKind = 'map-exif' | 'map-drop' | 'unplaced';
+export type ImageImportTarget =
+  | { kind: 'map-exif' }
+  | { kind: 'map-drop'; coords: Coordinates }
+  | { kind: 'unplaced' };
+
+export interface ImageImportResult {
+  duplicateCount: number;
+  unplacedCount: number;
 }
 
 interface UseImageImportProps {
   project: Project;
   notes: Note[];
   onUpdateProject: (project: Project) => void | Promise<void>;
-  onNotesCreated?: (notes: Note[]) => void;
-  onImportDialogChange?: (isOpen: boolean) => void;
+  onNotesCreated?: (notes: Note[], target: ImageImportTargetKind, result: ImageImportResult) => void;
   mapInstance: any;
 }
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
-const canImport = (preview: ImportPreview) => !preview.error && !preview.isDuplicate &&
-  preview.lat !== null && preview.lng !== null;
+const canImport = (preview: ImportPreview) =>
+  !preview.error &&
+  !preview.isDuplicate &&
+  !preview.excluded &&
+  (preview.target === 'unplaced' || (preview.lat !== null && preview.lng !== null));
 const imageMimeByExtension: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
   gif: 'image/gif', avif: 'image/avif', tif: 'image/tiff', tiff: 'image/tiff'
@@ -55,6 +71,9 @@ export const useImageImport = (props: UseImageImportProps) => {
   const generation = useRef(0);
   const preparing = useRef(false);
   const confirming = useRef(false);
+  /** 外部/文件选择照片都不再停在预览窗口，准备完成后直接写入。 */
+  const shouldAutoCommitRef = useRef(false);
+  const commitImportRef = useRef<(() => Promise<void>) | null>(null);
   const urls = useRef(new Set<string>());
   // Retain only hashes, not decoded images / full data URLs. Assets are immutable.
   const storedHashes = useRef(new Map<string, string>());
@@ -70,6 +89,7 @@ export const useImageImport = (props: UseImageImportProps) => {
     generation.current++;
     preparing.current = false;
     confirming.current = false;
+    shouldAutoCommitRef.current = false;
     releaseUrls();
     stagedNotes.current.clear();
     previewsRef.current = [];
@@ -80,7 +100,6 @@ export const useImageImport = (props: UseImageImportProps) => {
     setImportMessage(null);
     setHasImportError(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    latest.current.onImportDialogChange?.(false);
   }, [releaseUrls]);
 
   useEffect(() => {
@@ -93,7 +112,10 @@ export const useImageImport = (props: UseImageImportProps) => {
     };
   }, [project.id, closeImport, releaseUrls]);
 
-  const handleImageImport = useCallback(async (files: FileList | File[] | null) => {
+  const handleImageImport = useCallback(async (
+    files: FileList | File[] | null,
+    options?: { target?: ImageImportTarget }
+  ) => {
     if (!files?.length || confirming.current) return;
     // Snapshot before resetting the input, so selecting the same file triggers change again.
     const imageFiles = Array.from(files).filter((file) =>
@@ -101,6 +123,7 @@ export const useImageImport = (props: UseImageImportProps) => {
     );
     if (fileInputRef.current) fileInputRef.current.value = '';
     const run = ++generation.current;
+    const target = options?.target ?? { kind: 'map-exif' as const };
     const projectId = latest.current.project.id;
     const isCurrent = () => generation.current === run && latest.current.project.id === projectId;
     releaseUrls();
@@ -111,9 +134,8 @@ export const useImageImport = (props: UseImageImportProps) => {
     setHasImportError(false);
     setImportProgress({ completed: 0, total: imageFiles.length });
     preparing.current = true;
+    shouldAutoCommitRef.current = true;
     setIsPreparingImport(true);
-    setShowImportDialog(true);
-    latest.current.onImportDialogChange?.(true);
 
     try {
       const knownHashes = new Set<string>();
@@ -140,19 +162,29 @@ export const useImageImport = (props: UseImageImportProps) => {
       for (const originalFile of imageFiles) {
         if (!isCurrent()) return;
         const preview: ImportPreview = {
-          originalFile, file: originalFile, imageUrl: '', lat: null, lng: null
+          originalFile,
+          file: originalFile,
+          imageUrl: '',
+          lat: target.kind === 'map-drop' ? target.coords.lat : null,
+          lng: target.kind === 'map-drop' ? target.coords.lng : null,
+          target: target.kind,
+          targetCoords: target.kind === 'map-drop' ? target.coords : undefined
         };
-        try {
-          const { lat, lng } = await readImageGpsMetadata(originalFile);
-          preview.lat = lat;
-          preview.lng = lng;
-          if (lat === null || lng === null) {
-            preview.errorKind = 'gps-missing';
-            preview.error = '照片文件中没有有效 GPS 坐标；这不是设备定位权限问题。';
+        if (target.kind === 'map-exif') {
+          try {
+            const { lat, lng } = await readImageGpsMetadata(originalFile);
+            preview.lat = lat;
+            preview.lng = lng;
+            if (lat === null || lng === null) {
+              // 从地图拖入时，GPS 缺失不再是导入失败：直接进入待定位箱。
+              preview.target = 'unplaced';
+            }
+          } catch (error) {
+            // 没有 GPS 的有效图片由上面的 null 分支进入待定位箱；读取失败通常意味着
+            // 文件本身损坏或格式不受支持，不能把一个无法展示的资源悄悄存入项目。
+            preview.errorKind = 'gps-read';
+            preview.error = `读取照片信息失败，未导入：${errorMessage(error)}`;
           }
-        } catch (error) {
-          preview.errorKind = 'gps-read';
-          preview.error = `读取照片 GPS 失败，可重试：${errorMessage(error)}`;
         }
         if (!isCurrent()) return;
         try {
@@ -197,6 +229,10 @@ export const useImageImport = (props: UseImageImportProps) => {
       if (isCurrent()) {
         preparing.current = false;
         setIsPreparingImport(false);
+        if (shouldAutoCommitRef.current) {
+          shouldAutoCommitRef.current = false;
+          await commitImportRef.current?.();
+        }
       }
     }
   }, [releaseUrls]);
@@ -205,7 +241,18 @@ export const useImageImport = (props: UseImageImportProps) => {
     if (confirming.current || preparing.current) return;
     const previews = previewsRef.current;
     const valid = previews.filter(canImport);
-    if (!valid.length) return;
+    const duplicateCount = previews.filter((preview) => preview.isDuplicate).length;
+    if (!valid.length) {
+      closeImport();
+      if (duplicateCount) {
+        latest.current.onNotesCreated?.([], previews[0]?.target ?? 'map-exif', {
+          duplicateCount,
+          unplacedCount: 0
+        });
+      }
+      return;
+    }
+    const importTarget = valid[0].target ?? 'map-exif';
     confirming.current = true;
     setIsConfirmingImport(true);
     setImportMessage(null);
@@ -228,12 +275,16 @@ export const useImageImport = (props: UseImageImportProps) => {
         if (preview.imageFingerprint) storedHashes.current.set(assetId, preview.imageFingerprint);
         stagedNotes.current.set(preview, {
           id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-          coords: { lat: preview.lat!, lng: preview.lng! },
+          coords: preview.target === 'unplaced'
+            ? unplacedMapCoordinates()
+            : { lat: preview.lat!, lng: preview.lng! },
           text: '', emoji: '📍', fontSize: 3,
           images: [assetId], imageRefs: [{ assetId }],
           media: [{ id: `mid-${assetId}`, kind: 'image', assetId }],
           tags: [], variant: 'image', createdAt: Date.now(),
-          boardX: 0, boardY: 0, isInitialPosition: true
+          // 不再自动分配 Board 网格；由 Board 的待定位箱接收。
+          boardX: 0, boardY: 0, isInitialPosition: true,
+          ...(preview.target === 'unplaced' ? { unplacedOrder: Date.now() } : null)
         });
       }
       processing = null;
@@ -241,28 +292,16 @@ export const useImageImport = (props: UseImageImportProps) => {
       // Use the current project after IO, not the stale snapshot captured before reading files.
       const currentProject = latest.current.project;
       const existingIds = new Set(currentProject.notes.map((note) => note.id));
-      const allocator = createGridAllocator({
-        existingNotes: currentProject.notes, padding: PLACEMENT_PADDING,
-        gap: PLACEMENT_GAP, cellSize: PLACEMENT_GRID_CELL
-      });
       const newNotes = valid.map((preview) => stagedNotes.current.get(preview)!)
-        .filter((note) => !existingIds.has(note.id))
-        .map((note) => {
-          const { x, y } = allocator.findAndOccupy(256, 256, PLACEMENT_PADDING, PLACEMENT_PADDING);
-          return { ...note, boardX: x, boardY: y };
-        });
+        .filter((note) => !existingIds.has(note.id));
       await latest.current.onUpdateProject({ ...currentProject, notes: [...currentProject.notes, ...newNotes] });
       if (!isCurrent()) return;
-      // Invalid photos stay visible; successful photos cannot be submitted a second time.
-      const remaining = previews.filter((preview) => !!preview.error);
       previews.filter((preview) => !preview.error).forEach((preview) => {
         URL.revokeObjectURL(preview.imageUrl);
         urls.current.delete(preview.imageUrl);
         stagedNotes.current.delete(preview);
       });
-      previewsRef.current = remaining;
-      setImportPreview(remaining);
-      if (newNotes[0]) {
+      if (newNotes[0] && isNoteMapPlaced(newNotes[0])) {
         try {
           const { lat, lng } = newNotes[0].coords;
           latest.current.mapInstance?.flyTo([lat, lng], 16, { duration: 1.5 });
@@ -271,13 +310,13 @@ export const useImageImport = (props: UseImageImportProps) => {
           console.warn('Unable to focus imported point:', error);
         }
       }
-      if (remaining.length) {
-        setImportMessage(`已导入 ${newNotes.length} 张照片；${remaining.length} 张仍未导入，请查看原因。`);
-      } else {
-        closeImport();
-        // Only open an editor after the preview has closed and the project write succeeded.
-        latest.current.onNotesCreated?.(newNotes);
-      }
+      closeImport();
+      // 单张照片仍可进入对应编辑器；批量导入只保留轻提示。
+      const unplacedCount = newNotes.filter((note) => !isNoteMapPlaced(note)).length;
+      const completedTarget = unplacedCount === newNotes.length
+        ? 'unplaced'
+        : importTarget;
+      latest.current.onNotesCreated?.(newNotes, completedTarget, { duplicateCount, unplacedCount });
     } catch (error) {
       if (!isCurrent()) return;
       if (processing) processing.saveError = `保存失败，可重试：${errorMessage(error)}`;
@@ -291,6 +330,7 @@ export const useImageImport = (props: UseImageImportProps) => {
       }
     }
   }, [closeImport]);
+  commitImportRef.current = handleConfirmImport;
 
   const handleCancelImport = useCallback(() => {
     if (!confirming.current) closeImport();
@@ -298,12 +338,59 @@ export const useImageImport = (props: UseImageImportProps) => {
 
   const handleRetryPreparation = useCallback(() => {
     if (preparing.current || confirming.current) return;
-    return handleImageImport(previewsRef.current.map((preview) => preview.originalFile ?? preview.file));
+    return handleImageImport(
+      previewsRef.current.map((preview) => preview.originalFile ?? preview.file),
+      {
+        target:
+          previewsRef.current[0]?.target === 'map-drop' && previewsRef.current[0]?.targetCoords
+            ? { kind: 'map-drop', coords: previewsRef.current[0].targetCoords }
+            : previewsRef.current[0]?.target === 'unplaced'
+              ? { kind: 'unplaced' }
+              : { kind: 'map-exif' }
+      }
+    );
   }, [handleImageImport]);
+
+  const updatePreview = useCallback((index: number, patch: Partial<ImportPreview>) => {
+    const current = previewsRef.current[index];
+    if (!current || preparing.current || confirming.current) return;
+    const next = previewsRef.current.map((preview, previewIndex) =>
+      previewIndex === index ? { ...preview, ...patch } : preview
+    );
+    previewsRef.current = next;
+    setImportPreview(next);
+  }, []);
+
+  const handleTogglePreviewExcluded = useCallback((index: number) => {
+    const preview = previewsRef.current[index];
+    if (!preview || preview.error || preview.isDuplicate) return;
+    updatePreview(index, { excluded: !preview.excluded });
+  }, [updatePreview]);
+
+  /**
+   * 导入旧照片不需要浏览器定位权限。没有 EXIF 时，用户可先移动地图，
+   * 再把照片明确放到当前地图中心。
+   */
+  const handlePlacePreviewAtMapCenter = useCallback((index: number) => {
+    const preview = previewsRef.current[index];
+    const center = latest.current.mapInstance?.getCenter?.();
+    if (!preview || preview.errorKind !== 'gps-missing' || !center) return;
+    const lat = Number(center.lat);
+    const lng = Number(center.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    updatePreview(index, {
+      lat,
+      lng,
+      error: undefined,
+      errorKind: undefined,
+      excluded: false
+    });
+  }, [updatePreview]);
 
   return {
     importPreview, showImportDialog, isPreparingImport, isConfirmingImport,
     importProgress, importMessage, hasImportError, fileInputRef, dataImportInputRef,
-    handleImageImport, handleConfirmImport, handleCancelImport, handleRetryPreparation
+    handleImageImport, handleConfirmImport, handleCancelImport, handleRetryPreparation,
+    handleTogglePreviewExcluded, handlePlacePreviewAtMapCenter
   };
 };

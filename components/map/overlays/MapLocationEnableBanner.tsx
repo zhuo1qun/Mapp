@@ -3,6 +3,7 @@ import { Loader2, MapPin, ShieldAlert, X } from 'lucide-react';
 import { THEME_COLOR } from '../../../constants';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 import { ChromeWindow } from '../../ui/ChromeWindow';
+import { ChromeActionButton } from '../../ui/ChromeActionButton';
 import { useChromeAppearance } from '../../ui/chromeAppearanceContext';
 
 type Props = {
@@ -80,24 +81,22 @@ export const MapLocationEnableBanner: React.FC<Props> = ({
       </div>
 
       <div className="flex items-center justify-end gap-2 px-4 pb-4 pt-2">
-        <button
-          type="button"
+        <ChromeActionButton
           onClick={onDismiss}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100"
+          className="font-medium"
         >
           {insecureContext ? '知道了' : '稍后'}
-        </button>
+        </ChromeActionButton>
         {!insecureContext ? (
-          <button
-            type="button"
+          <ChromeActionButton
+            tone="primary"
+            themeColor={themeColor}
             onClick={onEnable}
             disabled={isRequesting}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-theme-chrome-fg shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ backgroundColor: themeColor }}
           >
             {isRequesting ? <Loader2 size={12} className="animate-spin" /> : null}
             {isRequesting ? '请求中…' : '启用位置'}
-          </button>
+          </ChromeActionButton>
         ) : null}
       </div>
     </ChromeWindow>

@@ -28,7 +28,7 @@
 - EXIF 改为照片导入时动态加载，不再随 Board 或 Mapping 视图提前下载。
 - Board、Mapping 与通用媒体入口共用一套 EXIF GPS 读取和 HEIC 转换实现。
 - 删除 MapView 中未使用的 EXIF 静态依赖，以及图片导入中失效的参数和中间变量。
-- 删除未使用的 `cytoscape-cose-bilkent` 及冗余的顶层图布局依赖声明；保留实际使用的 `cytoscape-fcose` 依赖链。
+- 旧图谱引擎及 Cytoscape 依赖已迁出 Mapping；看板保留独立的关联线能力。
 - Tailwind 只保留 Vite 构建链路，移除重复的 PostCSS 配置、`@tailwindcss/postcss` 和未使用的 `autoprefixer`；Vite 插件归入开发依赖。
 
 ### 尚未完成

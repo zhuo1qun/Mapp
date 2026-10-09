@@ -1,7 +1,7 @@
 import React from 'react';
 import { Edit3, Save } from 'lucide-react';
 import type { Frame } from '../../../types';
-import type { GraphLayerGroupStandard } from '../../../utils/graph/graphRuntimeCore';
+import type { NoteLayerGroupStandard } from '../../../utils/layer/noteLayerState';
 import { ChromeIconButton } from '../../ui/ChromeIconButton';
 import { LayerToolbarIcon } from '../../ui/LayerToolbarIcon';
 import { ChromeWindow } from '../../ui/ChromeWindow';
@@ -34,7 +34,7 @@ interface MapLayerControlProps {
   /** 展开面板对齐页面左/右缘（与顶栏按钮 margin 一致），不再与图层按钮左右齐平 */
   dropdownAlign?: 'start' | 'end';
   /** 工具栏按钮图标：与图层面板当前分组方式一致 */
-  layerGroupStandard?: GraphLayerGroupStandard;
+  layerGroupStandard?: NoteLayerGroupStandard;
   hostedWindow?: boolean;
 }
 

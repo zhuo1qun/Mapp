@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Project, Note, ProjectKind } from '../types';
-import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, GitBranch, RefreshCw } from 'lucide-react';
+import { Project, Note } from '../types';
+import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, RefreshCw } from 'lucide-react';
 import { generateId, formatDate, compressImageFromBase64 } from '../utils';
 import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
 import { downloadMappVizJson } from '../utils/export/mappVizJson';
-import { projectKindLabel, isProjectKind, sanitizeProjectKind } from '../utils/projectKind';
 import {
   formatImportErrorMessage,
   formatJsonParseFailure,
@@ -38,7 +37,6 @@ import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
 import { ChromeSearchField } from './ui/ChromeSearchField';
-import { ChromeSegmentedControl } from './ui/ChromeSegmentedControl';
 import { fetchBuiltinExamplesManifest } from '../utils/builtinExamples/manifest';
 import { parseExportPayload } from '../utils/builtinExamples/projectFromExport';
 import {
@@ -265,7 +263,9 @@ interface ProjectManagerProps {
   expandToHomeLayout?: boolean;
   onCloseSidebar?: () => void;
   onBackToHome?: () => void;
-  viewMode?: 'map' | 'board' | 'table' | 'graph';
+  /** 打开独立的临时公共地图，不与本地项目数据混存。 */
+  onOpenPlayground?: () => void;
+  viewMode?: 'map' | 'board' | 'table';
   activeProject?: Project | null;
   onExportCSV?: (project: Project) => void;
   onCheckData?: () => Promise<void>;
@@ -324,6 +324,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   expandToHomeLayout = false,
   onCloseSidebar,
   onBackToHome,
+  onOpenPlayground,
   viewMode = 'map',
   activeProject,
   onExportCSV,
@@ -397,7 +398,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const themeChromeInteractiveClass = `theme-chrome-interactive theme-chrome-interactive--${chromeAppearance}`;
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectKind, setNewProjectKind] = useState<ProjectKind>('mapping');
   const [newProjectNameShake, setNewProjectNameShake] = useState(false);
   const newProjectNameInputRef = useRef<HTMLInputElement>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -513,7 +513,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       id: generateId(),
       name: newProjectName,
       type: 'map',
-      projectKind: newProjectKind,
+      projectKind: 'mapping',
       createdAt: Date.now(),
       notes: []
     };
@@ -521,7 +521,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     onCreateProject(newProject);
     setIsCreating(false);
     setNewProjectName('');
-    setNewProjectKind('mapping');
     setIsCreateFileDragging(false);
 
     // If in sidebar mode, close sidebar after creation
@@ -611,7 +610,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         // 由项目状态层统一生成名称，避免此处与持久化层各加一次「(Copy)」。
         name: project.name,
         type: 'map',
-        projectKind: sanitizeProjectKind(fullProject.projectKind),
+        projectKind: 'mapping',
         createdAt: Date.now(),
         notes: fullProject.notes.map(note => ({
           ...note,
@@ -627,17 +626,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           id: generateId()
         })),
         themeColor: fullProject.themeColor,
-        backgroundOpacity: fullProject.backgroundOpacity,
-        graphLayers: fullProject.graphLayers,
-        graphLayerStandard: fullProject.graphLayerStandard,
-        graphFrameLayers: fullProject.graphFrameLayers,
-        graphEmojiLayers: fullProject.graphEmojiLayers,
-        graphNodeSize: fullProject.graphNodeSize,
-        graphLabelFontPx: fullProject.graphLabelFontPx,
-        graphEdgeWeight: fullProject.graphEdgeWeight,
-        graphEdgeLabelFontPx: fullProject.graphEdgeLabelFontPx,
-        graphEdgeCurve: fullProject.graphEdgeCurve,
-        graphDefaultLayoutMode: fullProject.graphDefaultLayoutMode
+        backgroundOpacity: fullProject.backgroundOpacity
       };
 
       onDuplicateProject(duplicatedProject);
@@ -722,24 +711,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           id: fullProject.id,
           name: fullProject.name,
           type: fullProject.type,
-          projectKind: sanitizeProjectKind(fullProject.projectKind),
+          projectKind: 'mapping',
           backgroundImage: fullProject.backgroundImage,
           createdAt: fullProject.createdAt,
           notes: fullProject.notes || [],
           frames: fullProject.frames || [],
           connections: fullProject.connections || [],
           themeColor: fullProject.themeColor,
-          backgroundOpacity: fullProject.backgroundOpacity,
-          graphLayers: fullProject.graphLayers,
-          graphLayerStandard: fullProject.graphLayerStandard,
-          graphFrameLayers: fullProject.graphFrameLayers,
-          graphEmojiLayers: fullProject.graphEmojiLayers,
-          graphNodeSize: fullProject.graphNodeSize,
-          graphLabelFontPx: fullProject.graphLabelFontPx,
-          graphEdgeWeight: fullProject.graphEdgeWeight,
-          graphEdgeLabelFontPx: fullProject.graphEdgeLabelFontPx,
-          graphEdgeCurve: fullProject.graphEdgeCurve,
-          graphDefaultLayoutMode: fullProject.graphDefaultLayoutMode
+          backgroundOpacity: fullProject.backgroundOpacity
         }
       };
       
@@ -896,6 +875,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       }
 
       const importedProject = (data as { project: Project }).project;
+      if ((importedProject as { projectKind?: unknown }).projectKind === 'graph') {
+        reportImportError('Graph 项目已迁出 Mapping，请在 Mapp Graph 中导入该文件。');
+        return;
+      }
       
       // Generate new ID to avoid conflicts
       const newProjectId = generateId();
@@ -903,23 +886,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         id: newProjectId,
         name: `${importedProject.name} (Imported)`,
         type: 'map',
-        projectKind: sanitizeProjectKind(importedProject.projectKind),
+        projectKind: 'mapping',
         createdAt: Date.now(),
         notes: importedProject.notes || [],
         frames: importedProject.frames || [],
         connections: importedProject.connections || [],
         themeColor: importedProject.themeColor,
-        backgroundOpacity: importedProject.backgroundOpacity,
-        graphLayers: importedProject.graphLayers,
-        graphLayerStandard: importedProject.graphLayerStandard,
-        graphFrameLayers: importedProject.graphFrameLayers,
-        graphEmojiLayers: importedProject.graphEmojiLayers,
-        graphNodeSize: importedProject.graphNodeSize,
-        graphLabelFontPx: importedProject.graphLabelFontPx,
-        graphEdgeWeight: importedProject.graphEdgeWeight,
-        graphEdgeLabelFontPx: importedProject.graphEdgeLabelFontPx,
-        graphEdgeCurve: importedProject.graphEdgeCurve,
-        graphDefaultLayoutMode: importedProject.graphDefaultLayoutMode
+        backgroundOpacity: importedProject.backgroundOpacity
       };
 
       // If importing into existing project (merge mode)
@@ -1218,7 +1191,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const closeCreateDialog = () => {
     setIsCreating(false);
     setNewProjectName('');
-    setNewProjectKind('mapping');
     setIsCreateFileDragging(false);
   };
 
@@ -1506,13 +1478,22 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       {isSidebar && !expandToHomeLayout && !transitionListOnly && (
         <>
           <div className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex flex-nowrap items-center gap-2">
-            <button
-              onClick={() => {
-                if (onBackToHome) onBackToHome();
+              <button
+                onClick={() => {
+                  if (onBackToHome) onBackToHome();
               }}
               className={`${themeChromeInteractiveClass} project-sidebar-action p-2 rounded-xl`}
-            >
+              >
               <Home size={24} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCreating(true)}
+              className={`${themeChromeInteractiveClass} project-sidebar-action p-2 rounded-xl`}
+              title="新建项目"
+              aria-label="新建项目"
+            >
+              <Plus size={24} strokeWidth={2} aria-hidden />
             </button>
             {onThemeColorChange &&
               onMapUiChromeOpacityChange &&
@@ -1648,7 +1629,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 pointerEvents: easterEggMode || homeHeroAnimateOut ? 'none' : 'auto'
               }}
             >
-              {/* dev 维护模式：上传/拖拽区域替换 New Project；两者同尺寸同圆角 */}
+              {/* 开发维护模式仍保留独立的项目导入口；常规入口与项目行一起渲染。 */}
               <div className="mt-0 w-full max-w-md px-4">
                 {exampleDevMaintenanceMode ? (
                   <div
@@ -1691,15 +1672,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       }}
                     />
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsCreating(true)}
-                    className={`${themeChromeInteractiveClass} flex h-16 w-full items-center justify-center rounded-xl border`}
-                  >
-                    <Plus size={22} strokeWidth={2} aria-hidden />
-                  </button>
-                )}
+                ) : null}
               </div>
             </MotionDiv>
           </div>
@@ -1809,6 +1782,46 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               willChange: 'transform, width, height, opacity'
             }}
           />
+          {homeLikeList && !transitionListOnly && !easterEggMode && onOpenPlayground ? (
+            <MotionDiv
+              ref={(element) => {
+                if (element) projectRowRefs.current.set('__home-playground__', element);
+                else projectRowRefs.current.delete('__home-playground__');
+              }}
+              className={`${themeChromeInteractiveClass} project-list-row group relative isolate -mt-px first:mt-0 flex items-center justify-between overflow-hidden rounded-2xl border border-solid p-4`}
+              onMouseEnter={() => setHoveredProjectId('__home-playground__')}
+              onMouseLeave={() => setHoveredProjectId(null)}
+            >
+              <button
+                type="button"
+                onClick={onOpenPlayground}
+                className="relative z-[1] flex w-full items-center gap-3 text-left"
+              >
+                <MapIcon size={22} strokeWidth={2} aria-hidden />
+                <span className="project-list-title text-lg font-bold leading-tight">PLAYGROUND</span>
+              </button>
+            </MotionDiv>
+          ) : null}
+          {homeLikeList && !transitionListOnly && !easterEggMode && !exampleDevMaintenanceMode ? (
+            <MotionDiv
+              ref={(element) => {
+                if (element) projectRowRefs.current.set('__home-create-project__', element);
+                else projectRowRefs.current.delete('__home-create-project__');
+              }}
+              className={`${themeChromeInteractiveClass} project-list-row group relative isolate -mt-px first:mt-0 flex items-center justify-between overflow-hidden rounded-2xl border border-solid p-4`}
+              onMouseEnter={() => setHoveredProjectId('__home-create-project__')}
+              onMouseLeave={() => setHoveredProjectId(null)}
+            >
+              <button
+                type="button"
+                onClick={() => setIsCreating(true)}
+                className="relative z-[1] flex w-full items-center gap-3 text-left"
+              >
+                <Plus size={22} strokeWidth={2} aria-hidden />
+                <span className="project-list-title text-lg font-bold leading-tight">新建项目</span>
+              </button>
+            </MotionDiv>
+          ) : null}
           {displayProjects.map(p => {
             // 仅在「项目 -> 主页」中间态取消选中高亮；收束可见行的逻辑仍使用原 currentProjectId。
             const isCurrentOpen =
@@ -1896,14 +1909,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       <div className="project-list-title text-lg font-bold leading-tight">
                         {p.name}
                       </div>
-                      {isProjectKind(p.projectKind) ? (
-                        <span
-                          className="project-list-kind-badge shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold"
-                          title={p.projectKind === 'graph' ? 'Graph 项目' : 'Mapping 项目'}
-                        >
-                          {projectKindLabel(p.projectKind)}
-                        </span>
-                      ) : null}
                       {builtinExampleIds.has(p.id) ? (
                         <span
                           className="project-list-kind-badge shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold"
@@ -1914,11 +1919,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                       ) : null}
                     </div>
                     <div className="project-list-meta mt-1 flex items-center gap-1 text-xs">
-                      {p.projectKind === 'graph' ? (
-                        <GitBranch size={12} />
-                      ) : (
-                        <MapIcon size={12} />
-                      )}
+                      <MapIcon size={12} />
                       {formatDate(p.createdAt)}
                     </div>
                   </>
@@ -2048,45 +2049,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 }}
                 placeholder="输入名称"
               />
-            </div>
-
-            <div className="flex items-start gap-2">
-              <span className="mt-1.5 shrink-0 text-xs font-medium text-gray-600">项目类型</span>
-              <div className="min-w-0 flex-1">
-                <ChromeSegmentedControl
-                  aria-label="项目类型"
-                  value={newProjectKind}
-                  onChange={setNewProjectKind}
-                  options={[
-                    {
-                      id: 'mapping',
-                      label: (
-                        <span className="flex flex-col items-center leading-tight">
-                          <span className="flex items-center gap-1.5">
-                            <MapIcon size={14} /> Mapping
-                          </span>
-                          {newProjectKind === 'mapping' ? (
-                            <span className="mt-0.5 text-[9px] font-medium text-gray-500">地图 · 看板 · 表格</span>
-                          ) : null}
-                        </span>
-                      )
-                    },
-                    {
-                      id: 'graph',
-                      label: (
-                        <span className="flex flex-col items-center leading-tight">
-                          <span className="flex items-center gap-1.5">
-                            <GitBranch size={14} /> Graph
-                          </span>
-                          {newProjectKind === 'graph' ? (
-                            <span className="mt-0.5 text-[9px] font-medium text-gray-500">图谱 · 看板 · 表格</span>
-                          ) : null}
-                        </span>
-                      )
-                    }
-                  ]}
-                />
-              </div>
             </div>
 
             <input

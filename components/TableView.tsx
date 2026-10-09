@@ -3,11 +3,11 @@ import { Note, Project, Frame, Connection, type GraphLayerState } from '../types
 import { Trash2 } from 'lucide-react';
 import {
   clampConnectionWeight,
-  connectionToGraphDirection,
+  connectionDirection,
   DEFAULT_CONNECTION_WEIGHT
-} from '../utils/graph/graphData';
+} from '../utils/connections/connectionData';
 import { generateId, parseNoteContent } from '../utils';
-import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
+import { mergeNoteLayerState, type NoteLayerGroupStandard } from '../utils/layer/noteLayerState';
 import { emojiLayerStateFromLegacyTagState, groupDisplayLabel, noteBelongsToLayerGroupKey } from '../utils/layer/unifiedNoteLayer';
 import { NoteEditor } from './NoteEditor';
 import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
@@ -22,7 +22,6 @@ import { TableBottomSubViewBar } from './table/TableBottomSubViewBar';
 import { TableWindowNavigator, type TableWindowTarget } from './table/TableWindowNavigator';
 import { GraphTopCenterConnectionButton } from './graph/GraphTopCenterConnectionButton';
 import { GraphConnectionPanel, connectionToPanelDraft, type ConnectionDraft } from './graph/GraphConnectionPanel';
-import { resolveProjectKind } from '../utils/projectKind';
 
 interface TableViewProps {
   project: Project;
@@ -35,7 +34,6 @@ interface TableViewProps {
   onUpdateConnections?: (connections: Connection[]) => void | Promise<void>;
   onSwitchToBoardView?: (coords?: { x: number; y: number }) => void;
   onSwitchToMapView?: (coords?: { lat: number; lng: number; zoom?: number }) => void;
-  onSwitchToGraphView?: (noteId: string) => void;
   onToggleEditor?: (isOpen: boolean) => void;
   themeColor: string;
   panelChromeStyle?: React.CSSProperties;
@@ -75,7 +73,7 @@ function noteRowTitle(note: Note | undefined): string {
 }
 
 function edgeDirectionHint(c: Connection): string {
-  const d = connectionToGraphDirection(c);
+  const d = connectionDirection(c);
   if (d === 'forward') return '→';
   if (d === 'backward') return '←';
   if (d === 'both') return '↔';
@@ -126,7 +124,6 @@ export const TableView: React.FC<TableViewProps> = ({
   onUpdateConnections,
   onSwitchToBoardView,
   onSwitchToMapView,
-  onSwitchToGraphView,
   onToggleEditor,
   themeColor,
   panelChromeStyle,
@@ -193,8 +190,8 @@ export const TableView: React.FC<TableViewProps> = ({
   });
   const [pickTarget, setPickTarget] = useState<'from' | 'to' | null>(null);
 
-  /** Mapping 项目表视图仅节点表；关联表仅 Graph 项目 */
-  const edgesTableEnabled = resolveProjectKind(project) === 'graph';
+  /** 关系仍可由地图/看板消费；表格不再提供独立的关联表入口。 */
+  const edgesTableEnabled = false;
   const activeSubView: TableSubView = edgesTableEnabled ? subView : 'points';
 
   useEffect(() => {
@@ -523,17 +520,17 @@ export const TableView: React.FC<TableViewProps> = ({
     return m;
   }, [project.notes]);
 
-  const tableGraphLayerStandard = (project.graphLayerStandard ?? 'tag') as GraphLayerGroupStandard;
+  const tableGraphLayerStandard = (project.graphLayerStandard ?? 'tag') as NoteLayerGroupStandard;
   const mergedTagTableLayers = useMemo(
-    () => mergeGraphLayerState(textNotes, project.graphLayers ?? null, 'tag'),
+    () => mergeNoteLayerState(textNotes, project.graphLayers ?? null, 'tag'),
     [textNotes, project.graphLayers]
   );
   const mergedFrameTableLayers = useMemo(
-    () => mergeGraphLayerState(textNotes, project.graphFrameLayers ?? null, 'frame'),
+    () => mergeNoteLayerState(textNotes, project.graphFrameLayers ?? null, 'frame'),
     [textNotes, project.graphFrameLayers]
   );
   const mergedEmojiTableLayers = useMemo(
-    () => mergeGraphLayerState(textNotes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji'),
+    () => mergeNoteLayerState(textNotes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji'),
     [textNotes, project.graphEmojiLayers, project.graphLayers]
   );
   const mergedTableLayers =
@@ -558,7 +555,7 @@ export const TableView: React.FC<TableViewProps> = ({
   );
 
   const handleTableLayerStandardChange = useCallback(
-    (standard: GraphLayerGroupStandard) => {
+    (standard: NoteLayerGroupStandard) => {
       if (!onUpdateProject) return;
       void onUpdateProject(project, { graphLayerStandard: standard });
     },
@@ -605,13 +602,13 @@ export const TableView: React.FC<TableViewProps> = ({
     if (activeSubView === 'points') {
       const header = ['分组', '节点ID', '标题', '正文', '时间段', '标签'];
       const rows: (string | number | undefined | null)[][] = [header];
-      const std = (project.graphLayerStandard ?? 'tag') as GraphLayerGroupStandard;
+      const std = (project.graphLayerStandard ?? 'tag') as NoteLayerGroupStandard;
       const merged =
         std === 'frame'
-          ? mergeGraphLayerState(textNotes, project.graphFrameLayers ?? null, 'frame')
+          ? mergeNoteLayerState(textNotes, project.graphFrameLayers ?? null, 'frame')
           : std === 'emoji'
-            ? mergeGraphLayerState(textNotes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji')
-            : mergeGraphLayerState(textNotes, project.graphLayers ?? null, 'tag');
+            ? mergeNoteLayerState(textNotes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji')
+            : mergeNoteLayerState(textNotes, project.graphLayers ?? null, 'tag');
       const fm = new Map((project.frames ?? []).map((f) => [String(f.id).trim(), f]));
       for (const key of merged.order) {
         const gl = groupDisplayLabel(String(key).trim(), std, fm);
@@ -744,7 +741,7 @@ export const TableView: React.FC<TableViewProps> = ({
     setPanelEditingKey('new');
   }, [connections, onUpdateConnections, panelEditingKey]);
 
-  /** 与 GraphView 关联面板一致：行末减号需可清草稿并退出点选（无画布时仅改 state） */
+  /** 表格关联面板：行末减号会清草稿并退出点选状态。 */
   const clearTableConnectionPanelGraphAndDraft = useCallback(() => {
     setPickTarget(null);
     if (panelEditingKey === 'new') {
@@ -1020,7 +1017,6 @@ export const TableView: React.FC<TableViewProps> = ({
           }}
           onSwitchToBoardView={onSwitchToBoardView}
           onSwitchToMapView={onSwitchToMapView}
-          onSwitchToGraphView={onSwitchToGraphView}
           themeColor={themeColor}
           mapUiChromeOpacity={mapUiChromeOpacity}
           mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -1045,7 +1041,7 @@ export const TableView: React.FC<TableViewProps> = ({
           onNewConnection={handleNewConnection}
           onBeginEndpointEdit={handleNewConnection}
           disableGraphPick
-          graphPickDisabledHint="请到 GraphView 选点"
+          graphPickDisabledHint="请通过搜索选择点位"
           onClearGraphAndDraftSelection={clearTableConnectionPanelGraphAndDraft}
           onClearFromSelection={clearTableConnectionFromOnly}
           onClearToSelection={clearTableConnectionToOnly}
@@ -1087,12 +1083,6 @@ export const TableView: React.FC<TableViewProps> = ({
         onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
         currentMapStyle={mapStyleId}
         onMapStyleChange={onMapStyleChange ?? (() => {})}
-        graphProject={project}
-        onGraphProjectPatch={
-          onUpdateProject && projectId
-            ? (patch) => void onUpdateProject(projectId, patch)
-            : undefined
-        }
       />
 
       <DeleteConfirmDialog

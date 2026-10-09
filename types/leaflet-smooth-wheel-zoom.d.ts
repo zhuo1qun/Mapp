@@ -7,6 +7,8 @@ declare module 'leaflet' {
     /** @deprecated alias of smoothMapZoom */
     smoothWheelZoom?: boolean | string;
     smoothSensitivity?: number;
+    /** Ctrl+wheel trackpad pinch sensitivity used by the unified zoom handler. */
+    smoothTrackpadPinchSensitivity?: number;
     touchZoomSensitivity?: number;
     smoothTouchZoom?: boolean;
     smoothZoomInertia?: boolean;

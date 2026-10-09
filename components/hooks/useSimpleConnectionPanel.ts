@@ -4,7 +4,7 @@ import { generateId } from '../../utils';
 import {
   clampConnectionWeight,
   DEFAULT_CONNECTION_WEIGHT
-} from '../../utils/graph/graphData';
+} from '../../utils/connections/connectionData';
 import { connectionToPanelDraft, type ConnectionDraft } from '../graph/GraphConnectionPanel';
 
 function emptyConnectionDraft(): ConnectionDraft {

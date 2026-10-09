@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { EMOJI_CATEGORIES, THEME_COLOR } from '../../constants';
 import { computeAnchoredPanelPlacement } from '../ui/anchoredPanelPlacement';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../ui/chromeAppearanceContext';
+import { ChromePropertyPopover } from '../ui/ChromePropertyPopover';
 
 export const EMOJI_PICKER_EST_W = 320;
 export const EMOJI_PICKER_EST_H = 400;
@@ -141,29 +141,19 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
 
   if (!isOpen || !position) return null;
 
-  return createPortal(
-    <div data-note-emoji-picker="" data-chrome-window-nested="">
-      <div className="fixed inset-0" style={{ zIndex: 9999 }} onClick={onClose} />
-      <div
-        ref={panelRef}
-        className={`fixed map-chrome-content-${chromeAppearance} rounded-xl border border-gray-100/80 shadow-lg overflow-hidden ${
-          panelChromeStyle ? '' : 'bg-white'
-        }`}
-        style={{
-          ...(panelChromeStyle || {}),
-          width: EMOJI_PICKER_EST_W,
-          maxWidth: 'min(100vw - 16px, 320px)',
-          maxHeight: position.maxHeight,
-          display: 'flex',
-          flexDirection: 'column',
-          left: position.left,
-          top: position.top,
-          zIndex: 10000,
-          pointerEvents: 'auto'
-        }}
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
+  return (
+    <ChromePropertyPopover
+      open={isOpen}
+      onClose={onClose}
+      placement={position}
+      panelRef={panelRef}
+      panelChromeStyle={panelChromeStyle}
+      chromeAppearance={chromeAppearance}
+      width={EMOJI_PICKER_EST_W}
+      maxWidth="min(100vw - 16px, 320px)"
+      className="flex max-h-full flex-col"
+      surface="emoji"
+    >
         <div className="relative border-b border-gray-100">
           {canScrollLeft && (
             <button
@@ -247,8 +237,6 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
             ))}
           </div>
         </div>
-      </div>
-    </div>,
-    document.body
+    </ChromePropertyPopover>
   );
 };

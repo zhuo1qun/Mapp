@@ -30,11 +30,13 @@ interface ClusterMarkerLayerProps {
   selectedNoteIds?: ReadonlySet<string> | null;
   isPreviewMode?: boolean;
   isEditMode?: boolean;
+  /** Playground 等受限数据源可按单条记录控制拖动权限。 */
+  canEditNote?: (note: Note) => boolean;
   onMarkerDragEnd?: (note: Note, e: DragEndEvent) => void;
   onMarkerDrag?: (note: Note, e: any) => void;
   onMarkerLongPressDragStart?: (note: Note) => void;
-  onMarkerLongPressDrag?: (note: Note, latLng: L.LatLng) => void;
-  onMarkerLongPressDragEnd?: (note: Note, latLng: L.LatLng) => void;
+  onMarkerLongPressDrag?: (note: Note, latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => void;
+  onMarkerLongPressDragEnd?: (note: Note, latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => void;
   // marker 拖拽乐观坐标覆盖
   noteCoordOverrides?: Record<string, Coordinates>;
   /** 图层面板叠放序：序号越大越在上层（与同视图 sortNotesByLayerStack 一致） */
@@ -59,6 +61,7 @@ function ClusterMarkerLayerInner({
   selectedNoteIds = null,
   isPreviewMode = false,
   isEditMode = false,
+  canEditNote,
   onMarkerDragEnd,
   onMarkerDrag,
   onMarkerLongPressDragStart,
@@ -147,17 +150,16 @@ function ClusterMarkerLayerInner({
 
   const zBoost = (note: Note) => (note.isFavorite ? 200 : 0) + (noteStackRank?.get(note.id) ?? 0) * 2;
 
-  const pinDraggable = (noteId: string) =>
-    !isPreviewMode &&
-    isEditMode &&
-    ((selectedNoteIds != null && selectedNoteIds.size > 0 && selectedNoteIds.has(noteId)) ||
-      selectedNoteId === noteId);
+  // 编辑态下，已单独渲染的 pin 没有「误拖整组」的风险，允许直接拖动。
+  // 真正的 cluster 不会走到这个分支；仍须先点开、选中成员后才会成为独立 pin。
+  const pinDraggable = (note: Note) => !isPreviewMode && isEditMode && (canEditNote?.(note) ?? true);
 
-  const pinLongPressDraggable = (noteId: string) =>
+  const pinLongPressDraggable = (note: Note) =>
     !isPreviewMode &&
     !isEditMode &&
-    ((selectedNoteIds != null && selectedNoteIds.size > 0 && selectedNoteIds.has(noteId)) ||
-      selectedNoteId === noteId);
+    (canEditNote?.(note) ?? true) &&
+    ((selectedNoteIds != null && selectedNoteIds.size > 0 && selectedNoteIds.has(note.id)) ||
+      selectedNoteId === note.id);
 
   const wrapKs = (lng: number) => {
     const ks = lngWrapOffsetsForBounds(lng, west, east);
@@ -191,19 +193,19 @@ function ClusterMarkerLayerInner({
                 }}
                 onMouseEnter={onMarkerHover ? () => onMarkerHover(note) : undefined}
                 onMouseLeave={onMarkerHover ? () => onMarkerHover(null) : undefined}
-                draggable={pinDraggable(note.id) && k === primaryK}
+                draggable={pinDraggable(note) && k === primaryK}
                 onDragEnd={onMarkerDragEnd ? (e) => onMarkerDragEnd(note, e) : undefined}
                 onDrag={onMarkerDrag ? (e) => onMarkerDrag(note, e) : undefined}
-                longPressDragEnabled={pinLongPressDraggable(note.id) && k === primaryK}
+                longPressDragEnabled={pinLongPressDraggable(note) && k === primaryK}
                 onLongPressDragStart={
                   onMarkerLongPressDragStart ? () => onMarkerLongPressDragStart(note) : undefined
                 }
                 onLongPressDrag={
-                  onMarkerLongPressDrag ? (latLng) => onMarkerLongPressDrag(note, latLng) : undefined
+                  onMarkerLongPressDrag ? (latLng, pointer) => onMarkerLongPressDrag(note, latLng, pointer) : undefined
                 }
                 onLongPressDragEnd={
                   onMarkerLongPressDragEnd
-                    ? (latLng) => onMarkerLongPressDragEnd(note, latLng)
+                    ? (latLng, pointer) => onMarkerLongPressDragEnd(note, latLng, pointer)
                     : undefined
                 }
                 motion={deletingNoteIds?.has(note.id) ? 'exit' : noteMotionById?.[note.id]}
@@ -265,19 +267,19 @@ function ClusterMarkerLayerInner({
             }}
             onMouseEnter={onMarkerHover ? () => onMarkerHover(note) : undefined}
             onMouseLeave={onMarkerHover ? () => onMarkerHover(null) : undefined}
-            draggable={pinDraggable(note.id) && k === primaryK}
+            draggable={pinDraggable(note) && k === primaryK}
             onDragEnd={onMarkerDragEnd ? (e) => onMarkerDragEnd(note, e) : undefined}
             onDrag={onMarkerDrag ? (e) => onMarkerDrag(note, e) : undefined}
-            longPressDragEnabled={pinLongPressDraggable(note.id) && k === primaryK}
+            longPressDragEnabled={pinLongPressDraggable(note) && k === primaryK}
             onLongPressDragStart={
               onMarkerLongPressDragStart ? () => onMarkerLongPressDragStart(note) : undefined
             }
             onLongPressDrag={
-              onMarkerLongPressDrag ? (latLng) => onMarkerLongPressDrag(note, latLng) : undefined
+              onMarkerLongPressDrag ? (latLng, pointer) => onMarkerLongPressDrag(note, latLng, pointer) : undefined
             }
             onLongPressDragEnd={
               onMarkerLongPressDragEnd
-                ? (latLng) => onMarkerLongPressDragEnd(note, latLng)
+                ? (latLng, pointer) => onMarkerLongPressDragEnd(note, latLng, pointer)
                 : undefined
             }
             motion={deletingNoteIds?.has(note.id) ? 'exit' : noteMotionById?.[note.id]}

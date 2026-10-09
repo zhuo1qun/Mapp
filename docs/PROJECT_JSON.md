@@ -35,7 +35,7 @@
 - 项目 `id`、所有 `notes[].id`、`frames[].id`、`connections[].id` **一律重新生成**
 - 名称变为 `` `${原名} (Imported)` ``
 - `connections` 的 `fromNoteId` / `toNoteId`、便签的 `groupId` / `groupIds` 会按新旧 id 映射改写
-- **合法** `projectKind`（`mapping` | `graph`）会保留；**缺失或非法值**视为未分型，首次打开弹窗询问 Mapping / Graph（见 `ProjectKindPromptDialog`）
+- 新项目统一写入 `projectKind: "mapping"`。旧 Graph 项目应在 Mapp Graph 中打开，不能再导入 Mapping。
 
 合并进**已有项目**时：
 
@@ -53,7 +53,7 @@
 | `id` | string | 导入会换新 id；可保留导出值作参考 |
 | `name` | string | **必填** |
 | `type` | `'map'` | 历史字段，固定写 `"map"` |
-| `projectKind` | `'mapping' \| 'graph'` | **推荐显式写出**。`mapping`=地图+看板+表；`graph`=图谱+表。导出仅写出合法值；非法或缺省 → 导入后询问 |
+| `projectKind` | `'mapping'` | **推荐显式写出**。Mapping 包含地图、看板和表格。 |
 | `createdAt` | number | Unix ms；导入时常改成当前时间 |
 | `notes` | `Note[]` | 主内容；可 `[]` |
 | `frames` | `Frame[]` | 看板 Frame；可 `[]` |
@@ -62,21 +62,14 @@
 | `backgroundOpacity` | number | 看板背景透明度 |
 | `standardSizeScale` | number | 看板便签全局缩放，约 `0.5`–`1` |
 
-### 2.2 图谱样式（可选）
+### 2.2 图层状态（兼容字段，可选）
 
 | 字段 | 说明 |
 |------|------|
-| `graphLayers` / `graphEmojiLayers` / `graphFrameLayers` | 标签 / Emoji / 簇图层面板状态；三者独立保存排序与显隐。标签层可用 `tagVisibilityLogic`: `'and'\|'or'`（多标签显隐）。时间线纵轴与簇布局主分区 **按 frame** |
-| `graphLayerStandard` | 地图/看板/表格面板切换用：`'tag'\|'emoji'\|'frame'`；图谱布局不依赖它 |
-| `graphDefaultLayoutMode` | `'time' \| 'cose' \| 'frameCluster'`（力传导模式使用 **fcose**） |
-| `graphNodeSize` | 节点直径 px，约 1–36 |
-| `graphLabelFontPx` | 空闲标签字号 4–16 |
-| `graphEdgeWeight` | 线粗 0.1–2 |
-| `graphEdgeLabelFontPx` | 边标签字号 3–16 |
-| `graphEdgeCurve` | 连线曲线；`true`/缺省 → unbundled-bezier，`false` → straight |
-| `graphTimeAxisWeightBias` 等 | 见 `types.ts` |
+| `graphLayers` / `graphEmojiLayers` / `graphFrameLayers` | 历史字段名；现用于地图、看板和表格中的标签 / Emoji / Frame 图层排序与显隐。标签层可用 `tagVisibilityLogic`: `'and'\|'or'`。 |
+| `graphLayerStandard` | 历史字段名；记录图层面板当前分组方式：`'tag'\|'emoji'\|'frame'`。 |
 
-导出当前会带上部分图谱字段；未列出的字段若手写进 JSON，导入时只要落在 `project` 上且后续 `saveProject` 能存，一般会保留（以当前导入代码拷贝的字段为准）。
+旧图谱布局字段不会在 Mapping 中使用；请在迁出的 Mapp Graph 项目中维护它们。
 
 ---
 

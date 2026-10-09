@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
-import { useChromeAppearance } from './chromeAppearanceContext';
+import { ChromeAppearanceContext, useChromeAppearance } from './chromeAppearanceContext';
 import { useCompactViewport } from '../../utils/ui/useCompactViewport';
 import { useStickyValue } from '../../utils/ui/useStickyValue';
 import { AnchoredWorkspaceWindow } from './AnchoredWorkspaceWindow';
@@ -219,10 +219,16 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
               panelRef={surfaceRef}
               data-chrome-window-surface=""
               data-map-layer-chrome-panel={surface === 'layer' ? '' : undefined}
-              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${phaseCls} ${className}`.trim()}
+              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${phaseCls} workspace-transient-elevation ${className}`.trim()}
               style={positionedStyle}
             >
-              {children}
+              {/*
+                * 窗口会通过 portal 脱离地图/主页原本的 DOM；把已解析的窗口主题继续提供给
+                * 内部字段，确保检索、新建项目等复用的 ChromeSearchField 同时采用这扇窗的槽位前景色。
+                */}
+              <ChromeAppearanceContext.Provider value={appearance}>
+                {children}
+              </ChromeAppearanceContext.Provider>
             </AnchoredWorkspaceWindow>
           </>
         );

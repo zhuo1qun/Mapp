@@ -1,5 +1,5 @@
 import type { Connection, Note, Project } from '../../types';
-import { clampConnectionWeight, clampNoteWeight } from '../graph/graphData';
+import { clampConnectionWeight, clampNoteWeight } from '../connections/connectionData';
 import { parseNoteContent } from '../../utils';
 import { downloadTextFile } from '../builtinExamples/projectFromExport';
 

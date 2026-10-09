@@ -34,6 +34,12 @@ function Control({ active = false, label, onClick, children }: ControlProps) {
 
 /** 仅在存在文本选区时显示，避免干扰普通输入。 */
 export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
+  // BubbleMenu 实际定位的是它创建并挂到 body 的外层节点；z-index 必须落在
+  // 该节点上，写在 React 内容节点上仍会被 NoteEditor 的 stacking context 压住。
+  const setMenuLayerRef = useCallback((element: HTMLDivElement | null) => {
+    element?.classList.add('note-editor-transient-root');
+  }, []);
+
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href || '';
     const input = window.prompt('链接地址', previousUrl);
@@ -51,6 +57,7 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
 
   return (
     <BubbleMenu
+      ref={setMenuLayerRef}
       editor={editor}
       pluginKey="note-editor-selection-menu"
       updateDelay={80}

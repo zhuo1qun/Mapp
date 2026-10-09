@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react';
 import type { GraphLayerState, Note, TagVisibilityLogic } from '../../types';
-import { GRAPH_UNTAGGED_TAG_GROUP } from '../../utils/graph/graphRuntimeCore';
+import { UNTYPED_NOTE_LAYER_GROUP } from '../../utils/layer/noteLayerState';
 import {
   noteBelongsToLayerGroupKey,
   normalizeTagVisibilityLogic,
@@ -62,7 +62,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   const visibilityLogic = normalizeTagVisibilityLogic(merged.tagVisibilityLogic);
 
   const hierarchy = useMemo(
-    () => groupTagsByHierarchyPrefix(merged.order ?? [], GRAPH_UNTAGGED_TAG_GROUP),
+    () => groupTagsByHierarchyPrefix(merged.order ?? [], UNTYPED_NOTE_LAYER_GROUP),
     [merged.order]
   );
 
@@ -109,7 +109,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
 
   const beginEditingTag = useCallback((fullKey: string) => {
     if (!onRenameTag) return;
-    if (fullKey === GRAPH_UNTAGGED_TAG_GROUP) return;
+    if (fullKey === UNTYPED_NOTE_LAYER_GROUP) return;
     cancelRenameRef.current = false;
     setEditingTagKey(fullKey);
     setEditingTagDraft(tagRenameEditablePart(fullKey));
@@ -256,9 +256,9 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
     const visible = !hiddenSet.has(k);
     const expanded = expandedTag === k;
     const groupNotes = notesForTag(k);
-    const fullLabel = k === GRAPH_UNTAGGED_TAG_GROUP ? '无标签' : k;
+    const fullLabel = k === UNTYPED_NOTE_LAYER_GROUP ? '无标签' : k;
     const displayLabel =
-      opts.nested && k !== GRAPH_UNTAGGED_TAG_GROUP ? tagHierarchySuffix(k) : fullLabel;
+      opts.nested && k !== UNTYPED_NOTE_LAYER_GROUP ? tagHierarchySuffix(k) : fullLabel;
     const isDragging = dragTagKey === k;
     const isOver = overTagKey === k && (dragTagKey != null || dragPrefixKeys != null) && dragTagKey !== k;
     const showLineBefore = isOver && dropPlace === 'before';
@@ -361,7 +361,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
           ) : (
             <span
               className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 cursor-default"
-              title={`${fullLabel}${onRenameTag && k !== GRAPH_UNTAGGED_TAG_GROUP ? '（双击重命名）' : ''}`}
+              title={`${fullLabel}${onRenameTag && k !== UNTYPED_NOTE_LAYER_GROUP ? '（双击重命名）' : ''}`}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 beginEditingTag(k);
@@ -416,7 +416,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
         const pNotes = notesForPrefix(tags);
         const allHidden = tags.every((t) => hiddenSet.has(t));
         const colors = leafOnly ? prefixColors(tags) : [];
-        const prefixLabel = prefix === GRAPH_UNTAGGED_TAG_GROUP ? '无标签' : prefix;
+        const prefixLabel = prefix === UNTYPED_NOTE_LAYER_GROUP ? '无标签' : prefix;
         const dropAnchor = tags[0];
         const isPrefixDragging =
           dragPrefixKeys != null &&
@@ -533,7 +533,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
                 <span
                   className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-800 cursor-default"
                   title={
-                    leafOnly && onRenameTag && tags[0] !== GRAPH_UNTAGGED_TAG_GROUP
+                    leafOnly && onRenameTag && tags[0] !== UNTYPED_NOTE_LAYER_GROUP
                       ? `${prefixLabel}（双击重命名）`
                       : prefixLabel
                   }

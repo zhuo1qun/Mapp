@@ -54,8 +54,6 @@ interface NoteEditorProps {
   onDelete?: (noteId: string) => void | Promise<void>;
   onSwitchToMapView?: (coords?: { lat: number; lng: number }) => void;
   onSwitchToBoardView?: (coords?: { x: number; y: number }, mapInstance?: any) => void;
-  /** Graph 项目：关闭编辑器并在图谱中聚焦该便签 */
-  onSwitchToGraphView?: (noteId: string) => void;
   themeColor?: string;
   /** 编辑器自行使用这组全局「界面外观」参数生成表面，不依赖调用方传入样式对象。 */
   mapUiChromeOpacity?: number;
@@ -88,7 +86,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onDelete,
   onSwitchToMapView,
   onSwitchToBoardView,
-  onSwitchToGraphView,
   themeColor = THEME_COLOR,
   mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
   mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
@@ -167,6 +164,30 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     onMarkdownChange: setText,
     onImagePaste: (event) => richPasteHandlerRef.current(event)
   });
+  const autoFocusNewTextRef = useRef<string | null>(null);
+  const shouldAutoFocusNewText =
+    isNewNote && !autoOpenCamera && isNoteContentEmpty(initialNote ?? {});
+
+  /**
+   * 空白的新草稿没有可浏览的内容，直接把光标放进正文；
+   * 已有内容、媒体草稿以及「拍照新建」均维持原先不抢焦点的打开行为。
+   */
+  useEffect(() => {
+    if (!isOpen) {
+      autoFocusNewTextRef.current = null;
+      return;
+    }
+    if (!shouldAutoFocusNewText || !editor) return;
+
+    const noteKey = initialNote?.id ?? '__new-note__';
+    if (autoFocusNewTextRef.current === noteKey) return;
+    const frame = requestAnimationFrame(() => {
+      if (editor.isDestroyed) return;
+      editor.commands.focus('end');
+      autoFocusNewTextRef.current = noteKey;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editor, initialNote?.id, isOpen, shouldAutoFocusNewText]);
 
   const insertTextAtEditorSelection = useCallback(
     (value: string) => {
@@ -417,7 +438,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
     if (closeAfterSave) {
       if (outcome === 'discarded') onClose();
-      else setTimeout(() => { (onSaveClose ?? onClose)(); }, 0);
+      // 保存回调会更新父级项目状态；不要再延后一轮事件循环，否则刚重渲染的
+      // 编辑器可能覆盖这次关闭请求，导致“完成”看似没有反应。
+      else (onSaveClose ?? onClose)();
     }
     return outcome;
   };
@@ -744,12 +767,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           onNavigateGo={() => {
             if (!hasNavigableGpsCoords(initialNote?.coords)) return;
             setNavSheetOpen(true);
-          }}
-          showLocateGraph={!!(initialNote?.id && onSwitchToGraphView)}
-          onLocateGraph={() => {
-            if (!initialNote?.id) return;
-            dismissOverlays();
-            onSwitchToGraphView(initialNote.id);
           }}
           onSave={() => {
             dismissOverlays();

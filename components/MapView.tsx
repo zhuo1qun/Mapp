@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { set } from 'idb-keyval';
 
 import { Note, Coordinates, Project, Frame, Connection, type GraphLayerState } from '../types';
-import { mergeGraphLayerState, type GraphLayerGroupStandard } from '../utils/graph/graphRuntimeCore';
+import { mergeNoteLayerState, type NoteLayerGroupStandard } from '../utils/layer/noteLayerState';
 import {
   emojiLayerStateFromLegacyTagState,
   isNoteVisibleInUnifiedLayer,
@@ -21,7 +21,6 @@ import { useMapStyling } from '@/components/hooks/useMapStyling';
 import { useBorderSearch } from '@/components/hooks/useBorderSearch';
 import { useMapClustering } from '@/components/hooks/useMapClustering';
 import { useMapInitialization } from '@/components/hooks/useMapInitialization';
-import { useNotePositioning } from '@/components/hooks/useNotePositioning';
 import { useDataImport } from '@/components/hooks/useDataImport';
 import { useFileDrop } from '@/components/hooks/useFileDrop';
 import { useCsvImport } from '@/components/hooks/useCsvImport';
@@ -50,14 +49,16 @@ import { MapLocationEnableBanner } from './map/overlays/MapLocationEnableBanner'
 import { MapImportMenuModal } from './map/overlays/MapImportMenuModal';
 import { MapTopRightEditToggle } from './map/overlays/MapTopRightEditToggle';
 import { MapPreviewTopRightToolbar } from './map/overlays/MapPreviewTopRightToolbar';
-import { type EditInspectorPanelProps, type InspectorGroupContext } from './map/overlays/MapEditInspectorPanel';
-import { useRegisterEditInspector } from './editInspector/EditInspectorProvider';
 import { GraphConnectionPanel } from './graph/GraphConnectionPanel';
 import { useSimpleConnectionPanel } from './hooks/useSimpleConnectionPanel';
 import { ClusterMarkerLayer } from './map/layers/ClusterMarkerLayer';
 import { MapClickHandler } from './map/MapClickHandler';
 import { MapShiftBoxSelect } from './map/MapShiftBoxSelect';
 import { MapConnectionLinesOverlay } from './map/MapConnectionLinesOverlay';
+import { MapUnplacedNoteDropHandler } from './map/MapUnplacedNoteDropHandler';
+import { UnplacedNotesSidebar } from './map/overlays/MapUnplacedNotesPanel';
+import { transferNotesSpatially } from '../utils/note/spatialTransfer';
+import { moveNoteToMapUnplaced, placeNoteOnMap } from '../utils/note/notePlacement';
 import { SettingsPanel } from './SettingsPanel';
 import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolbarSlot';
 import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
@@ -70,10 +71,9 @@ import { hexToRgb, isPhotoTakenRecently } from '../utils/map/mapUtils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
 import { loadImage, getViewPositionCache, setViewPositionCache } from '../utils/persistence/storage';
 import { useNotesWithResolvedMedia } from '../utils/persistence/useNotesWithResolvedMedia';
-import { ImportPreviewDialog } from './ImportPreviewDialog';
 import { buildMapTabExportPayload } from '../utils/map/mapTabExportPayload';
 import { buildStandaloneMapTabHtml } from '../utils/map/mapTabExportHtml';
-import { downloadTextFile } from '../utils/graph/graphExportHtml';
+import { downloadTextFile } from '../utils/builtinExamples/projectFromExport';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
 import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
@@ -89,7 +89,6 @@ import {
   type MapChromeAppearance
 } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
-import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -347,7 +346,6 @@ interface MapViewProps {
   onUpdateNote: (note: Note) => void;
   onDeleteNote?: (noteId: string) => void;
   onToggleEditor: (isOpen: boolean) => void;
-  onImportDialogChange?: (isOpen: boolean) => void;
   onUpdateProject?: (project: Project) => void;
   navigateToCoords?: { lat: number; lng: number; zoom?: number } | null;
   projectId?: string;
@@ -386,6 +384,16 @@ interface MapViewProps {
   chromeAppearance?: MapChromeAppearance;
   /** 编辑地图关联边（大屏属性面板） */
   onUpdateConnections?: (connections: Connection[]) => void | Promise<void>;
+  /** Playground 复用 Mapping 地图时关闭项目专属的筛选入口。 */
+  showLayerControl?: boolean;
+  /** 单条记录的服务端所有权；未传入时保持普通项目的全量可编辑行为。 */
+  canEditNote?: (note: Note) => boolean;
+  /** 无权编辑时给宿主展示说明；真正的写入仍由宿主服务端二次校验。 */
+  onEditDenied?: (note: Note) => void;
+  /** Playground 不提供“待定位箱”，新记录按当前地图坐标直接发布。 */
+  directMapPlacement?: boolean;
+  /** 是否允许将本地照片批量导入当前数据源。 */
+  allowPhotoImport?: boolean;
 }
 
 type MapChromeId = 'settings' | 'layer' | 'search' | 'locate' | 'create';
@@ -398,7 +406,6 @@ export const MapView: React.FC<MapViewProps> = ({
   onUpdateNote,
   onDeleteNote,
   onToggleEditor,
-  onImportDialogChange,
   onUpdateProject,
   onUpdateConnections,
   fileInputRef: externalFileInputRef,
@@ -431,7 +438,12 @@ export const MapView: React.FC<MapViewProps> = ({
   waypoints: _waypoints,
   setWaypoints: _setWaypoints,
   panelChromeStyle: panelChromeStyleProp,
-  chromeAppearance: chromeAppearanceProp
+  chromeAppearance: chromeAppearanceProp,
+  showLayerControl = true,
+  canEditNote,
+  onEditDenied,
+  directMapPlacement = false,
+  allowPhotoImport = true
 }) => {
   // 触摸设备在拖动时只在停下后补瓦片，避免请求队列反过来拖慢手势；
   // 鼠标设备则沿用 Leaflet 的实时补图路径，横向平移不会等到松手才开始加载。
@@ -441,7 +453,20 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapChromeTone = useChromeAppearance(chromeAppearanceProp);
   if (!project) return null;
   const notes = project.notes;
+  const canModifyNote = useCallback(
+    (note: Note) => canEditNote?.(note) ?? true,
+    [canEditNote]
+  );
+  const denyEdit = useCallback(
+    (note: Note) => onEditDenied?.(note),
+    [onEditDenied]
+  );
   const connections = project.connections || [];
+  const unplacedMapNotes = useMemo(
+    () => notes.filter((note) => !noteHasRenderableMapPosition(note)),
+    [notes]
+  );
+  const unplacedMapNotesWithMedia = useNotesWithResolvedMedia(unplacedMapNotes);
   const mapChromeSurface =
     panelChromeStyleProp ??
     mapChromeSurfaceStyle(mapUiChromeOpacity, mapUiChromeBlurPx, mapChromeTone);
@@ -566,49 +591,6 @@ export const MapView: React.FC<MapViewProps> = ({
     anchorNoteIdForNew: inspectorNoteId
   });
 
-  const inspectorGroupContext = useMemo((): InspectorGroupContext | null => {
-    if (preSelectedNotes && preSelectedNotes.length > 0) {
-      const members = preSelectedNotes;
-      const geo = members.filter((n) => noteHasRenderableMapPosition(n));
-      let lat = 0;
-      let lng = 0;
-      geo.forEach((n) => {
-        lat += n.coords.lat;
-        lng += n.coords.lng;
-      });
-      const centroidMap =
-        geo.length > 0 ? { lat: lat / geo.length, lng: lng / geo.length } : undefined;
-      return {
-        kind: 'cluster',
-        title: `簇 · ${members.length} 点`,
-        members,
-        centroidMap
-      };
-    }
-    if (selectedNoteIds.size > 1) {
-      const members = notes.filter((n) => selectedNoteIds.has(n.id));
-      const firstG = members[0]?.noteGroupId;
-      const isObjectGroup =
-        !!firstG && members.length > 0 && members.every((m) => m.noteGroupId === firstG);
-      const geo = members.filter((n) => noteHasRenderableMapPosition(n));
-      let lat = 0;
-      let lng = 0;
-      geo.forEach((n) => {
-        lat += n.coords.lat;
-        lng += n.coords.lng;
-      });
-      const centroidMap =
-        geo.length > 0 ? { lat: lat / geo.length, lng: lng / geo.length } : undefined;
-      return {
-        kind: 'multi',
-        title: isObjectGroup ? `对象组 · ${members.length} 个` : `多选 · ${members.length} 个`,
-        members,
-        centroidMap
-      };
-    }
-    return null;
-  }, [preSelectedNotes, selectedNoteIds, notes]);
-
   const hoveredNoteRaw = useMemo(
     () => (hoveredNoteId ? notes.find((n) => n.id === hoveredNoteId) ?? null : null),
     [hoveredNoteId, notes]
@@ -681,6 +663,40 @@ export const MapView: React.FC<MapViewProps> = ({
   navigateToCoordsRef.current = navigateToCoords;
   const mapViewMountedRef = useRef(true);
   const mapShellRef = useRef<HTMLDivElement | null>(null);
+  const unplacedSidebarRef = useRef<HTMLElement | null>(null);
+  const lastMarkerDragPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const [isUnplacedSidebarDropTarget, setIsUnplacedSidebarDropTarget] = useState(false);
+  const [unplacedSidebarDropCount, setUnplacedSidebarDropCount] = useState(0);
+
+  const isOverUnplacedSidebar = useCallback((event?: { clientX?: number; clientY?: number }) => {
+    const x = event?.clientX;
+    const y = event?.clientY;
+    const rect = unplacedSidebarRef.current?.getBoundingClientRect();
+    return (
+      typeof x === 'number' &&
+      typeof y === 'number' &&
+      !!rect &&
+      x >= rect.left &&
+      x <= rect.right &&
+      y >= rect.top &&
+      y <= rect.bottom
+    );
+  }, []);
+
+  const draggedNoteIdsFor = useCallback(
+    (note: Note) => (selectedNoteIds.has(note.id) ? [...selectedNoteIds] : [note.id]),
+    [selectedNoteIds]
+  );
+
+  const updateUnplacedSidebarDropTarget = useCallback(
+    (note: Note, pointer?: { clientX?: number; clientY?: number }) => {
+      const isTarget = isOverUnplacedSidebar(pointer);
+      setIsUnplacedSidebarDropTarget(isTarget);
+      setUnplacedSidebarDropCount(isTarget ? draggedNoteIdsFor(note).length : 0);
+      return isTarget;
+    },
+    [draggedNoteIdsFor, isOverUnplacedSidebar]
+  );
 
   useEffect(() => {
     mapViewMountedRef.current = true;
@@ -837,6 +853,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const [isLocating, setIsLocating] = useState(false);
   const [locateEpoch, setLocateEpoch] = useState(0);
   const [isCreatingAtLocation, setIsCreatingAtLocation] = useState(false);
+  const [photoImportNotice, setPhotoImportNotice] = useState<string | null>(null);
+  const photoImportNoticeTimerRef = useRef<number | null>(null);
   /** Empty-project geolocation arrived after fallback center — one-shot late recenter */
   const [lateAutoCenter, setLateAutoCenter] = useState<[number, number] | null>(null);
 
@@ -855,7 +873,7 @@ export const MapView: React.FC<MapViewProps> = ({
     currentLocation,
     deviceHeading,
     hasLocationPermission,
-    needsLocationEnable,
+    permissionStatus,
     isRequestingLocation,
     isSecureContext,
     locationError,
@@ -996,39 +1014,89 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Image import management hook
   const {
-    importPreview,
-    showImportDialog,
     fileInputRef,
     dataImportInputRef,
     handleImageImport,
-    handleConfirmImport,
-    handleCancelImport,
-    isConfirmingImport,
-    isPreparingImport,
-    importProgress,
-    importMessage,
-    hasImportError,
-    handleRetryPreparation
   } = useImageImport({
     project,
     notes,
     onUpdateProject,
-    onNotesCreated: (newNotes) => {
-      if (newNotes[0]) queuePersistedNoteEditor(newNotes[0]);
+    onNotesCreated: (newNotes, target, { duplicateCount, unplacedCount }) => {
+      // 无 EXIF 坐标的照片需要立即有可见的归宿和下一步操作；切入编辑态后待定位箱会展开，
+      // 也会启用「从待定位箱拖到地图」的专用落点。
+      if (unplacedCount > 0) {
+        onWorkspaceEditModeChange(true);
+      }
+      if (newNotes.length === 1 && unplacedCount === 0 && duplicateCount === 0) {
+        queuePersistedNoteEditor(newNotes[0]);
+        return;
+      }
+      if (newNotes.length > 0 || duplicateCount > 0) {
+        if (photoImportNoticeTimerRef.current != null) {
+          window.clearTimeout(photoImportNoticeTimerRef.current);
+        }
+        const positionedCount = newNotes.length - unplacedCount;
+        const importNotice =
+          newNotes.length === 0
+            ? '已有重复图片，未重复导入。'
+            : unplacedCount === newNotes.length
+              ? `已放入待定位箱 ${unplacedCount} 项，可在地图编辑模式中定位。`
+              : unplacedCount > 0
+                ? `已创建 ${positionedCount} 个照片点位；${unplacedCount} 项已放入待定位箱。`
+                : `已创建 ${newNotes.length} 个照片点位，可点击地图上的点位补充文字。`;
+        setPhotoImportNotice(
+          duplicateCount > 0 && newNotes.length > 0
+            ? `${importNotice} 另有 ${duplicateCount} 项已有重复图片。`
+            : importNotice
+        );
+        photoImportNoticeTimerRef.current = window.setTimeout(() => {
+          setPhotoImportNotice(null);
+          photoImportNoticeTimerRef.current = null;
+        }, 4200);
+      }
     },
-    onImportDialogChange,
     mapInstance
   });
 
+  useEffect(() => () => {
+    if (photoImportNoticeTimerRef.current != null) {
+      window.clearTimeout(photoImportNoticeTimerRef.current);
+    }
+  }, []);
+
   const { handleDataImport } = useDataImport({ project, onUpdateProject });
   const { handleCsvImport } = useCsvImport({ project, onUpdateProject });
-  const { computeBoardPosition } = useNotePositioning(notes);
   const { isDragging, dismissDrag, rootProps } = useFileDrop({
     isEditorOpen,
     handleImageImport,
     handleDataImport,
     handleCsvImport
   });
+
+  /** 外部图片投到地图时使用照片自身 GPS；没有 GPS 的图片自动进入待定位箱。 */
+  const handleMapShellDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!allowPhotoImport) {
+        event.preventDefault();
+        return;
+      }
+      const files = event.dataTransfer.files;
+      const hasImage = Array.from(files).some(
+        (file) =>
+          file.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp|gif|avif|tiff?)$/i.test(file.name)
+      );
+      const map = mapInstanceRef.current;
+      if (!isEditorOpen && hasImage && map) {
+        event.preventDefault();
+        event.stopPropagation();
+        dismissDrag();
+        handleImageImport(files, { target: { kind: 'map-exif' } });
+        return;
+      }
+      rootProps.onDrop(event);
+    },
+    [allowPhotoImport, dismissDrag, handleImageImport, isEditorOpen, rootProps]
+  );
 
   // Map layers management hook
   const {
@@ -1130,17 +1198,17 @@ export const MapView: React.FC<MapViewProps> = ({
     setMapConnPickTarget(null);
   }, [closeMapChromeExcept, setShowImportMenu, setShowMapConnectionPanel, setMapConnPickTarget]);
 
-  const graphLayerStandard = (project.graphLayerStandard ?? 'tag') as GraphLayerGroupStandard;
+  const graphLayerStandard = (project.graphLayerStandard ?? 'tag') as NoteLayerGroupStandard;
   const mergedTagMapLayers = useMemo(
-    () => mergeGraphLayerState(notes, project.graphLayers ?? null, 'tag'),
+    () => mergeNoteLayerState(notes, project.graphLayers ?? null, 'tag'),
     [notes, project.graphLayers]
   );
   const mergedFrameMapLayers = useMemo(
-    () => mergeGraphLayerState(notes, project.graphFrameLayers ?? null, 'frame'),
+    () => mergeNoteLayerState(notes, project.graphFrameLayers ?? null, 'frame'),
     [notes, project.graphFrameLayers]
   );
   const mergedEmojiMapLayers = useMemo(
-    () => mergeGraphLayerState(notes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji'),
+    () => mergeNoteLayerState(notes, project.graphEmojiLayers ?? emojiLayerStateFromLegacyTagState(project.graphLayers), 'emoji'),
     [notes, project.graphEmojiLayers, project.graphLayers]
   );
   const mergedMapProjectLayers =
@@ -1174,6 +1242,70 @@ export const MapView: React.FC<MapViewProps> = ({
     if (mapRenderedNotes.some((note) => note.id === introNote.id)) return mapRenderedNotes;
     return [...mapRenderedNotes, introNote as Note];
   }, [introNote, mapRenderedNotes]);
+
+  const placeUnlocatedNotes = useCallback(
+    (noteIds: string[], coords: Coordinates) => {
+      const ids = new Set(noteIds);
+      const targetNotes = notes.filter((note) => ids.has(note.id));
+      if (targetNotes.length === 0) {
+        return;
+      }
+      const nextNotes = transferNotesSpatially(notes, ids, { kind: 'map', coords });
+      if (onUpdateProject) {
+        void onUpdateProject({ ...project, notes: nextNotes });
+      } else {
+        targetNotes.forEach((note) => onUpdateNote(placeNoteOnMap(note, coords)));
+      }
+      setSelectedNoteId(targetNotes[0].id);
+      setSelectedNoteIds(new Set(targetNotes.map((note) => note.id)));
+      setPreSelectedNotes(null);
+    },
+    [notes, onUpdateNote, onUpdateProject, project]
+  );
+
+  /** 图钉移入待定位箱即清除地图位置；多选后拖动其中任意一个会一起转移。 */
+  const moveMapNotesToUnplaced = useCallback(
+    (noteIds: string[]) => {
+      const ids = new Set(noteIds);
+      const targetNotes = notes.filter((note) => ids.has(note.id));
+      if (targetNotes.length === 0) return;
+
+      const transferOrder = Date.now();
+      const nextNotes = transferNotesSpatially(notes, ids, { kind: 'unplaced' }).map((note) =>
+        ids.has(note.id) ? { ...note, unplacedOrder: transferOrder } : note
+      );
+      if (onUpdateProject) {
+        void onUpdateProject({ ...project, notes: nextNotes });
+      } else {
+        targetNotes.forEach((note) => onUpdateNote(moveNoteToMapUnplaced(note, transferOrder)));
+      }
+      setNoteCoordOverrides((current) => {
+        const next = { ...current };
+        targetNotes.forEach((note) => delete next[note.id]);
+        return next;
+      });
+      setSelectedNoteId(null);
+      setSelectedNoteIds(new Set());
+      setPreSelectedNotes(null);
+    },
+    [notes, onUpdateNote, onUpdateProject, project]
+  );
+
+  const deleteUnplacedMapNotes = useCallback(
+    (noteIds: string[]) => {
+      const ids = new Set(noteIds);
+      const targets = notes.filter((note) => ids.has(note.id));
+      if (!targets.length) return;
+      const wording = targets.length === 1 ? '永久删除这个待定位记录吗？' : `永久删除这 ${targets.length} 个待定位记录吗？`;
+      if (!window.confirm(wording)) return;
+      if (onUpdateProject) {
+        void onUpdateProject({ ...project, notes: notes.filter((note) => !ids.has(note.id)) });
+      } else {
+        targets.forEach((note) => onDeleteNote?.(note.id));
+      }
+    },
+    [notes, onDeleteNote, onUpdateProject, project]
+  );
 
   /** 详情卡优先用已解析像素的 note，避免再次卡在「加载中」 */
   const selectedNote = useMemo(() => {
@@ -1217,7 +1349,7 @@ export const MapView: React.FC<MapViewProps> = ({
   );
 
   const handleMapLayerStandardChange = useCallback(
-    (standard: GraphLayerGroupStandard) => {
+    (standard: NoteLayerGroupStandard) => {
       if (!onUpdateProject) return;
       void onUpdateProject({ ...project, graphLayerStandard: standard });
     },
@@ -1362,7 +1494,6 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const createNewMapNote = useCallback(
     (coords: Coordinates, overrides?: Partial<Note>): Partial<Note> => {
-      const { boardX, boardY } = computeBoardPosition();
       return {
         id: generateId(),
         createdAt: Date.now(),
@@ -1375,12 +1506,15 @@ export const MapView: React.FC<MapViewProps> = ({
         variant: 'standard',
         isFavorite: false,
         color: '#FFFFFF',
-        boardX,
-        boardY,
+        // Mapping 创建的对象尚未进入 Board；0,0 只是兼容旧数据结构的内部哨兵。
+        boardX: 0,
+        boardY: 0,
+        isInitialPosition: true,
+        unplacedOrder: Date.now(),
         ...overrides
       };
     },
-    [computeBoardPosition]
+    []
   );
 
   /**
@@ -1567,7 +1701,6 @@ export const MapView: React.FC<MapViewProps> = ({
     ) {
       return;
     }
-
     // 普通地图模式：单选会打开详情卡，故收起其它浮层；Shift 多选不打断当前工作流。
     if (!additive) closePanelsForPreview();
     setPreSelectedNotes(null);
@@ -1636,6 +1769,11 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!latLng) return;
 
     isMarkerDraggingRef.current = true;
+    const pointer = e?.originalEvent as { clientX?: number; clientY?: number } | undefined;
+    if (typeof pointer?.clientX === 'number' && typeof pointer.clientY === 'number') {
+      lastMarkerDragPointerRef.current = { clientX: pointer.clientX, clientY: pointer.clientY };
+    }
+    updateUnplacedSidebarDropTarget(note, lastMarkerDragPointerRef.current ?? undefined);
 
     setNoteCoordOverrides((prev) => ({
       ...prev,
@@ -1644,12 +1782,31 @@ export const MapView: React.FC<MapViewProps> = ({
         lng: latLng.lng
       }
     }));
-  }, []);
+  }, [updateUnplacedSidebarDropTarget]);
 
   const handleMarkerDragEnd = useCallback((note: Note, e: L.DragEndEvent) => {
+    if (!canModifyNote(note)) {
+      denyEdit(note);
+      return;
+    }
     const marker = e.target as L.Marker;
     const latLng = marker.getLatLng();
     if (!latLng) return;
+
+    const isDropTarget = updateUnplacedSidebarDropTarget(note, lastMarkerDragPointerRef.current ?? undefined);
+    lastMarkerDragPointerRef.current = null;
+    setIsUnplacedSidebarDropTarget(false);
+    setUnplacedSidebarDropCount(0);
+
+    if (isDropTarget) {
+      isMarkerDraggingRef.current = false;
+      ignoreNextMarkerClickRef.current = true;
+      setTimeout(() => {
+        ignoreNextMarkerClickRef.current = false;
+      }, 0);
+      moveMapNotesToUnplaced(draggedNoteIdsFor(note));
+      return;
+    }
 
     // 乐观更新：先把坐标写到本地覆盖表，保证 marker 位置不会在聚类重算前回弹
     setNoteCoordOverrides((prev) => ({
@@ -1674,11 +1831,16 @@ export const MapView: React.FC<MapViewProps> = ({
         lng: latLng.lng
       }
     });
-  }, [onUpdateNote]);
+  }, [canModifyNote, denyEdit, draggedNoteIdsFor, moveMapNotesToUnplaced, onUpdateNote, updateUnplacedSidebarDropTarget]);
 
   const handleMarkerLongPressDragStart = useCallback(
     (note: Note) => {
+      if (!canModifyNote(note)) {
+        denyEdit(note);
+        return;
+      }
       isMarkerDraggingRef.current = true;
+      lastMarkerDragPointerRef.current = null;
       setPreSelectedNotes(null);
       setSelectedNoteIds((current) =>
         current.has(note.id) ? current : new Set([note.id])
@@ -1687,19 +1849,38 @@ export const MapView: React.FC<MapViewProps> = ({
       closeMapChromeExcept();
       onWorkspaceEditModeChange(true);
     },
-    [closeMapChromeExcept, onWorkspaceEditModeChange]
+    [canModifyNote, closeMapChromeExcept, denyEdit, onWorkspaceEditModeChange]
   );
 
-  const handleMarkerLongPressDrag = useCallback((note: Note, latLng: L.LatLng) => {
+  const handleMarkerLongPressDrag = useCallback((note: Note, latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => {
     isMarkerDraggingRef.current = true;
+    lastMarkerDragPointerRef.current = pointer;
+    updateUnplacedSidebarDropTarget(note, pointer);
     setNoteCoordOverrides((prev) => ({
       ...prev,
       [note.id]: { lat: latLng.lat, lng: latLng.lng }
     }));
-  }, []);
+  }, [updateUnplacedSidebarDropTarget]);
 
   const handleMarkerLongPressDragEnd = useCallback(
-    (note: Note, latLng: L.LatLng) => {
+    (note: Note, latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => {
+      if (!canModifyNote(note)) {
+        denyEdit(note);
+        return;
+      }
+      const isDropTarget = updateUnplacedSidebarDropTarget(note, pointer);
+      setIsUnplacedSidebarDropTarget(false);
+      setUnplacedSidebarDropCount(0);
+      lastMarkerDragPointerRef.current = null;
+      if (isDropTarget) {
+        isMarkerDraggingRef.current = false;
+        ignoreNextMarkerClickRef.current = true;
+        window.setTimeout(() => {
+          ignoreNextMarkerClickRef.current = false;
+        }, 0);
+        moveMapNotesToUnplaced(draggedNoteIdsFor(note));
+        return;
+      }
       setNoteCoordOverrides((prev) => ({
         ...prev,
         [note.id]: { lat: latLng.lat, lng: latLng.lng }
@@ -1714,7 +1895,7 @@ export const MapView: React.FC<MapViewProps> = ({
         coords: { lat: latLng.lat, lng: latLng.lng }
       });
     },
-    [onUpdateNote]
+    [canModifyNote, denyEdit, draggedNoteIdsFor, moveMapNotesToUnplaced, onUpdateNote, updateUnplacedSidebarDropTarget]
   );
 
   
@@ -1728,16 +1909,22 @@ export const MapView: React.FC<MapViewProps> = ({
         variant: noteData.variant || existingNote!.variant,
         isFavorite: noteData.isFavorite ?? existingNote?.isFavorite ?? false
       } as Note;
+      if (!canModifyNote(fullNote)) {
+        denyEdit(fullNote);
+        return;
+      }
       await onUpdateNote(fullNote);
-      // Update editingNote to reflect the saved changes
-      setEditingNote(fullNote);
       setIntroNote((current) => (current?.id === fullNote.id ? fullNote : current));
     } else {
-      // 新Note必须指定variant
+      // Mapping 新建记录永远先进入 Board 待定箱。NoteEditor 会重新组装保存值，
+      // 因此在最终落库边界再次固定这个跨视图状态，避免草稿字段被遗漏。
       const fullNote: Note = {
         ...noteData,
         variant: noteData.variant || 'standard',
-        isFavorite: noteData.isFavorite ?? false
+        isFavorite: noteData.isFavorite ?? false,
+        boardX: 0,
+        boardY: 0,
+        isInitialPosition: directMapPlacement ? false : true
       } as Note;
       await onAddNote(fullNote);
       // For new notes, update editingNote as well
@@ -1797,12 +1984,17 @@ export const MapView: React.FC<MapViewProps> = ({
   const handleDeleteNoteWithExit = useCallback(
     async (noteId: string) => {
       if (!onDeleteNote || deletingNoteIdsRef.current.has(noteId)) return;
+      const note = notes.find((item) => item.id === noteId);
+      if (note && !canModifyNote(note)) {
+        denyEdit(note);
+        return;
+      }
       setEditingNote(null);
       setIsEditorOpen(false);
       onToggleEditor(false);
       await exitMapNote(noteId, true);
     },
-    [exitMapNote, onDeleteNote, onToggleEditor]
+    [canModifyNote, denyEdit, exitMapNote, notes, onDeleteNote, onToggleEditor]
   );
 
   // 侧栏「编辑」按钮或地图 label 双击：打开完整便签编辑器
@@ -1810,6 +2002,10 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!isUIVisible) return;
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
+    if (!canModifyNote(note)) {
+      denyEdit(note);
+      return;
+    }
 
     setPreSelectedNotes(null);
     setSelectedNoteIds(new Set([noteId]));
@@ -1818,7 +2014,7 @@ export const MapView: React.FC<MapViewProps> = ({
     setIsEditorOpen(true);
     onToggleEditor(true);
     closeMapChromeExcept();
-  }, [closeMapChromeExcept, isUIVisible, notes, onToggleEditor]);
+  }, [canModifyNote, closeMapChromeExcept, denyEdit, isUIVisible, notes, onToggleEditor]);
 
   const handleMapShiftBoxSelectClaimed = useCallback(() => {
     ignoreNextMapClickRef.current = true;
@@ -1908,59 +2104,6 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   }, [pendingPlaceNote, onMapClick, isUIVisible]);
 
-  const clearInspectorCoordOverride = useCallback((noteId: string) => {
-    setNoteCoordOverrides((prev) => {
-      const next = { ...prev };
-      delete next[noteId];
-      return next;
-    });
-  }, []);
-
-  const mapEditInspectorPanelProps = useMemo(
-    (): EditInspectorPanelProps => ({
-      note: inspectorNote,
-      groupContext: inspectorNote ? null : inspectorGroupContext,
-      coordMode: 'map',
-      themeColor,
-      panelChromeStyle: mapChromeSurface,
-      frames: project.frames ?? [],
-      connections,
-      notes,
-      hasConnectionWrite: !!onUpdateConnections,
-      onUpdateNote,
-      onEditConnection: handleEditMapConnection,
-      onNewConnection: handleNewConnectionFromInspector,
-      mapInstance,
-      noteCoordOverrides,
-      onClearCoordOverride: clearInspectorCoordOverride,
-      onOpenFullNoteEditor: handleEditNoteFromLabel,
-      onFocusPeerOnMap: (noteId: string) => {
-        const n = notes.find((x) => x.id === noteId);
-        if (!n?.coords || !mapInstance) return;
-        mapInstance.flyTo([n.coords.lat, n.coords.lng], Math.max(mapInstance.getZoom(), 15), { duration: 0.75 });
-      }
-    }),
-    [
-      inspectorNote,
-      inspectorGroupContext,
-      themeColor,
-      mapChromeSurface,
-      project.frames,
-      connections,
-      notes,
-      onUpdateConnections,
-      onUpdateNote,
-      handleEditMapConnection,
-      handleNewConnectionFromInspector,
-      handleEditNoteFromLabel,
-      mapInstance,
-      noteCoordOverrides,
-      clearInspectorCoordOverride
-    ]
-  );
-
-  useRegisterEditInspector(isUIVisible && isMapToolbarEditMode, mapEditInspectorPanelProps);
-
   const exportStandaloneMapTab = useCallback(async () => {
     if (!mapInstance) return;
     try {
@@ -1999,18 +2142,9 @@ export const MapView: React.FC<MapViewProps> = ({
       onDragEnter={rootProps.onDragEnter}
       onDragOver={rootProps.onDragOver}
       onDragLeave={rootProps.onDragLeave}
-      onDrop={rootProps.onDrop}
+      onDrop={handleMapShellDrop}
       onDragEnd={rootProps.onDragEnd}
     >
-      <ChromeDropOverlay
-        open={isDragging}
-        themeColor={themeColor}
-        chromeOpacity={mapUiChromeOpacity}
-        chromeBlurPx={mapUiChromeBlurPx}
-        title={isEditorOpen ? '拖入图片添加到便签' : '拖入图片、JSON 或 CSV 以导入'}
-        description={isEditorOpen ? '图片会加入当前便签' : '文件会导入当前项目'}
-        onDismiss={dismissDrag}
-      />
       <MapContainer 
         key={project.id}
         center={initialMapPosition?.center || defaultCenter}
@@ -2051,6 +2185,10 @@ export const MapView: React.FC<MapViewProps> = ({
         <MapNavigationHandler coords={navigateToCoords} onComplete={onNavigateComplete} />
         <MapPositionTracker onPositionChange={handleMapPositionChange} />
         <MapClickHandler onClick={handleMapClickInternal} />
+        <MapUnplacedNoteDropHandler
+          enabled={isUIVisible && isMapToolbarEditMode && unplacedMapNotes.length > 0}
+          onDropNotes={placeUnlocatedNotes}
+        />
         {isUIVisible && (
           <MapShiftBoxSelect
             enabled={isUIVisible}
@@ -2270,7 +2408,9 @@ export const MapView: React.FC<MapViewProps> = ({
         )}
 
         <MapLocationEnableBanner
-          visible={(needsLocationEnable || !isSecureContext) && !locationEnableDismissed && !locationError}
+          // `unknown` / `prompt` 时不抢在浏览器原生权限框前弹应用内窗口；
+          // 用户点定位、新建或拍照时会直接触发浏览器授权。仅明确拒绝或不安全环境才提示原因。
+          visible={(permissionStatus === 'denied' || !isSecureContext) && !locationEnableDismissed && !locationError}
           isRequesting={isRequestingLocation || locatingActive}
           insecureContext={!isSecureContext}
           themeColor={themeColor}
@@ -2309,6 +2449,7 @@ export const MapView: React.FC<MapViewProps> = ({
           selectedNoteIds={selectedNoteIds}
           isPreviewMode={!isUIVisible}
           isEditMode={isMapToolbarEditMode}
+          canEditNote={canEditNote}
           onMarkerDragEnd={handleMarkerDragEnd}
           onMarkerDrag={handleMarkerDrag}
           onMarkerLongPressDragStart={handleMarkerLongPressDragStart}
@@ -2318,60 +2459,12 @@ export const MapView: React.FC<MapViewProps> = ({
           noteMotionById={noteMotionById}
         />
 
-        {/* Import preview markers */}
-        {showImportDialog && importPreview.filter(p => !p.error && p.lat !== null && p.lng !== null).map((preview, index) => (
-          <Marker
-            key={`preview-${index}`}
-            position={[preview.lat, preview.lng]}
-            icon={L.divIcon({
-              className: 'custom-icon preview-marker',
-              html: `<div style="
-                position: relative;
-                background-color: ${themeColor}; 
-                width: 40px; 
-                height: 40px; 
-                border-radius: 50% 50% 50% 0; 
-                transform: rotate(-45deg);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-                border: 3px solid ${themeColor};
-                overflow: hidden;
-                opacity: 0.7;
-              ">
-                <div style="
-                  position: absolute;
-                  inset: 0;
-                  border-radius: 50% 50% 50% 0;
-                  overflow: hidden;
-                  transform: rotate(45deg);
-                ">
-                  <img src="${preview.imageUrl}" style="
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    transform: scale(1.2);
-                    transform-origin: center;
-                  " />
-                </div>
-              </div>`,
-              iconSize: [40, 40],
-              iconAnchor: [20, 40]
-            })}
-          />
-        ))}
-
         {isUIVisible && (
           <div
             data-allow-context-menu
             data-mapp-chrome-ui=""
-            className={`fixed top-2 sm:top-4 ui-workspace-left z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 sm:gap-3 pointer-events-none ${
+            className={`fixed top-2 z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 pointer-events-none sm:top-4 sm:gap-3 ui-workspace-left ${
               toolbarSlotKind ? 'map-toolbar--sheet-open' : ''
-            } ${
-              isMapToolbarEditMode
-                ? 'right-2 sm:right-4 lg:right-[calc(20rem+0.75rem)]'
-                : 'right-2 sm:right-4'
             }`}
           >
               <div
@@ -2406,8 +2499,10 @@ export const MapView: React.FC<MapViewProps> = ({
                     onCloseMenus={handleCloseLocateAndCreateMenus}
                     hostedWindow
                     compactViewport={compactViewport}
+                    compactUnplacedTrayOpen={isMapToolbarEditMode || isDragging}
+                    allowPhotoImport={allowPhotoImport}
                   />
-                  <MapLayerControl
+                  {showLayerControl ? <MapLayerControl
                     showPanel={showFrameLayerPanel}
                     onTogglePanel={handleToggleLayerPanel}
                     onClosePanel={handleCloseLayerPanel}
@@ -2425,10 +2520,10 @@ export const MapView: React.FC<MapViewProps> = ({
                     layerGroupStandard={graphLayerStandard}
                     hostedWindow
                     unifiedNotesLayerSlot={null}
-                  />
+                  /> : null}
                 </div>
                 <div
-                  className="flex h-10 sm:h-12 gap-1.5 sm:gap-2 pointer-events-auto items-center shrink-0"
+                  className="fixed right-2 top-2 z-[var(--z-map-toolbar)] flex h-10 shrink-0 items-center gap-1.5 pointer-events-auto sm:right-4 sm:top-4 sm:h-12 sm:gap-2"
                   onPointerDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
@@ -2508,13 +2603,7 @@ export const MapView: React.FC<MapViewProps> = ({
                           onLabelSizeChange={setLabelSize}
                           showTextLabels={showTextLabels}
                           onShowTextLabelsChange={setShowTextLabels}
-                          graphProject={project}
                           onExportHtml={() => void exportStandaloneMapTab()}
-                          onGraphProjectPatch={
-                            onUpdateProject
-                              ? (patch) => void onUpdateProject({ ...project, ...patch })
-                              : undefined
-                          }
                         />
                       )
                     };
@@ -2619,6 +2708,37 @@ export const MapView: React.FC<MapViewProps> = ({
         </div>
 
       </MapContainer>
+
+      {!directMapPlacement ? <UnplacedNotesSidebar
+        open={
+          isUIVisible &&
+          (isMapToolbarEditMode || isDragging)
+        }
+        notes={unplacedMapNotesWithMedia}
+        themeColor={themeColor}
+        chromeSurfaceStyle={mapChromeContentSurface}
+        panelRef={unplacedSidebarRef}
+        isDropTarget={isUnplacedSidebarDropTarget}
+        dropCount={unplacedSidebarDropCount}
+        isDark={mapChromeTone === 'dark'}
+        placementDragMime="application/x-mapp-unplaced-note"
+        onDeleteSelected={deleteUnplacedMapNotes}
+        onDropFiles={(files) => {
+          dismissDrag();
+          const items = Array.from(files);
+          const imageFiles = items.filter((file) =>
+            file.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp|gif|avif|tiff?)$/i.test(file.name)
+          );
+          if (imageFiles.length) {
+            handleImageImport(imageFiles, { target: { kind: 'unplaced' } });
+            return;
+          }
+          const dataFile = items.find((file) => file.type === 'application/json' || file.name.endsWith('.json'));
+          const csvFile = items.find((file) => file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv'));
+          if (dataFile) handleDataImport(dataFile);
+          else if (csvFile) handleCsvImport(csvFile);
+        }}
+      /> : null}
 
       {isUIVisible && initialTileProgress !== null ? (
         <div
@@ -2735,7 +2855,7 @@ export const MapView: React.FC<MapViewProps> = ({
                     initialNote={editingNote || {}}
                     isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
                     autoOpenCamera={editorAutoOpenCamera}
-                    onSwitchToBoardView={(coords) => onSwitchToBoardView(coords, mapInstance)}
+                    onSwitchToBoardView={(coords) => onSwitchToBoardView?.(coords, mapInstance)}
                     themeColor={themeColor}
                     mapUiChromeOpacity={mapUiChromeOpacity}
                     mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -2765,8 +2885,8 @@ export const MapView: React.FC<MapViewProps> = ({
                   onImageIndexChange={setCurrentPreviewImageIndex}
                   chromeAppearance={mapChromeTone}
                   themeColor={themeColor}
-                  onOpenEditor={handleEditNoteFromLabel}
-                  onDelete={isMapToolbarEditMode ? handleDeleteNoteWithExit : undefined}
+                  onOpenEditor={canModifyNote(stickySelectedNote) ? handleEditNoteFromLabel : undefined}
+                  onDelete={isMapToolbarEditMode && canModifyNote(stickySelectedNote) ? handleDeleteNoteWithExit : undefined}
                 />
               ) : null
             };
@@ -2819,21 +2939,15 @@ export const MapView: React.FC<MapViewProps> = ({
         }}
       />
 
-      <ImportPreviewDialog
-        isOpen={showImportDialog}
-        importPreview={importPreview}
-        themeColor={themeColor}
-        panelChromeStyle={mapChromeSurface}
-        onConfirm={handleConfirmImport}
-        onCancel={handleCancelImport}
-        isConfirming={isConfirmingImport}
-        isPreparing={isPreparingImport}
-        progress={importProgress}
-        message={importMessage}
-        hasImportError={hasImportError}
-        onRetryPreparation={handleRetryPreparation}
-        showCoordinates={true}
-      />
+      {photoImportNotice ? (
+        <div
+          role="status"
+          className="fixed bottom-20 left-1/2 z-[2500] w-[min(calc(100vw-2rem),25rem)] -translate-x-1/2 rounded-xl border border-white/60 px-4 py-3 text-center text-sm font-medium text-gray-800 shadow-lg"
+          style={mapChromeContentSurface}
+        >
+          {photoImportNotice}
+        </div>
+      ) : null}
 
       {/* Settings hosted by ChromeToolbarSlot */}
 

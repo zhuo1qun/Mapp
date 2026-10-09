@@ -1,11 +1,8 @@
 import { get, set, del, keys } from 'idb-keyval';
 import { Project, Note } from '../../types';
-import type { NoteImageRef, ProjectKind } from '../../types';
-import type { GraphLayoutMode } from '../graph/graphRuntimeCore';
-import { normalizeProjectConnections } from '../graph/graphData';
-import { sanitizeProjectKind } from '../projectKind';
+import type { Connection, Frame, NoteImageRef, ProjectKind, SyncEntityMetadata } from '../../types';
+import { normalizeProjectConnections } from '../connections/connectionData';
 import { normalizeNotesToSingleFrame } from '../frame/noteFrameMembership';
-import { coerceGraphLayoutMode } from '../graph/graphRuntimeCore';
 import {
   IMAGE_PREFIX,
   SKETCH_PREFIX,
@@ -20,14 +17,16 @@ import {
   writeMediaRecordFromDataUrl
 } from './imageAssetStore';
 import { ensureNoteMediaSynced } from './noteMediaSync';
+import { enqueueLocalChanges } from './localChangeQueue';
 
 // Storage keys
 const PROJECT_LIST_KEY = 'mapp-project-list';
 const PROJECT_PREFIX = 'mapp-project-';
+const PROJECT_SUMMARY_PREFIX = 'mapp-project-summary-';
 const BACKGROUND_IMAGE_PREFIX = 'mapp-bg-';
 const STORAGE_VERSION_KEY = 'mapp-storage-version';
-/** v3：图片以 Blob+ImageAsset 存储；Note 持有 imageRefs / asset id */
-const CURRENT_STORAGE_VERSION = 3;
+/** v4：保留 v3 的 Blob 媒体资产，并为可同步实体补齐 revision / outbox。 */
+const CURRENT_STORAGE_VERSION = 4;
 
 /** 连线规范化（删孤儿边、箭头方向修正）后待写回 IndexedDB 的项目 id */
 const projectIdsPendingConnectionMigration = new Set<string>();
@@ -59,35 +58,10 @@ export function setViewPositionCache(projectId: string, viewType: 'map' | 'board
   }
 }
 
-const getGraphLayoutCacheKey = (projectId: string): string => `mapp-graph-layout-${projectId}`;
-
-export function getGraphLayoutCache(projectId: string): GraphLayoutMode | null {
-  if (!projectId) return null;
-  try {
-    const raw = sessionStorage.getItem(getGraphLayoutCacheKey(projectId));
-    if (raw === 'time' || raw === 'cose') return raw;
-    // 历史 frameCluster → 由 coerceGraphLayoutMode 统一回退
-    if (raw === 'frameCluster') return coerceGraphLayoutMode(raw);
-  } catch (err) {
-    console.warn('Failed to load graph layout cache', err);
-  }
-  return null;
-}
-
-export function setGraphLayoutCache(projectId: string, mode: GraphLayoutMode): void {
-  if (!projectId) return;
-  try {
-    sessionStorage.setItem(getGraphLayoutCacheKey(projectId), mode);
-  } catch (err) {
-    console.warn('Failed to save graph layout cache', err);
-  }
-}
-
 export function clearViewPositionCache(projectId: string): void {
   try {
     sessionStorage.removeItem(getViewPositionCacheKey(projectId, 'map'));
     sessionStorage.removeItem(getViewPositionCacheKey(projectId, 'board'));
-    sessionStorage.removeItem(getGraphLayoutCacheKey(projectId));
   } catch (err) {
     console.warn('Failed to clear view position cache', err);
   }
@@ -1508,12 +1482,11 @@ export async function cleanBrokenReferences(notes: Note[]): Promise<Note[]> {
 function ensureProjectCompatibility(project: Project): Project {
   const fixedProject = { ...project };
   
-  // 历史图片背景模式已移除；保留合法 projectKind，无效值清掉以便首次打开询问（不静默猜测）
+  // Mapping 已不再承载 Graph 工作流。未分型的历史项目均按 Mapping 打开；
+  // 标记为 graph 的旧项目会在读取项目列表前由 purgeLegacyGraphProjects 删除。
   fixedProject.type = 'map';
   delete fixedProject.backgroundImage;
-  const kind = sanitizeProjectKind(fixedProject.projectKind);
-  if (kind) fixedProject.projectKind = kind;
-  else delete fixedProject.projectKind;
+  fixedProject.projectKind = 'mapping';
   
   // 确保 notes 数组存在
   if (!fixedProject.notes) {
@@ -1524,10 +1497,6 @@ function ensureProjectCompatibility(project: Project): Project {
   fixedProject.notes = normalizeNotesToSingleFrame(
     fixedProject.notes.map((n) => ensureNoteMediaSynced(ensureNoteVariant(n)))
   );
-
-  if (fixedProject.graphDefaultLayoutMode != null) {
-    fixedProject.graphDefaultLayoutMode = coerceGraphLayoutMode(fixedProject.graphDefaultLayoutMode);
-  }
 
   const { project: withConnections, mutated: connectionsMutated } = normalizeProjectConnections(fixedProject);
   if (connectionsMutated) {
@@ -1562,8 +1531,129 @@ function scheduleConnectionMigrationPersist(project: Project): void {
   }, 0);
 }
 
-// 保存项目（分片存储，图片分离）；返回已迁移为引用的 Project，供内存态使用
+type SyncableProjectEntity = (Note | Frame | Connection) & SyncEntityMetadata;
+
+function withoutSyncMetadata<T extends SyncEntityMetadata>(entity: T): Record<string, unknown> {
+  const { updatedAt: _updatedAt, revision: _revision, ...payload } = entity as T & Record<string, unknown>;
+  return payload;
+}
+
+function projectPayload(project: Project): Record<string, unknown> {
+  const {
+    notes: _notes,
+    frames: _frames,
+    connections: _connections,
+    version: _version,
+    storageVersion: _storageVersion,
+    updatedAt: _updatedAt,
+    revision: _revision,
+    ...payload
+  } = project;
+  return payload;
+}
+
+function changedSince<T extends SyncEntityMetadata>(
+  next: T,
+  previous?: T
+): boolean {
+  if (!previous || previous.updatedAt == null || previous.revision == null) return true;
+  return JSON.stringify(withoutSyncMetadata(next)) !== JSON.stringify(withoutSyncMetadata(previous));
+}
+
+function stampEntity<T extends SyncableProjectEntity>(
+  entity: T,
+  previous: T | undefined,
+  now: number
+): T {
+  if (changedSince(entity, previous)) {
+    return {
+      ...entity,
+      updatedAt: now,
+      revision: Math.max(entity.revision || 0, previous?.revision || 0) + 1
+    };
+  }
+  return {
+    ...entity,
+    updatedAt: entity.updatedAt ?? previous?.updatedAt,
+    revision: entity.revision ?? previous?.revision
+  };
+}
+
+function stampEntities<T extends SyncableProjectEntity>(
+  entities: T[] | undefined,
+  previousEntities: T[] | undefined,
+  now: number
+): T[] | undefined {
+  if (!entities) return entities;
+  const previousById = new Map((previousEntities || []).map((entity) => [entity.id, entity]));
+  return entities.map((entity) => stampEntity(entity, previousById.get(entity.id), now));
+}
+
+function collectEntityChanges<T extends SyncableProjectEntity>(
+  projectId: string,
+  entity: 'note' | 'frame' | 'connection',
+  nextEntities: T[] | undefined,
+  previousEntities: T[] | undefined,
+  now: number
+): Array<{
+  projectId: string;
+  entity: 'note' | 'frame' | 'connection';
+  entityId: string;
+  operation: 'upsert' | 'delete';
+  revision: number;
+  occurredAt: number;
+  deletedAt?: number;
+  payload?: Record<string, unknown>;
+}> {
+  const changes: Array<{
+    projectId: string;
+    entity: 'note' | 'frame' | 'connection';
+    entityId: string;
+    operation: 'upsert' | 'delete';
+    revision: number;
+    occurredAt: number;
+    deletedAt?: number;
+    payload?: Record<string, unknown>;
+  }> = [];
+  const previousById = new Map((previousEntities || []).map((item) => [item.id, item]));
+  const nextById = new Map((nextEntities || []).map((item) => [item.id, item]));
+
+  for (const item of nextEntities || []) {
+    const previous = previousById.get(item.id);
+    if (changedSince(item, previous)) {
+      changes.push({
+        projectId,
+        entity,
+        entityId: item.id,
+        operation: 'upsert',
+        revision: item.revision || 1,
+        occurredAt: now,
+        payload: withoutSyncMetadata(item)
+      });
+    }
+  }
+
+  for (const previous of previousEntities || []) {
+    if (nextById.has(previous.id)) continue;
+    changes.push({
+      projectId,
+      entity,
+      entityId: previous.id,
+      operation: 'delete',
+      revision: (previous.revision || 0) + 1,
+      occurredAt: now,
+      deletedAt: now
+    });
+  }
+  return changes;
+}
+
+// 保存项目（分片存储，图片分离）。同时记录实体级 outbox，供未来共享地图增量同步使用。
 export async function saveProject(project: Project): Promise<Project> {
+  const previousStored = await get<Project>(`${PROJECT_PREFIX}${project.id}`);
+  const previous = previousStored ? ensureProjectCompatibility(previousStored) : undefined;
+  const now = Date.now();
+
   // 0. 确保项目数据兼容性
   const compatibleProject = ensureProjectCompatibility(project);
   
@@ -1574,16 +1664,34 @@ export async function saveProject(project: Project): Promise<Project> {
   migratedProject.notes = await Promise.all(
     compatibleProject.notes.map(note => migrateNoteImages(note))
   );
-  
+
+  migratedProject.notes = stampEntities(migratedProject.notes, previous?.notes, now) || [];
+  migratedProject.frames = stampEntities(migratedProject.frames, previous?.frames, now) as Frame[] | undefined;
+  migratedProject.connections = stampEntities(
+    migratedProject.connections,
+    previous?.connections,
+    now
+  ) as Connection[] | undefined;
+
+  const projectChanged = !previous ||
+    previous.updatedAt == null ||
+    previous.revision == null ||
+    JSON.stringify(projectPayload(migratedProject)) !== JSON.stringify(projectPayload(previous));
+
   // 2. 添加版本号
   const projectWithVersion: Project = {
     ...migratedProject,
     version: Date.now(), // 使用时间戳作为版本号
-    storageVersion: CURRENT_STORAGE_VERSION
+    storageVersion: CURRENT_STORAGE_VERSION,
+    updatedAt: projectChanged ? now : migratedProject.updatedAt ?? previous?.updatedAt,
+    revision: projectChanged
+      ? Math.max(migratedProject.revision || 0, previous?.revision || 0) + 1
+      : migratedProject.revision ?? previous?.revision
   };
   
   // 3. 保存项目数据（不包含 Base64 图片）
   await set(`${PROJECT_PREFIX}${project.id}`, projectWithVersion);
+  await set(projectSummaryKey(project.id), buildProjectSummary(projectWithVersion));
   
   // 4. 更新项目列表
   const projectList = await get<string[]>(PROJECT_LIST_KEY) || [];
@@ -1591,6 +1699,24 @@ export async function saveProject(project: Project): Promise<Project> {
     projectList.push(project.id);
     await set(PROJECT_LIST_KEY, projectList);
   }
+
+  const changes = [
+    ...(projectChanged
+      ? [{
+          projectId: project.id,
+          entity: 'project' as const,
+          entityId: project.id,
+          operation: 'upsert' as const,
+          revision: projectWithVersion.revision || 1,
+          occurredAt: now,
+          payload: projectPayload(projectWithVersion)
+        }]
+      : []),
+    ...collectEntityChanges(project.id, 'note', projectWithVersion.notes, previous?.notes, now),
+    ...collectEntityChanges(project.id, 'frame', projectWithVersion.frames, previous?.frames, now),
+    ...collectEntityChanges(project.id, 'connection', projectWithVersion.connections, previous?.connections, now)
+  ];
+  await enqueueLocalChanges(changes);
 
   return projectWithVersion;
 }
@@ -1634,44 +1760,53 @@ export interface ProjectSummary {
   hasSketches: boolean;
 }
 
+function projectSummaryKey(projectId: string): string {
+  return `${PROJECT_SUMMARY_PREFIX}${projectId}`;
+}
+
+function buildProjectSummary(project: Project): ProjectSummary {
+  let hasImages = false;
+  let hasSketches = false;
+  for (const note of project.notes) {
+    if (note.images && note.images.length > 0) hasImages = true;
+    if (note.sketch) hasSketches = true;
+    if (hasImages && hasSketches) break;
+  }
+  return {
+    id: project.id,
+    name: project.name,
+    type: project.type,
+    projectKind: project.projectKind,
+    createdAt: project.createdAt,
+    notesCount: project.notes.length,
+    hasImages,
+    hasSketches
+  };
+}
+
 export async function loadProjectSummaries(): Promise<ProjectSummary[]> {
   const projectIds = await loadProjectList();
   const summaries: ProjectSummary[] = [];
 
   for (const projectId of projectIds) {
     try {
-  const project = await loadProject(projectId, false);
-  if (project) {
-        // 计算项目统计信息
-        let hasImages = false;
-        let hasSketches = false;
+      const cached = await get<ProjectSummary>(projectSummaryKey(projectId));
+      if (cached) {
+        summaries.push(cached);
+        continue;
+      }
 
-    for (const note of project.notes) {
-          if (note.images && note.images.length > 0) {
-            hasImages = true;
-          }
-          if (note.sketch) {
-            hasSketches = true;
-          }
-          // 如果都找到了就可以提前退出
-          if (hasImages && hasSketches) break;
-        }
-
-        summaries.push({
-          id: project.id,
-          name: project.name,
-          type: project.type,
-          projectKind: project.projectKind,
-          createdAt: project.createdAt,
-          notesCount: project.notes.length,
-          hasImages,
-          hasSketches
-        });
+      // 旧项目尚未写入摘要：只在第一次列表读取时回退计算并补齐缓存。
+      const project = await loadProject(projectId, false);
+      if (project) {
+        const summary = buildProjectSummary(project);
+        await set(projectSummaryKey(projectId), summary);
+        summaries.push(summary);
       }
     } catch (error) {
       console.error(`Failed to load project summary for ${projectId}:`, error);
-          }
-        }
+    }
+  }
 
   return summaries;
 }
@@ -1687,12 +1822,27 @@ export async function loadAllProjects(loadImages: boolean = false): Promise<Proj
     
 // 删除项目
 export async function deleteProject(projectId: string): Promise<void> {
+  const project = await get<Project>(`${PROJECT_PREFIX}${projectId}`);
+  const deletedAt = Date.now();
+
   // 首先删除项目数据和更新列表（快速操作）
   await del(`${PROJECT_PREFIX}${projectId}`);
+  await del(projectSummaryKey(projectId));
   
   const projectList = await loadProjectList();
   const updatedList = projectList.filter(id => id !== projectId);
   await set(PROJECT_LIST_KEY, updatedList);
+
+  // 实体不再保留在活跃项目中，但删除 tombstone 会留在 outbox，直到未来云端确认。
+  await enqueueLocalChanges([{
+    projectId,
+    entity: 'project',
+    entityId: projectId,
+    operation: 'delete',
+    revision: (project?.revision || 0) + 1,
+    occurredAt: deletedAt,
+    deletedAt
+  }]);
 
   // 异步清理项目相关的媒体文件（不阻塞UI）
   setTimeout(async () => {
@@ -1718,6 +1868,25 @@ export async function deleteProject(projectId: string): Promise<void> {
       console.warn(`Failed to cleanup files for deleted project ${projectId}:`, error);
     }
   }, 100);
+}
+
+/**
+ * Mapping 不再支持 Graph 项目。启动时直接删除旧图谱项目及其索引记录；
+ * deleteProject 会继续处理关联媒体引用和本地变更 tombstone。
+ */
+export async function purgeLegacyGraphProjects(): Promise<number> {
+  const projectIds = await loadProjectList();
+  let removed = 0;
+
+  // 必须串行：deleteProject 会读写同一份项目 id 列表，并行会互相覆盖更新。
+  for (const projectId of projectIds) {
+    const rawProject = await get<{ projectKind?: unknown }>(`${PROJECT_PREFIX}${projectId}`);
+    if (rawProject?.projectKind !== 'graph') continue;
+    await deleteProject(projectId);
+    clearViewPositionCache(projectId);
+    removed += 1;
+  }
+  return removed;
 }
 
 // 数据迁移：从旧格式迁移到新格式

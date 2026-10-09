@@ -39,6 +39,10 @@ export interface UseBoardNoteDragArgs {
   onBrowseLongPressStartEdit: (note: Note) => void;
   /** 编辑态拖动单张便签时，与多选共用选中描边/工具栏。 */
   onBeginSingleNoteDrag?: (noteId: string) => void;
+  /** 画布右侧待定箱等外部拖放目标可借此获得悬停反馈。 */
+  onNoteDragPointerMove?: (note: Note, pointer: { clientX: number; clientY: number }) => void;
+  /** 松开时返回 true 则由外部目标接管，不再提交画布坐标。 */
+  onDropNoteToExternalTarget?: (note: Note, pointer: { clientX: number; clientY: number }) => boolean;
 }
 
 /**
@@ -63,7 +67,9 @@ export function useBoardNoteDrag({
   cacheDragRect,
   onBrowseOpenEditor,
   onBrowseLongPressStartEdit,
-  onBeginSingleNoteDrag
+  onBeginSingleNoteDrag,
+  onNoteDragPointerMove,
+  onDropNoteToExternalTarget
 }: UseBoardNoteDragArgs) {
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -283,6 +289,13 @@ export function useBoardNoteDrag({
       if (isMultiSelectDragging) {
         e.stopPropagation();
         e.preventDefault();
+        const firstSelectedNote = notes.find((note) => selectedNoteIds.has(note.id));
+        if (firstSelectedNote) {
+          onNoteDragPointerMove?.(firstSelectedNote, {
+            clientX: e.clientX,
+            clientY: e.clientY
+          });
+        }
         setMultiSelectDragOffset((prev) => ({ x: prev.x + worldDx, y: prev.y + worldDy }));
         return;
       }
@@ -290,6 +303,10 @@ export function useBoardNoteDrag({
       if (!draggingNoteId) return;
       e.stopPropagation();
       e.preventDefault();
+      const draggedNote = notes.find((note) => note.id === draggingNoteId);
+      if (draggedNote) {
+        onNoteDragPointerMove?.(draggedNote, { clientX: e.clientX, clientY: e.clientY });
+      }
       setDragOffset((prev) => ({ x: prev.x + worldDx, y: prev.y + worldDy }));
     },
     [
@@ -298,8 +315,11 @@ export function useBoardNoteDrag({
       transformScale,
       isMultiSelectDragging,
       draggingNoteId,
+      notes,
+      selectedNoteIds,
       clearNotePressTracking,
-      clearLongPressTimer
+      clearLongPressTimer,
+      onNoteDragPointerMove
     ]
   );
 
@@ -319,6 +339,12 @@ export function useBoardNoteDrag({
 
         dragPointerPosRef.current = null;
         clearNotePressTracking();
+
+        if (onDropNoteToExternalTarget?.(note, { clientX: e.clientX, clientY: e.clientY })) {
+          resetDragVisual();
+          promotedTouchDragNoteIdRef.current = null;
+          return;
+        }
 
         if (multiSelectDragOffset.x === 0 && multiSelectDragOffset.y === 0) {
           resetDragVisual();
@@ -359,6 +385,20 @@ export function useBoardNoteDrag({
       const hasMovedEnough = movedDistance > EDIT_DRAG_COMMIT_MOVE_PX;
 
       if (draggingNoteId === note.id && !isZoomingRef.current && isEditingDrag) {
+        if (onDropNoteToExternalTarget?.(note, { clientX: e.clientX, clientY: e.clientY })) {
+          e.stopPropagation();
+          e.preventDefault();
+          try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          } catch {
+            /* pointer capture may already be released */
+          }
+          dragPointerPosRef.current = null;
+          clearNotePressTracking();
+          resetDragVisual();
+          promotedTouchDragNoteIdRef.current = null;
+          return;
+        }
         if (hasMoved || hasMovedEnough) {
           e.stopPropagation();
           try {
@@ -437,7 +477,8 @@ export function useBoardNoteDrag({
       isShiftPressed,
       onBrowseOpenEditor,
       armSettleFallback,
-      clearLongPressTimer
+      clearLongPressTimer,
+      onDropNoteToExternalTarget
     ]
   );
 

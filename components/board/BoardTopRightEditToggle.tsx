@@ -11,8 +11,6 @@ type Props = {
   chromeHoverBackground?: string;
   onEnterEditMode: () => void;
   onExitEditMode: () => void;
-  /** 与右侧属性面板错开：lg 为 w-80 面板 + 0.75rem 间距（子元素 margin 无法改变 fixed 容器的 right） */
-  reserveRightForInspector?: boolean;
 };
 
 function darkenHex(hex: string, factor = 0.9): string {
@@ -38,19 +36,14 @@ export const BoardTopRightEditToggle: React.FC<Props> = ({
   chromeSurfaceStyle,
   chromeHoverBackground,
   onEnterEditMode,
-  onExitEditMode,
-  reserveRightForInspector = false
+  onExitEditMode
 }) => {
   if (!isUIVisible) return null;
 
   return (
     <div
       data-allow-context-menu
-      className={`fixed top-2 sm:top-4 z-[500] hidden h-10 sm:h-12 gap-3 pointer-events-auto items-center sm:flex ${
-        reserveRightForInspector
-          ? 'right-2 sm:right-4 lg:right-[calc(20rem+0.75rem)]'
-          : 'right-2 sm:right-4'
-      }`}
+      className="fixed right-2 top-2 z-[500] hidden h-10 items-center gap-3 pointer-events-auto sm:right-4 sm:top-4 sm:h-12 sm:flex"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >

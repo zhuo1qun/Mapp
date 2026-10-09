@@ -194,7 +194,6 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
           themeColor={themeColor}
           panelChromeStyle={panelChromeStyle}
           chromeAppearance={chromeAppearance}
-          title={editingTagId ? '编辑标签' : '添加标签'}
           label={newTagLabel}
           onLabelChange={setNewTagLabel}
           selectedColor={newTagColor}
@@ -204,6 +203,7 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
           portalPlacement={tagPanelPos}
           portalBackdrop
           portalPanelRef={tagPanelPortalRef}
+          applyLabel="完成"
           autoFocus
           onInputKeyDown={(e) => {
             if (e.key === 'Enter') onSaveTag();

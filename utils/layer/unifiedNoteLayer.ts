@@ -1,6 +1,7 @@
 import type { Frame, GraphLayerState, Note, TagVisibilityLogic } from '../../types';
-import { GRAPH_UNTAGGED_TAG_GROUP } from '../graph/graphRuntimeCore';
-import type { GraphLayerGroupStandard } from '../graph/graphRuntimeCore';
+import { UNTYPED_NOTE_LAYER_GROUP } from './noteLayerState';
+import type { NoteLayerGroupStandard } from './noteLayerState';
+import { isNoteMapPlaced } from '../note/notePlacement';
 
 /** 没有 emoji 的便签在 Emoji 图层中的稳定分组键。 */
 export const GRAPH_UNEMOJI_GROUP = '无 Emoji';
@@ -13,13 +14,7 @@ export function normalizeTagVisibilityLogic(raw?: string | null): TagVisibilityL
  * 地图可绘制的地理坐标：standard / image 且有效数字、非占位 0,0（无坐标/仅白板数据的导入使用 0,0）。
  */
 export function noteHasRenderableMapPosition(note: Note): boolean {
-  if (note.variant !== 'standard' && note.variant !== 'image') return false;
-  const c = note.coords;
-  if (!c || typeof c.lat !== 'number' || typeof c.lng !== 'number' || isNaN(c.lat) || isNaN(c.lng)) {
-    return false;
-  }
-  if (c.lat === 0 && c.lng === 0) return false;
-  return true;
+  return (note.variant === 'standard' || note.variant === 'image') && isNoteMapPlaced(note);
 }
 
 export function truncateRawTextLabel(text: string, maxLen = 56): string {
@@ -44,7 +39,7 @@ export function noteTagLabels(note: Note): string[] {
 export function noteTagLayerGroupKey(note: Note): string {
   const raw = note.tags?.[0]?.label?.trim() ?? '';
   if (raw !== '') return raw;
-  return GRAPH_UNTAGGED_TAG_GROUP;
+  return UNTYPED_NOTE_LAYER_GROUP;
 }
 
 /** Emoji 是与标签、簇并列的图层分组依据，不再拼入标签层键。 */
@@ -99,12 +94,12 @@ export function effectiveFrameGroupKeyForNote(note: Note, hiddenSet: Set<string>
 export function noteBelongsToLayerGroupKey(
   note: Note,
   groupKey: string,
-  standard: GraphLayerGroupStandard
+  standard: NoteLayerGroupStandard
 ): boolean {
   const k = String(groupKey).trim();
   if (standard === 'tag') {
     const labels = noteTagLabels(note);
-    if (k === '' || k === GRAPH_UNTAGGED_TAG_GROUP) return labels.length === 0;
+    if (k === '' || k === UNTYPED_NOTE_LAYER_GROUP) return labels.length === 0;
     return labels.includes(k);
   }
   if (standard === 'emoji') return noteEmojiLayerGroupKey(note) === k;
@@ -122,7 +117,7 @@ export function noteBelongsToLayerGroupKey(
 export function isNoteVisibleInUnifiedLayer(
   note: Note,
   merged: GraphLayerState,
-  standard: GraphLayerGroupStandard
+  standard: NoteLayerGroupStandard
 ): boolean {
   if (note.layerItemHidden) return false;
   const hiddenSet = new Set((merged.hidden ?? []).map((h) => String(h).trim()));
@@ -149,19 +144,19 @@ export function noteVisibleByTagHiddenSet(
   logic: TagVisibilityLogic = 'or'
 ): boolean {
   const labels = noteTagLabels(note);
-  if (labels.length === 0) return !tagHidden.has(GRAPH_UNTAGGED_TAG_GROUP);
+  if (labels.length === 0) return !tagHidden.has(UNTYPED_NOTE_LAYER_GROUP);
   if (logic === 'and') return labels.every((l) => !tagHidden.has(l));
   return labels.some((l) => !tagHidden.has(l));
 }
 
 export function groupDisplayLabel(
   key: string,
-  standard: GraphLayerGroupStandard,
+  standard: NoteLayerGroupStandard,
   framesById: Map<string, Frame>
 ): string {
   const k = String(key).trim();
   if (standard === 'tag') {
-    if (k === '' || k === GRAPH_UNTAGGED_TAG_GROUP) return '无标签';
+    if (k === '' || k === UNTYPED_NOTE_LAYER_GROUP) return '无标签';
     return k;
   }
   if (standard === 'emoji') return k === GRAPH_UNEMOJI_GROUP ? '无 Emoji' : k;
