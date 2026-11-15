@@ -124,6 +124,17 @@ export interface CanvasImagePlacement {
 /** 便签对图片的引用：资产 + 可选派生 Variant（贴纸/裁剪等） */
 export interface NoteImageRef {
   assetId: string;
+  /** 图片来源；旧数据缺省时按 local 解释。remote 可先引用，之后再缓存为本地资产。 */
+  source?:
+    | { kind: 'local' }
+    | {
+        kind: 'remote';
+        url: string;
+        cachedAssetId?: string;
+        cachedAt?: number;
+        cacheStatus?: 'none' | 'pending' | 'ready' | 'failed';
+        thumbnailUrl?: string;
+      };
   variantId?: string;
   /**
    * 是否使用 variant 展示。false 时保留裁剪数据但显示原图；缺省视为 true。
@@ -141,9 +152,23 @@ export interface NoteMediaItem {
   kind: NoteMediaKind;
   /** 资产 id（`img-…`）；涂鸦也走资产存储 */
   assetId: string;
+  /** 与 imageRefs.source 相同；保留 assetId 以兼容现有媒体排序与迁移代码。 */
+  source?: NoteImageRef['source'];
   variantId?: string;
   /** false 时保留裁剪数据但显示原图；缺省视为 true */
   variantEnabled?: boolean;
+}
+
+export interface LinkPreview {
+  url: string;
+  canonicalUrl?: string;
+  title?: string;
+  description?: string;
+  siteName?: string;
+  faviconUrl?: string;
+  imageUrl?: string;
+  fetchedAt?: number;
+  status?: 'pending' | 'ready' | 'failed';
 }
 
 /**
@@ -161,6 +186,8 @@ export interface Note extends SyncEntityMetadata {
   coords: Coordinates;
   emoji: string;
   text: string;
+  /** 网页链接的结构化预览；正文仍保留可读 URL，兼容旧视图与导出。 */
+  linkPreview?: LinkPreview;
   fontSize: number; // 1 to 5 scale
   isBold?: boolean;
   isFavorite?: boolean; // 收藏标记
@@ -214,6 +241,8 @@ export interface Note extends SyncEntityMetadata {
   
   // Layout scale for board view
   layoutScale?: number; // Scale factor for layout (default 1)
+  /** Board 文本便签尺寸；缺省为 standard。图片贴纸仍由 imageWidth/imageHeight 决定。 */
+  boardSize?: 'standard' | 'expanded';
 
   // Lightweight note group (not a visual Frame; used for multi-select auto-group)
   noteGroupId?: string;

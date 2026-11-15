@@ -251,12 +251,22 @@ export function mapChromeSurfaceInlineCss(opacity: number, blurPx: number): stri
 export function mapChromeTextLabelInlineCss(
   opacity: number,
   blurPx: number,
-  themeColor: string
+  themeColor: string,
+  appearance: MapChromeAppearance = 'light'
 ): string {
   const themeRgb = parseHexToRgb(themeColor);
   if (!themeRgb) return mapChromeSurfaceInlineCss(opacity, blurPx);
 
   const o = Math.min(1, Math.max(0, opacity));
+  if (appearance === 'dark') {
+    return [
+      mapChromeSurfaceInlineCss(o, blurPx),
+      'background-color:transparent',
+      `background-image:linear-gradient(180deg,rgba(15,23,42,var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(15,23,42,var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
+      `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${Math.min(0.58, o * 0.65)})`
+    ].join(';');
+  }
+
   // 使用白色与主题色的预混色，避免纯主题色半透明叠在深色底图上后显脏或降低可读性。
   const tint = 0.13;
   const background = [themeRgb.r, themeRgb.g, themeRgb.b]

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useCompactViewport } from '../../utils/ui/useCompactViewport';
 
 const PORT_RADIUS = 4.5;
+const LINK_COLOR = '#9ca3af';
 
 function cssEscape(value: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
@@ -48,6 +49,38 @@ function sourceWindowFor(src: HTMLElement): HTMLElement | null {
   );
 }
 
+function anchorPoint(
+  host: HTMLElement,
+  rect: DOMRectReadOnly,
+  side: 'left' | 'right'
+): { x: number; y: number } {
+  return viewportToLocal(
+    host,
+    side === 'left' ? rect.left : rect.right,
+    rect.top + rect.height / 2
+  );
+}
+
+function linkBetweenAnchors(
+  host: HTMLElement,
+  sourceAnchor: HTMLElement,
+  destinationAnchor: HTMLElement
+): LinkGeom | null {
+  const sourceRect = sourceAnchor.getBoundingClientRect();
+  const destinationRect = destinationAnchor.getBoundingClientRect();
+  if (!isUsableRect(sourceRect) || !isUsableRect(destinationRect)) return null;
+
+  const from = anchorPoint(host, sourceRect, 'right');
+  const to = anchorPoint(host, destinationRect, 'left');
+  return {
+    d: cubicHorizontal(from.x, from.y, to.x, to.y),
+    x1: from.x,
+    y1: from.y,
+    x2: to.x,
+    y2: to.y
+  };
+}
+
 function measureLinks(host: HTMLElement, sourceNoteId: string): LinkGeom[] {
   const src = document.querySelector<HTMLElement>(
     `[data-workspace-link-source="${cssEscape(sourceNoteId)}"]`
@@ -61,6 +94,9 @@ function measureLinks(host: HTMLElement, sourceNoteId: string): LinkGeom[] {
   const destRect = dest.getBoundingClientRect();
   if (!isUsableRect(srcRect) || !isUsableRect(destRect)) return [];
 
+  const destinationAnchor = dest.querySelector<HTMLElement>('[data-workspace-link-anchor="note-editor-title"]');
+  const destinationAnchorRect = destinationAnchor?.getBoundingClientRect();
+
   const sourceWindow = sourceWindowFor(src);
   const windowRect = sourceWindow?.getBoundingClientRect();
   if (windowRect) {
@@ -68,13 +104,18 @@ function measureLinks(host: HTMLElement, sourceNoteId: string): LinkGeom[] {
   }
 
   const fromY = srcRect.top + srcRect.height / 2;
-  const destY = Math.min(Math.max(fromY, destRect.top + 18), destRect.bottom - 18);
-  // 起点落在源窗口右缘，终点落在目标窗口左缘，避免记在行内边距上显得偏左。
+  // 编辑器始终接在标题栏左侧，避免来源行切换时终点沿窗口边缘跳动。
+  const destY = destinationAnchorRect && isUsableRect(destinationAnchorRect)
+    ? destinationAnchorRect.top + destinationAnchorRect.height / 2
+    : destRect.top + 18;
+  // 起点落在源窗口右缘，终点落在编辑器标题栏左缘。
   const fromX = windowRect ? windowRect.right : srcRect.right;
-  const toX = destRect.left;
+  const toX = destinationAnchorRect && isUsableRect(destinationAnchorRect)
+    ? destinationAnchorRect.left
+    : destRect.left;
   const from = viewportToLocal(host, fromX, fromY);
   const to = viewportToLocal(host, toX, destY);
-  return [
+  const links: LinkGeom[] = [
     {
       d: cubicHorizontal(from.x, from.y, to.x, to.y),
       x1: from.x,
@@ -83,11 +124,30 @@ function measureLinks(host: HTMLElement, sourceNoteId: string): LinkGeom[] {
       y2: to.y
     }
   ];
+
+  // 辅助窗口不再从 NoteEditor 扇出。媒体详情只表达它与媒体窗口的直接关系。
+  const mediaWindow = document.querySelector<HTMLElement>(
+    '[data-workspace-link-target="editor-media"]'
+  );
+  const mediaDetailWindow = document.querySelector<HTMLElement>(
+    '[data-workspace-link-target="media-detail"]'
+  );
+  const mediaAnchor = mediaWindow?.querySelector<HTMLElement>(
+    '[data-workspace-link-anchor="editor-media-title"]'
+  );
+  const mediaDetailAnchor = mediaDetailWindow?.querySelector<HTMLElement>(
+    '[data-workspace-link-anchor="media-detail-title"]'
+  );
+  if (mediaAnchor && mediaDetailAnchor) {
+    const mediaDetailLink = linkBetweenAnchors(host, mediaAnchor, mediaDetailAnchor);
+    if (mediaDetailLink) links.push(mediaDetailLink);
+  }
+
+  return links;
 }
 
 type WorkspaceWindowLinkOverlayProps = {
   sourceNoteId: string | null;
-  themeColor: string;
   className?: string;
   /** 源/目标窗口 portal 到 body 时，连线也挂到 body。 */
   portal?: boolean;
@@ -99,7 +159,6 @@ type WorkspaceWindowLinkOverlayProps = {
  */
 export const WorkspaceWindowLinkOverlay: React.FC<WorkspaceWindowLinkOverlayProps> = ({
   sourceNoteId,
-  themeColor,
   className,
   portal = false
 }) => {
@@ -165,7 +224,7 @@ export const WorkspaceWindowLinkOverlay: React.FC<WorkspaceWindowLinkOverlayProp
               <path
                 d={link.d}
                 fill="none"
-                stroke={themeColor}
+                stroke={LINK_COLOR}
                 strokeWidth={2.25}
                 strokeLinecap="round"
                 className="workspace-window-link-path"
@@ -174,17 +233,13 @@ export const WorkspaceWindowLinkOverlay: React.FC<WorkspaceWindowLinkOverlayProp
                 cx={link.x1}
                 cy={link.y1}
                 r={PORT_RADIUS}
-                fill={themeColor}
-                stroke="white"
-                strokeWidth={1.5}
+                fill={LINK_COLOR}
               />
               <circle
                 cx={link.x2}
                 cy={link.y2}
                 r={PORT_RADIUS}
-                fill={themeColor}
-                stroke="white"
-                strokeWidth={1.5}
+                fill={LINK_COLOR}
               />
             </g>
           ))}

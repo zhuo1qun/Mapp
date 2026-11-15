@@ -6,6 +6,8 @@ type Props = {
   frameChromeStyle: CSSProperties;
   isSelectingNotePosition: boolean;
   notePositionPreview: BoardPoint | null;
+  /** Transient gesture state (b), owned by the interaction machine. */
+  isBoxSelectGestureActive: boolean;
   boxSelectStart: BoardPoint | null;
   boxSelectEnd: BoardPoint | null;
   isDrawingFrame: boolean;
@@ -19,6 +21,7 @@ export function BoardCanvasFeedback({
   frameChromeStyle,
   isSelectingNotePosition,
   notePositionPreview,
+  isBoxSelectGestureActive,
   boxSelectStart,
   boxSelectEnd,
   isDrawingFrame,
@@ -42,7 +45,7 @@ export function BoardCanvasFeedback({
         />
       ) : null}
 
-      {boxSelectStart && boxSelectEnd ? (
+      {isBoxSelectGestureActive && boxSelectStart && boxSelectEnd ? (
         <div
           className="absolute z-[3000] pointer-events-none"
           style={{

@@ -51,6 +51,40 @@ Deno.serve(async (req) => {
   const endpoint = Deno.env.get('NOMINATIM_ENDPOINT') || 'https://nominatim.openstreetmap.org';
   const headers = nominatimHeaders(req);
 
+  // —— reverse：坐标转为行政区或海域名称 ——
+  const latRaw = url.searchParams.get('lat');
+  const lonRaw = url.searchParams.get('lon');
+  if (latRaw != null || lonRaw != null) {
+    const lat = Number(latRaw);
+    const lon = Number(lonRaw);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return json({ error: 'Invalid coordinates' }, { status: 400, headers: corsHeaders(origin) });
+    }
+    const upstream =
+      `${endpoint}/reverse?format=jsonv2` +
+      `&lat=${encodeURIComponent(lat)}` +
+      `&lon=${encodeURIComponent(lon)}` +
+      `&addressdetails=1&zoom=14`;
+    const r = await fetch(upstream, { headers });
+    const text = await r.text();
+    if (!r.ok) {
+      return json(
+        { error: 'Upstream error', status: r.status, body: text.slice(0, 2000) },
+        { status: 502, headers: corsHeaders(origin) }
+      );
+    }
+    try {
+      return json(JSON.parse(text), {
+        headers: {
+          ...corsHeaders(origin),
+          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800'
+        }
+      });
+    } catch {
+      return json({ error: 'Bad upstream JSON' }, { status: 502, headers: corsHeaders(origin) });
+    }
+  }
+
   // —— lookup：按 osm id 取详情（可带 polygon_geojson）——
   const osmIdRaw = url.searchParams.get('osmId');
   const osmType = (url.searchParams.get('osmType') ?? '') as 'relation' | 'way' | 'node' | '';

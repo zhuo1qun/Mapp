@@ -15,6 +15,7 @@ interface EditorAreaProps {
   updateCursorPosition: () => void;
   editor: Editor | null;
   themeColor: string;
+  reserveBottomCorner?: boolean;
 }
 
 export const EditorArea: React.FC<EditorAreaProps> = ({
@@ -27,7 +28,8 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
   textareaRef,
   updateCursorPosition,
   editor,
-  themeColor
+  themeColor,
+  reserveBottomCorner = false
 }) => {
   return (
     <div
@@ -62,11 +64,15 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
               outline: 'none',
               boxShadow: 'none',
               zIndex: 2,
-              caretColor: themeColor
+              caretColor: themeColor,
+              paddingBottom: reserveBottomCorner ? '8rem' : undefined
             }}
           />
         ) : (
-          <div className="note-editor-tiptap-wrap cursor-text w-full h-full bg-transparent overflow-y-auto py-2 px-4 min-h-0">
+          <div
+            className="note-editor-tiptap-wrap cursor-text w-full h-full bg-transparent overflow-y-auto py-2 px-4 min-h-0"
+            style={{ paddingBottom: reserveBottomCorner ? '8rem' : undefined }}
+          >
             <EditorContent editor={editor as any} />
             {editor ? <EditorBubbleMenu editor={editor} /> : null}
             {editor ? <EditorSlashMenu editor={editor} /> : null}

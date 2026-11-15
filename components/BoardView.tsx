@@ -1,14 +1,12 @@
-import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { Note, Frame, Connection, type GraphLayerState, type Project } from '../types';
 import { mergeNoteLayerState, type NoteLayerGroupStandard } from '../utils/layer/noteLayerState';
 import {
   emojiLayerStateFromLegacyTagState,
-  isNoteVisibleInUnifiedLayer,
-  noteHasRenderableMapPosition
+  isNoteVisibleInUnifiedLayer
 } from '../utils/layer/unifiedNoteLayer';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
-import { NoteEditor } from './NoteEditor';
-import { BoardPaperNoteContent } from './note/BoardPaperNoteContent';
+import { DeferredNoteEditor } from './note-editor/DeferredNoteEditor';
 import { Check, Minus, Settings } from 'lucide-react';
 import { generateId } from '../utils';
 import { DEFAULT_THEME_COLOR, TAG_COLORS } from '../constants';
@@ -18,7 +16,7 @@ import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot'
 import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
-import { loadNoteImages, getViewPositionCache } from '../utils/persistence/storage';
+import { getViewPositionCache } from '../utils/persistence/storage';
 import { useNotesWithResolvedMedia } from '../utils/persistence/useNotesWithResolvedMedia';
 import { noteRendersAsBoardSticker } from '../utils/persistence/mediaDisplay';
 import { useBoardNoteDrag } from './hooks/useBoardNoteDrag';
@@ -28,11 +26,18 @@ import { useBoardPointerCapture } from './hooks/useBoardPointerCapture';
 import {
   boardNoteDimensions,
 } from '../utils/board/boardPlacement';
+import { fitBoardNotesToViewport } from '../utils/board/boardViewport';
+import { fitBoardNotesForEditMode } from '../utils/board/boardEditModeFit';
+import { reorderBoardNoteLayers, type BoardLayerOrderCommand } from '../utils/board/boardLayerOrder';
 import { TagAddPanel } from './ui/TagAddPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { useCsvImport } from '@/components/hooks/useCsvImport';
 import { BoardImageLightbox } from './board/BoardImageLightbox';
 import { BoardCanvasFeedback } from './board/BoardCanvasFeedback';
+import { BoardCanvasShell } from './board/BoardCanvasShell';
+import { BoardNoteLayer } from './board/BoardNoteLayer';
+import { BoardScene } from './board/BoardScene';
+import { BoardTopChrome } from './board/BoardTopChrome';
 import { BoardFrameBodies } from './board/BoardFrameBodies';
 import { BoardSelectionOverlay } from './board/BoardSelectionOverlay';
 import { useBoardNoteMotion } from './board/useBoardNoteMotion';
@@ -49,17 +54,24 @@ import { useSimpleConnectionPanel } from './hooks/useSimpleConnectionPanel';
 import { BoardTopCenterEditToolbar } from './board/BoardTopCenterEditToolbar';
 import type { BoardFrameResizeCorner } from './board/BoardFrameControls';
 import {
-  applySelectionScaleToNotes,
   computeSelectionContentBounds,
   scaledSelectionPositions,
   selectionFixedPoint,
   selectionMovingCorner,
-  selectionScaleAxesFromPointer,
   snapshotSelectionPoses,
   type SelectionScaleCorner
 } from '../utils/board/boardSelectionScale';
-import { resizeBoardImageFromPointer } from '../utils/board/boardImageResize';
+import { resolveBoardSelectionBounds } from '../utils/board/boardSelectionBounds';
+import { syncNotesToContainingFrames } from '../utils/frame/boardFrameMembership';
+import { useBoardBatchActions } from './board/useBoardBatchActions';
+import { useBoardFrameGroupShortcut } from './board/useBoardFrameGroupShortcut';
+import { useBoardSelectionToolbarActions } from './board/useBoardSelectionToolbarActions';
+import { useBoardCanvasNavigation } from './board/useBoardCanvasNavigation';
+import { createBoardPointerDownHandler } from './board/createBoardPointerDownHandler';
+import { createBoardPointerMoveHandler } from './board/createBoardPointerMoveHandler';
+import { createBoardPointerUpHandler } from './board/createBoardPointerUpHandler';
 import { resolveBoardFrameLayout } from '../utils/board/boardFrameLayout';
+import { resolveBoardFrameTitleTint } from '../utils/board/boardFrameTitleStyle';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { LayerToolbarIcon } from './ui/LayerToolbarIcon';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
@@ -69,9 +81,7 @@ import { VIBRATION_MEDIUM } from './board-constants';
 import {
   clientPoint,
   clientToBoardPoint,
-  clientToViewPoint,
-  distanceBetween,
-  transformAroundViewPoint
+  distanceBetween
 } from '../utils/board/boardCoordinates';
 import {
   isNoteBoardPlaced,
@@ -85,9 +95,6 @@ import {
   selectionHasTimedNotesInSelection,
   selectionHasUntaggedNotes
 } from '../utils/board/boardSelectionFilters';
-
-const BOARD_NOTE_INTRO_DISMISS_DELAY_MS = 560;
-
 
 /** Frame 叠在玻璃底上的主题色/分组色（hex → rgba） */
 function frameTintFromHex(hex: string, alpha: number): string {
@@ -214,6 +221,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   } = useBoardInteractionMachine();
   const { capturePointer, releasePointer, releaseAllPointers } = useBoardPointerCapture(containerRef);
   const isPanning = interactionKind === 'panning';
+  // b: this exists only from the matching pointerdown until pointerup/cancel.
+  const isBoxSelectGestureActive = interactionKind === 'box-selecting';
   const draggingFrameId =
     interactionState.kind === 'dragging-frame' ? interactionState.id : null;
   const draggingFrameOffset =
@@ -222,8 +231,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     interactionState.kind === 'resizing-frame' ? interactionState : null;
   const resizingImage =
     interactionState.kind === 'resizing-image' ? interactionState : null;
-  const introDismissTimerRef = useRef<number | null>(null);
-  const introExitTimerRef = useRef<number | null>(null);
   const boardLongPressPreviewNoteRef = useRef<Note | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
@@ -231,19 +238,19 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     editingNote,
     setEditingNote,
     introNote,
-    setIntroNote,
     isIntroPending,
-    setIsIntroPending,
     introNoteMotion,
-    setIntroNoteMotion,
     enteringNoteIds,
+    markBoardNotesEntering,
     deletingNoteIds,
-    introTimerRef,
     introStartedAtRef,
     boardDisplayNotes,
     addBoardNoteWithEnter,
     beginNewBoardNoteIntro,
     openNewBoardNoteEditorAfterIntro,
+    openBoardNoteEditor,
+    closeEditor,
+    cancelPendingNoteIntro,
     deleteBoardNotesWithExit
   } = useBoardNoteMotion({
     notes,
@@ -254,19 +261,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     onToggleEditor,
     setSelectedNoteId,
     setSelectedNoteIds,
-    onBeginIntro: () => {
-      if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
-      if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
+    onBeforeEditorOpen: () => {
+      setMultiBatchPanel('none');
+      setBrowseTagFilterPanelOpen(false);
+      setBrowseTimeFilterPanelOpen(false);
     }
   });
-
-  useEffect(() => () => {
-    if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
-    if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
-  }, []);
-  
-  // 缩放保存的防抖定时器
-  const zoomSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Calculate initial transform: cache -> fit all objects -> default
   const calculateInitialTransform = useCallback(() => {
@@ -280,44 +280,20 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       }
     }
     
-    // 2. Calculate to fit all objects
-    const placedNotes = notes.filter(isNoteBoardPlaced);
-    if (placedNotes.length > 0) {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      placedNotes.forEach(note => {
-        minX = Math.min(minX, note.boardX);
-        minY = Math.min(minY, note.boardY);
-        const { width: w, height: h } = boardNoteDimensions(note);
-        maxX = Math.max(maxX, note.boardX + w);
-        maxY = Math.max(maxY, note.boardY + h);
-      });
-      
-      const padding = 100;
-      minX -= padding;
-      minY -= padding;
-      maxX += padding;
-      maxY += padding;
-      const contentWidth = maxX - minX;
-      const contentHeight = maxY - minY;
-      const { width: cW, height: cH } = containerRef.current.getBoundingClientRect();
-      
-      const scaleX = cW / contentWidth;
-      const scaleY = cH / contentHeight;
-      const newScale = Math.min(Math.max(0.2, Math.min(scaleX, scaleY) * 0.9), 4);
-      
-      const newX = (cW - contentWidth * newScale) / 2 - minX * newScale;
-      const newY = (cH - contentHeight * newScale) / 2 - minY * newScale;
-      
-      return { x: newX, y: newY, scale: newScale };
-    }
-    
-    // 3. Default
-    return { x: 0, y: 0, scale: 1 };
+    // 2. Calculate to fit all objects. The geometry is pure and covered independently.
+    const { width, height } = containerRef.current.getBoundingClientRect();
+    return fitBoardNotesToViewport(notes, { width, height });
   }, [notes, projectId]);
   
-  // Canvas Viewport State - initialize with calculated transform
+  // 返回 Board 时直接使用当前项目的缓存视图，避免先绘制一帧 (0, 0, 1)。
+  // 首次进入且没有缓存时，再由下方 layout effect 在首帧绘制前完成自动适配。
   const [transform, setTransform] = useState(() => {
-    // This will be recalculated when container is ready
+    if (projectId) {
+      const cached = getViewPositionCache(projectId, 'board');
+      if (cached?.x !== undefined && cached?.y !== undefined && cached?.scale !== undefined) {
+        return { x: cached.x, y: cached.y, scale: cached.scale };
+      }
+    }
     return { x: 0, y: 0, scale: 1 };
   });
   const transformRef = useRef(transform);
@@ -480,6 +456,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   
   const isZoomingRef = useRef(false);
   const [isZooming, setIsZooming] = useState(false);
+  isZoomingRef.current = isZooming;
   const dragRectRef = useRef<DOMRect | null>(null);
   
   const animationFrameRef = useRef<number | null>(null);
@@ -520,13 +497,21 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setSelectedNoteId,
     setSelectedNoteIds,
     setMultiBatchPanel,
-    deleteNotesWithExit: deleteBoardNotesWithExit
+    deleteNotesWithExit: deleteBoardNotesWithExit,
+    markBoardNotesEntering
   });
   // Multi-select state
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   
   // Box selection state
   const [isBoxSelecting, setIsBoxSelecting] = useState(false);
+  // a: the persistent toolbar mode. Keeping a synchronous ref prevents a
+  // quick tool-click then canvas-press from reading a stale render value.
+  const boxSelectToolActiveRef = useRef(false);
+  const setBoxSelectToolActive = useCallback((active: boolean) => {
+    boxSelectToolActiveRef.current = active;
+    setIsBoxSelecting(active);
+  }, []);
   const [boxSelectStart, setBoxSelectStart] = useState<{ x: number; y: number } | null>(null);
   const [boxSelectEnd, setBoxSelectEnd] = useState<{ x: number; y: number } | null>(null);
 
@@ -535,6 +520,87 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [batchTagColorIndex, setBatchTagColorIndex] = useState(0);
   const [batchTimeStartStr, setBatchTimeStartStr] = useState('');
   const [batchTimeEndStr, setBatchTimeEndStr] = useState('');
+  const {
+    canGroup,
+    canUngroup,
+    applyBatchTags,
+    dismissBatchTagPanel,
+    applyBatchTime,
+    runGroupSelected,
+    runUngroupSelected
+  } = useBoardBatchActions({
+    notes,
+    project,
+    onUpdateNote,
+    onUpdateProject,
+    workspaceEditMode,
+    selectedNoteIds,
+    batchTagLabel,
+    setBatchTagLabel,
+    batchTagColorIndex,
+    batchTimeStartStr,
+    batchTimeEndStr,
+    setMultiBatchPanel
+  });
+  const selectedBoardNotes = useMemo(
+    () => notes.filter((note) => selectedNoteIds.has(note.id) && isNoteBoardPlaced(note)),
+    [notes, selectedNoteIds]
+  );
+  const selectedTextBoardNotes = useMemo(
+    () => selectedBoardNotes.filter((note) => !noteRendersAsBoardSticker(note)),
+    [selectedBoardNotes]
+  );
+  const selectedTextNotesExpanded =
+    selectedTextBoardNotes.length > 0 && selectedTextBoardNotes.every((note) => note.boardSize === 'expanded');
+  const toggleSelectedNoteSize = useCallback(() => {
+    if (!selectedTextBoardNotes.length) return;
+    const selectedIds = new Set(selectedTextBoardNotes.map((note) => note.id));
+    const boardSize: Note['boardSize'] = selectedTextNotesExpanded ? 'standard' : 'expanded';
+    const nextNotes = notes.map((note) => {
+      if (!selectedIds.has(note.id)) return note;
+      const before = boardNoteDimensions(note);
+      const resized = { ...note, boardSize };
+      const after = boardNoteDimensions(resized);
+      return {
+        ...resized,
+        boardX: note.boardX + (before.width - after.width) / 2,
+        boardY: note.boardY + (before.height - after.height) / 2
+      };
+    });
+    if (onUpdateProject && project) {
+      void onUpdateProject({ ...project, notes: nextNotes });
+    } else {
+      nextNotes.filter((note) => selectedIds.has(note.id)).forEach(onUpdateNote);
+    }
+  }, [notes, onUpdateNote, onUpdateProject, project, selectedTextBoardNotes, selectedTextNotesExpanded]);
+  const applyBoardLayerOrder = useCallback((command: BoardLayerOrderCommand) => {
+    if (!selectedNoteIds.size) return;
+    const nextNotes = reorderBoardNoteLayers(notes, selectedNoteIds, command);
+    if (onUpdateProject && project) {
+      void onUpdateProject({ ...project, notes: nextNotes });
+    } else {
+      nextNotes.forEach(onUpdateNote);
+    }
+  }, [notes, onUpdateNote, onUpdateProject, project, selectedNoteIds]);
+
+  useEffect(() => {
+    const handleLayerShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || !selectedNoteIds.size || editingNote) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], .ProseMirror')) return;
+      const left = event.code === 'BracketLeft' || event.key === '[';
+      const right = event.code === 'BracketRight' || event.key === ']';
+      if (!left && !right) return;
+      event.preventDefault();
+      applyBoardLayerOrder(
+        event.shiftKey
+          ? (left ? 'back' : 'front')
+          : (left ? 'backward' : 'forward')
+      );
+    };
+    window.addEventListener('keydown', handleLayerShortcut);
+    return () => window.removeEventListener('keydown', handleLayerShortcut);
+  }, [applyBoardLayerOrder, editingNote, selectedNoteIds.size]);
 
   useEffect(() => {
     if (selectedNoteIds.size <= 1) {
@@ -608,6 +674,21 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [boardFilterTimeRange, setBoardFilterTimeRange] = useState<{ min: number; max: number } | null>(
     null
   );
+  const { runBatchDelete, exitMultiSelectToolbar, onLocateOnMap } =
+    useBoardSelectionToolbarActions({
+      selectedNoteIds,
+      selectedNotes: selectedBoardNotes,
+      deleteBoardNotesWithExit,
+      setSelectedNoteId,
+      setSelectedNoteIds,
+      setMultiBatchPanel,
+      setBatchTagLabel,
+      setBatchTimeStartStr,
+      setBatchTimeEndStr,
+      setBrowseTagFilterPanelOpen,
+      setBrowseTimeFilterPanelOpen,
+      onSwitchToMapView
+    });
   const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
   const [editingFrameTitle, setEditingFrameTitle] = useState('');
   const frameTitleInputRef = useRef<HTMLInputElement | null>(null);
@@ -722,31 +803,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     return () => window.removeEventListener(WORKSPACE_TRANSIENT_DISMISS_EVENT, dismiss);
   }, [setShowBoardInsConnPanel, setBoardInsConnPick]);
   
-  const openBoardNoteEditor = useCallback(
-    (note: Note) => {
-      void (async () => {
-        // 编辑器接管注意力时，收起选中对象下方的标签/时间临时面板；
-        // 选中对象工具栏本身仍保留，供定位和取消选择使用。
-        setMultiBatchPanel('none');
-        setBrowseTagFilterPanelOpen(false);
-        setBrowseTimeFilterPanelOpen(false);
-        let loaded = note;
-        const hasLoadedImages =
-          !!note.images?.length && note.images.some((img) => img.startsWith('data:'));
-        if (!hasLoadedImages) {
-          try {
-            loaded = await loadNoteImages(note);
-          } catch (error) {
-            console.error('Failed to load note images:', error);
-          }
-        }
-        setEditingNote(loaded);
-        onToggleEditor(true);
-      })();
-    },
-    [onToggleEditor]
-  );
-
   const commitProjectNotes = useCallback(
     (nextNotes: Note[]) => {
       if (!project || !onUpdateProject) return;
@@ -1004,44 +1060,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     };
   }, []);
 
-  // Keyboard shortcuts for note grouping: Cmd/Ctrl+G (group) and Cmd/Ctrl+Shift+G (ungroup)
-  useEffect(() => {
-    const handleGroupShortcut = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      const isGKey = e.key === 'g' || e.key === 'G';
-      if (!isGKey) return;
-
-      if (!e.shiftKey) {
-        // Cmd/Ctrl+G：成组
-        if (selectedNoteIds.size < 2) return;
-        e.preventDefault();
-        const newGroupId = generateId();
-        const updatedNotes = notes.map(n =>
-          selectedNoteIds.has(n.id) ? { ...n, noteGroupId: newGroupId } : n
-        );
-        onUpdateProject?.({ ...project, notes: updatedNotes });
-      } else {
-        // Cmd/Ctrl+Shift+G：取消编组（将所有被选中便签所在的组全部解散）
-        const groupIdsInSelection = new Set(
-          notes
-            .filter(n => selectedNoteIds.has(n.id) && n.noteGroupId)
-            .map(n => n.noteGroupId!)
-        );
-        if (groupIdsInSelection.size === 0) return;
-        e.preventDefault();
-        const updatedNotes = notes.map(n =>
-          n.noteGroupId && groupIdsInSelection.has(n.noteGroupId)
-            ? { ...n, noteGroupId: undefined }
-            : n
-        );
-        onUpdateProject?.({ ...project, notes: updatedNotes });
-        setSelectedNoteIds(new Set());
-      }
-    };
-
-    window.addEventListener('keydown', handleGroupShortcut);
-    return () => window.removeEventListener('keydown', handleGroupShortcut);
-  }, [notes, project, selectedNoteIds, onUpdateProject]);
+  useBoardFrameGroupShortcut({
+    notes,
+    project,
+    onUpdateProject,
+    selectedNoteIds,
+    setSelectedNoteIds
+  });
 
   useEffect(() => {
     // 退出编辑模式时清除选中和长按状态
@@ -1056,47 +1081,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   }, [workspaceEditMode, cancelBrowseLongPress, clearNotePressTracking, clearDeferredClick]);
 
-  // 计算Note的中心点是否在Frame内
-  const isNoteInFrame = (note: Note, frame: Frame): boolean => {
-    const { width, height } = boardNoteDimensions(note);
-    const centerX = note.boardX + width / 2;
-    const centerY = note.boardY + height / 2;
-    
-    return centerX >= frame.x && 
-           centerX <= frame.x + frame.width && 
-           centerY >= frame.y && 
-           centerY <= frame.y + frame.height;
-  };
-
   // 更新所有 Note 的分组信息（一便签只属于一个 frame：重叠时取第一个）
   const updateNoteGroups = () => {
-    let changed = false;
-    const updatedNotes = notes.map(note => {
-      const containingFrames = frames.filter(frame => isNoteInFrame(note, frame));
-      const primary = containingFrames[0];
-      const newGroupIds = primary ? [primary.id] : undefined;
-      const newGroupNames = primary ? [primary.title] : undefined;
-      const newGroupId = primary?.id;
-      const newGroupName = primary?.title;
-
-      const oldGroupIds = note.groupIds || (note.groupId ? [note.groupId] : []);
-      const currentNewGroupIds = newGroupIds || [];
-      
-      const hasNoteChanges = JSON.stringify(oldGroupIds) !== JSON.stringify(currentNewGroupIds);
-
-      if (hasNoteChanges) {
-        changed = true;
-        return {
-          ...note,
-          groupIds: newGroupIds,
-          groupNames: newGroupNames,
-          groupId: newGroupId,
-          groupName: newGroupName
-        };
-      }
-      return note;
-    });
-    
+    const { notes: updatedNotes, changed } = syncNotesToContainingFrames(notes, frames);
     if (changed && project) {
       console.log('Batch updating note groups');
       onUpdateProject({
@@ -1116,7 +1103,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
   // Apply initial transform when project changes or container is ready
   const lastProjectIdRef = useRef<string | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!containerRef.current || !projectId) return;
     
     // Only auto-initialize if the project has changed or it's the first time
@@ -1134,7 +1121,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         return prev;
       });
     }
-  }, [projectId, calculateInitialTransform]); // Removed transform from dependencies if possible, or use projectId as trigger
+  }, [projectId, calculateInitialTransform]); // 首帧绘制前恢复，避免默认缩放闪现
 
 
   // Zoom to Fit on Enter Edit Mode with animation
@@ -1147,35 +1134,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         }
         // Wait for DOM to render and measure text notes
         const calculateBounds = () => {
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            placedNotes.forEach(note => {
-                const { width: w, height: h } = boardNoteDimensions(note);
-                minX = Math.min(minX, note.boardX);
-                minY = Math.min(minY, note.boardY);
-                maxX = Math.max(maxX, note.boardX + w);
-                maxY = Math.max(maxY, note.boardY + h);
-            });
-
-            const padding = 100;
-            minX -= padding; 
-            minY -= padding;
-            maxX += padding; 
-            maxY += padding;
-            const contentWidth = maxX - minX;
-            const contentHeight = maxY - minY;
             const { width: cW, height: cH } = containerRef.current.getBoundingClientRect();
-
-            const scaleX = cW / contentWidth;
-            const scaleY = cH / contentHeight;
-            // Remove min/max constraints to fit exactly
-            const newScale = Math.min(scaleX, scaleY);
-
-            const newX = (cW - contentWidth * newScale) / 2 - minX * newScale;
-            const newY = (cH - contentHeight * newScale) / 2 - minY * newScale;
+            const endTransform = fitBoardNotesForEditMode(notes, { width: cW, height: cH });
+            if (!endTransform) return;
 
             // 使用动画过渡
             const startTransform = { ...transform };
-            const endTransform = { x: newX, y: newY, scale: newScale };
             const duration = 400; // 400ms 动画
             const startTime = Date.now();
             
@@ -1230,34 +1194,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   }, [navigateToCoords, projectId]); // Significant reduction in dependencies
 
-  const closeEditor = (reason: 'saved' | 'discarded' = 'discarded') => {
-    if (introTimerRef.current !== null) {
-      window.clearTimeout(introTimerRef.current);
-      introTimerRef.current = null;
-    }
-    setIsIntroPending(false);
-    if (introNote) {
-      if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
-      if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
-      if (reason === 'saved') {
-        // 保存后的临时卡应由已写入项目的正式卡直接接管，不走删除退场。
-        setIntroNote(null);
-      } else {
-      const introNoteId = introNote.id;
-      introDismissTimerRef.current = window.setTimeout(() => {
-        introDismissTimerRef.current = null;
-        setIntroNoteMotion('exit');
-        introExitTimerRef.current = window.setTimeout(() => {
-          introExitTimerRef.current = null;
-          setIntroNote((current) => (current?.id === introNoteId ? null : current));
-        }, BOARD_NOTE_EXIT_MS);
-      }, BOARD_NOTE_INTRO_DISMISS_DELAY_MS);
-      }
-    }
-    setEditingNote(null);
-    onToggleEditor(false);
-  };
-
   // 在指定位置创建便签（board 坐标；光标为中心，与预览框一致，不做网格吸附）
   const createNoteAtPosition = (
     boardX: number,
@@ -1311,12 +1247,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
   const cancelBoardLongPressPreview = useCallback(() => {
     boardLongPressPreviewNoteRef.current = null;
-    if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
-    introTimerRef.current = null;
-    setIsIntroPending(false);
-    setIntroNote(null);
-    setEditingNote(null);
-  }, []);
+    cancelPendingNoteIntro();
+  }, [cancelPendingNoteIntro]);
 
   const cancelTransientBoardInteraction = useCallback(
     (pointerId?: number) => {
@@ -1436,708 +1368,168 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     ]
   );
 
-  const scheduleZoomTransformPersist = useCallback((x: number, y: number, scale: number) => {
-    if (zoomSaveTimeoutRef.current) {
-      clearTimeout(zoomSaveTimeoutRef.current);
-    }
-    zoomSaveTimeoutRef.current = setTimeout(() => {
-      if (onTransformChange) {
-        onTransformChange(x, y, scale);
-      }
-    }, 500);
-  }, [onTransformChange]);
-
-  // 处理触摸双指缩放
-  const touchStartRef = useRef<{
-    distance: number;
-    scale: number;
-  } | null>(null);
-
-  isZoomingRef.current = isZooming;
-
-  // Use native event listeners for touch events to allow preventDefault
-  // Stable deps: read transform via transformRef so pinch does not rebind every frame.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const cancelSingleFingerPan = () => {
-      if (interactionRef.current.kind !== 'panning') return;
-      resetInteraction();
-      releaseAllPointers();
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      // 如果是双指，取消所有长按检测与单指平移
-      if (e.touches.length === 2) {
-        e.preventDefault(); // 禁用浏览器的双指缩放
-        cancelSingleFingerPan();
-        isZoomingRef.current = true;
-        setIsZooming(true);
-
-        cancelBrowseLongPress();
-
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        const distance = distanceBetween(
-          clientPoint(touch1.clientX, touch1.clientY),
-          clientPoint(touch2.clientX, touch2.clientY)
-        );
-        touchStartRef.current = {
-          distance,
-          scale: transformRef.current.scale
-        };
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && touchStartRef.current) {
-        e.preventDefault();
-        cancelBrowseLongPress();
-
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        const distance = distanceBetween(
-          clientPoint(touch1.clientX, touch1.clientY),
-          clientPoint(touch2.clientX, touch2.clientY)
-        );
-
-        const start = touchStartRef.current;
-        const scaleRatio = distance / start.distance;
-        const newScale = Math.min(Math.max(0.2, start.scale * scaleRatio), 4);
-
-        // Anchor at current two-finger midpoint (world point under fingers stays put)
-        const currentCenterX = (touch1.clientX + touch2.clientX) / 2;
-        const currentCenterY = (touch1.clientY + touch2.clientY) / 2;
-        const rect = container.getBoundingClientRect();
-        const relativeCenter = clientToViewPoint(clientPoint(currentCenterX, currentCenterY), rect);
-
-        const t = transformRef.current;
-        const next = transformAroundViewPoint(t, relativeCenter, newScale);
-        transformRef.current = next;
-        setTransform(next);
-      }
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) {
-        if (touchStartRef.current) {
-          const t = transformRef.current;
-          scheduleZoomTransformPersist(t.x, t.y, t.scale);
-        }
-        touchStartRef.current = null;
-        // 延迟重置缩放状态，防止触发误点击
-        setTimeout(() => {
-          isZoomingRef.current = false;
-          setIsZooming(false);
-        }, 100);
-      }
-    };
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: false });
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchEnd);
-    };
-  }, [
-    scheduleZoomTransformPersist,
-    cancelBrowseLongPress,
+  useBoardCanvasNavigation({
+    containerRef,
+    transformRef,
+    setTransform,
+    isZoomingRef,
+    setIsZooming,
     interactionRef,
+    resetInteraction,
     releaseAllPointers,
-    resetInteraction
-  ]);
+    cancelBrowseLongPress,
+    onTransformChange
+  });
 
-  // Figma 式触控板规则：双指滑动平移画布；捏合（浏览器会标为 Ctrl+wheel）
-  // 或 Cmd/Ctrl+滚轮才缩放。平移合并到每帧，避免高频 wheel 逐条触发 React 更新。
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  const handleBoardPointerMoveController = createBoardPointerMoveHandler({
+    containerRef,
+    dragRectRef,
+    transform,
+    transformRef,
+    interactionRef,
+    longPressStartRef: boardLongPressStartRef,
+    clearLongPress: clearBoardLongPress,
+    isSelectingNotePosition,
+    setNotePositionPreview,
+    isShiftPressed,
+    notes,
+    selectedNoteIds,
+    boxSelectStart,
+    setBoxSelectEnd,
+    setDrawingFrameEnd,
+    setSelectedNoteIds,
+    setLocalDraggingFramePos,
+    setLocalResizingFrameSize,
+    setLocalResizingImageSize,
+    selectionScaleStartPosesRef,
+    setSelectionScalePreview,
+    isZoomingRef,
+    updatePanning,
+    setTransform
+  });
 
-    let pendingPanX = 0;
-    let pendingPanY = 0;
-    let panFrame: number | null = null;
+  const handleBoardPointerDownController = createBoardPointerDownHandler({
+    containerRef,
+    dragRectRef,
+    transform,
+    interactionRef,
+    stopAnimations,
+    isDrawingFrame,
+    workspaceEditMode,
+    setIsDrawingFrame,
+    beginDrawingFrame,
+    setDrawingFrameStart,
+    setDrawingFrameEnd,
+    startBoardLongPress,
+    cancelBrowseLongPress,
+    isBoxSelectToolActive: () => boxSelectToolActiveRef.current,
+    isShiftPressed,
+    draggingNoteId,
+    isResizingImage: Boolean(resizingImage),
+    beginBoxSelecting,
+    setBoxSelectStart,
+    setBoxSelectEnd,
+    setSelectedNoteIds,
+    setSelectedNoteId,
+    beginPanning,
+    capturePointer
+  });
 
-    const wheelPixels = (e: WheelEvent) => {
-      if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) return 16;
-      if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) return container.clientHeight;
-      return 1;
-    };
+  const handleBoardPointerUpController = createBoardPointerUpHandler({
+    containerRef,
+    dragRectRef,
+    transform,
+    transformRef,
+    interactionRef,
+    boardLongPressTriggeredRef,
+    clearBoardLongPress,
+    commitBoardLongPressPreview,
+    resetInteraction,
+    releasePointer,
+    selectionScalePreview,
+    selectionScaleStartPosesRef,
+    selectionScaleSettleExpectedRef,
+    selectionScaleSettleTimerRef,
+    clearSelectionScalePreview,
+    notes,
+    frames,
+    applyProjectNotes: commitProjectNotes,
+    localResizingFrameSize,
+    setLocalResizingFrameSize,
+    localResizingImageSize,
+    setLocalResizingImageSize,
+    localDraggingFramePos,
+    setLocalDraggingFramePos,
+    isWaitingForSyncRef,
+    imageResizeSettleTimerRef,
+    onUpdateFrames,
+    onUpdateNote,
+    drawingFrameEnd,
+    selectedNoteIds,
+    isDrawingFrame,
+    setIsDrawingFrame,
+    setBoxSelectStart,
+    setBoxSelectEnd,
+    setDrawingFrameStart,
+    setDrawingFrameEnd,
+    setSelectedFrameId,
+    setEditingFrameId,
+    setEditingFrameTitle,
+    movementFromOrigin,
+    onTransformChange,
+    isMultiSelectDragging,
+    isZooming,
+    isSelectingNotePosition,
+    createNoteAtPosition,
+    editingFrameId,
+    selectedFrameId,
+    selectedNoteId,
+    selectedConnectionId,
+    isShiftPressed,
+    setSelectedNoteId,
+    setSelectedNoteIds,
+    setSelectedConnectionId,
+    workspaceEditMode,
+    filterFrameIds,
+    boardFilterTagLabels,
+    boardFilterIncludeUntagged,
+    boardFilterTimeRange,
+    setFilterFrameIds,
+    setBoardFilterTagLabels,
+    setBoardFilterIncludeUntagged,
+    setBoardFilterTimeRange
+  });
 
-    const flushPan = () => {
-      panFrame = null;
-      if (pendingPanX === 0 && pendingPanY === 0) return;
-      const prev = transformRef.current;
-      // 与通常的两指滚动画布一致：手势向下，内容向上移动。
-      const next = { ...prev, x: prev.x - pendingPanX, y: prev.y - pendingPanY };
-      pendingPanX = 0;
-      pendingPanY = 0;
-      transformRef.current = next;
-      setTransform(next);
-      scheduleZoomTransformPersist(next.x, next.y, next.scale);
-    };
+  // A note layer may deliberately stop a bubbling pointer-up for its own drag.
+  // A marquee's pointer is captured by the canvas, so end its b-state during
+  // capture before a child can absorb that release. Other pointer-up flows
+  // keep their existing bubbling behaviour.
+  const handleBoxSelectPointerUpCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (interactionRef.current.kind !== 'box-selecting') return;
+      event.stopPropagation();
+      handleBoardPointerUpController(event);
+    },
+    [handleBoardPointerUpController, interactionRef]
+  );
 
-    const wheelHandler = (e: WheelEvent) => {
-      e.preventDefault();
-      const isZoomGesture = e.ctrlKey || e.metaKey;
-      if (!isZoomGesture) {
-        const pixels = wheelPixels(e);
-        pendingPanX += e.deltaX * pixels;
-        pendingPanY += e.deltaY * pixels;
-        if (panFrame == null) panFrame = requestAnimationFrame(flushPan);
-        return;
+  const handleBoxSelectPointerCancelCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (interactionRef.current.kind !== 'box-selecting') return;
+      event.stopPropagation();
+      cancelTransientBoardInteraction(event.pointerId);
+    },
+    [cancelTransientBoardInteraction, interactionRef]
+  );
+
+  const handleBoxSelectLostPointerCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (interactionRef.current.kind === 'box-selecting') {
+        cancelTransientBoardInteraction(event.pointerId);
       }
-
-      const rect = container.getBoundingClientRect();
-      const viewPoint = clientToViewPoint(clientPoint(e.clientX, e.clientY), rect);
-      // 指数缩放使同样的手指开合在任意倍率下保持同样的相对变化。
-      const scrollDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-      const zoomFactor = Math.exp(-scrollDelta * 0.004);
-      let nextX = 0;
-      let nextY = 0;
-      let nextScale = 1;
-      setTransform((prev) => {
-        nextScale = Math.min(Math.max(0.2, prev.scale * zoomFactor), 4);
-        const next = transformAroundViewPoint(prev, viewPoint, nextScale);
-        nextX = next.x;
-        nextY = next.y;
-        transformRef.current = next;
-        return next;
-      });
-      scheduleZoomTransformPersist(nextX, nextY, nextScale);
-    };
-
-    container.addEventListener('wheel', wheelHandler, { passive: false });
-
-    return () => {
-      container.removeEventListener('wheel', wheelHandler);
-      if (panFrame != null) cancelAnimationFrame(panFrame);
-    };
-  }, [scheduleZoomTransformPersist]);
-
-  const handleBoardPointerDown = (e: React.PointerEvent) => {
-      // 阻止浏览器默认长按菜单
-      e.preventDefault();
-
-      // 如果有正在运行的动画，立即停止它，防止位置计算抖动
-      stopAnimations();
-
-      // 缓存容器位置，减少抖动并提高性能
-      dragRectRef.current = containerRef.current?.getBoundingClientRect() || null;
-      const pointerClient = clientPoint(e.clientX, e.clientY);
-      
-      // 如果在Frame绘制模式 (必须在编辑模式下才有效)
-      if (isDrawingFrame && workspaceEditMode) {
-          const rect = dragRectRef.current;
-          if (!rect) return;
-          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
-          beginDrawingFrame(e.pointerId, boardPoint);
-          setDrawingFrameStart(boardPoint);
-          setDrawingFrameEnd(boardPoint);
-          capturePointer(e.pointerId);
-          return;
-      } else if (isDrawingFrame && !workspaceEditMode) {
-          // 如果不在编辑模式但处于绘制状态，自动退出绘制模式
-          setIsDrawingFrame(false);
-      }
-      
-      // 检查事件目标是否是 note 元素
-      // 如果目标是 note，不清空长按计时器，让 note 自己处理
-      const target = e.target as HTMLElement;
-      const isNoteClick = target.closest('[data-is-note]') !== null;
-
-      if (!isNoteClick) startBoardLongPress(e);
-      
-      // 只有当目标不是 note 时，才取消长按检测和单击检测
-      if (!isNoteClick) {
-        cancelBrowseLongPress();
-        // 注意：不清空 currentNotePressIdRef，因为用户可能在note上按下，然后移动鼠标到背景上
-        // currentNotePressIdRef 会在 handleNotePointerUp 中根据移动距离判断是否清空
-      }
-      
-      // 框选：编辑模式下「框选」按钮，或任意模式下按住 Shift
-      const shiftOrBoxSelect =
-        (workspaceEditMode && isBoxSelecting) || isShiftPressed || e.shiftKey;
-      if (
-        e.button === 0 &&
-        shiftOrBoxSelect &&
-        interactionRef.current.kind === 'idle' &&
-        !draggingNoteId &&
-        !isNoteClick &&
-        !resizingImage
-      ) {
-          const rect = dragRectRef.current;
-          if (!rect) return;
-          const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
-          beginBoxSelecting(e.pointerId, boardPoint);
-          setBoxSelectStart(boardPoint);
-          setBoxSelectEnd(boardPoint);
-          // Shift 时保留已有选中；否则替换
-          if (!isShiftPressed && !e.shiftKey) {
-              setSelectedNoteIds(new Set());
-              setSelectedNoteId(null);
-          }
-          capturePointer(e.pointerId);
-          return;
-      }
-      
-      // Allow panning in both edit and non-edit modes, but not when dragging notes or frames
-      if (e.button === 0 && !draggingNoteId && interactionRef.current.kind === 'idle') {
-          beginPanning(e.pointerId, pointerClient);
-          capturePointer(e.pointerId);
-      }
-  };
-
-  const handleBoardPointerMove = (e: React.PointerEvent) => {
-      const pointerClient = clientPoint(e.clientX, e.clientY);
-      const longPressStart = boardLongPressStartRef.current;
-      if (longPressStart) {
-        if (
-          distanceBetween(
-            pointerClient,
-            clientPoint(longPressStart.clientX, longPressStart.clientY)
-          ) > 10
-        ) {
-          clearBoardLongPress();
-        }
-      }
-      // 如果处于位置选择模式，更新预览位置
-      if (isSelectingNotePosition && (containerRef.current || dragRectRef.current)) {
-          const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          setNotePositionPreview(clientToBoardPoint(pointerClient, rect, transform));
-      }
-      
-      const activeInteraction = interactionRef.current;
-      if (activeInteraction.kind === 'idle' || activeInteraction.pointerId !== e.pointerId) {
-        return;
-      }
-
-      const resolveBoardPoint = () => {
-        const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-        if (!rect) return null;
-        return clientToBoardPoint(pointerClient, rect, transform);
-      };
-
-      // Frame / 图片 / 多选缩放 / 框选 / 平移：按 interaction kind 分支，避免长 if 链漏互斥
-      switch (activeInteraction.kind) {
-        case 'dragging-frame': {
-          const boardPoint = resolveBoardPoint();
-          if (!boardPoint) return;
-          setLocalDraggingFramePos({
-            x: boardPoint.x - activeInteraction.offset.x,
-            y: boardPoint.y - activeInteraction.offset.y
-          });
-          return;
-        }
-        case 'resizing-image': {
-          const boardPoint = resolveBoardPoint();
-          if (!boardPoint) return;
-          const next = resizeBoardImageFromPointer({
-            startX: activeInteraction.startBoardX,
-            startY: activeInteraction.startBoardY,
-            startWidth: activeInteraction.startWidth,
-            startHeight: activeInteraction.startHeight,
-            corner: activeInteraction.corner,
-            pointerX: boardPoint.x,
-            pointerY: boardPoint.y,
-            lockAspect: !(e.shiftKey || isShiftPressed)
-          });
-
-          if (notes.some((n) => n.id === activeInteraction.id)) {
-            setLocalResizingImageSize({
-              id: activeInteraction.id,
-              ...next
-            });
-          }
-          return;
-        }
-        case 'resizing-frame': {
-          const boardPoint = resolveBoardPoint();
-          if (!boardPoint) return;
-          const { x: worldX, y: worldY } = boardPoint;
-          const fixedX = activeInteraction.fixedX;
-          const fixedY = activeInteraction.fixedY;
-          setLocalResizingFrameSize({
-            x: Math.min(fixedX, worldX),
-            y: Math.min(fixedY, worldY),
-            width: Math.max(100, Math.abs(fixedX - worldX)),
-            height: Math.max(100, Math.abs(fixedY - worldY))
-          });
-          return;
-        }
-        case 'scaling-selection': {
-          const boardPoint = resolveBoardPoint();
-          const startPoses = selectionScaleStartPosesRef.current;
-          if (!boardPoint || !startPoses) return;
-          const fixed = { x: activeInteraction.fixedX, y: activeInteraction.fixedY };
-          const axes = selectionScaleAxesFromPointer(
-            fixed,
-            { x: activeInteraction.startMovingX, y: activeInteraction.startMovingY },
-            boardPoint
-          );
-          setSelectionScalePreview(scaledSelectionPositions(startPoses, fixed, axes));
-          return;
-        }
-        case 'drawing-frame': {
-          const boardPoint = resolveBoardPoint();
-          if (!boardPoint) return;
-          setDrawingFrameEnd(boardPoint);
-          return;
-        }
-        case 'box-selecting': {
-          if (!boxSelectStart) return;
-          const boardPoint = resolveBoardPoint();
-          if (!boardPoint) return;
-          const { x: worldX, y: worldY } = boardPoint;
-          setBoxSelectEnd({ x: worldX, y: worldY });
-
-          const minX = Math.min(boxSelectStart.x, worldX);
-          const maxX = Math.max(boxSelectStart.x, worldX);
-          const minY = Math.min(boxSelectStart.y, worldY);
-          const maxY = Math.max(boxSelectStart.y, worldY);
-
-          const additive = isShiftPressed || e.shiftKey;
-          const selectedIds = new Set<string>(additive ? selectedNoteIds : new Set());
-          notes.forEach((note) => {
-            const { width: noteWidth, height: noteHeight } = boardNoteDimensions(note);
-            const noteRight = note.boardX + noteWidth;
-            const noteBottom = note.boardY + noteHeight;
-
-            if (note.boardX < maxX && noteRight > minX && note.boardY < maxY && noteBottom > minY) {
-              selectedIds.add(note.id);
-            } else if (!additive) {
-              selectedIds.delete(note.id);
-            }
-          });
-          setSelectedNoteIds(selectedIds);
-          return;
-        }
-        case 'panning': {
-          if (isZoomingRef.current) return;
-          e.preventDefault();
-          const delta = updatePanning(e.pointerId, pointerClient);
-          if (!delta) return;
-          setTransform((prev) => {
-            const next = { ...prev, x: prev.x + delta.x, y: prev.y + delta.y };
-            transformRef.current = next;
-            return next;
-          });
-          return;
-        }
-        default:
-          return;
-      }
-  };
-
-  const handleBoardPointerUp = (e: React.PointerEvent) => {
-      const pointerClient = clientPoint(e.clientX, e.clientY);
-      const activeInteraction = interactionRef.current;
-      if (activeInteraction.kind !== 'idle' && activeInteraction.pointerId !== e.pointerId) return;
-      // 优先处理需要释放状态的操作，避免提前返回导致状态未释放
-      const didCreateFromLongPress = boardLongPressTriggeredRef.current;
-      clearBoardLongPress();
-      if (didCreateFromLongPress) {
-          boardLongPressTriggeredRef.current = false;
-          commitBoardLongPressPreview();
-          resetInteraction(e.pointerId);
-          dragRectRef.current = null;
-          releasePointer(e.pointerId);
-          return;
-      }
-
-      // 所有对象手势都由画布层统一提交；子元素不再抢先清除状态。
-      if (activeInteraction.kind === 'scaling-selection') {
-          const preview = selectionScalePreview;
-          const startPoses = selectionScaleStartPosesRef.current;
-          if (preview && startPoses && preview.size > 0) {
-              const { notes: updated, changed } = applySelectionScaleToNotes(
-                notes,
-                preview,
-                frames
-              );
-              if (changed) {
-                  selectionScaleSettleExpectedRef.current = new Map(preview);
-                  if (selectionScaleSettleTimerRef.current) {
-                    clearTimeout(selectionScaleSettleTimerRef.current);
-                  }
-                  selectionScaleSettleTimerRef.current = setTimeout(() => {
-                    selectionScaleSettleTimerRef.current = null;
-                    clearSelectionScalePreview();
-                  }, 500);
-                  commitProjectNotes(updated);
-              } else {
-                  clearSelectionScalePreview();
-              }
-          } else {
-              clearSelectionScalePreview();
-          }
-          resetInteraction(e.pointerId);
-          dragRectRef.current = null;
-          releasePointer(e.pointerId);
-          return;
-      }
-
-      if (activeInteraction.kind === 'resizing-frame') {
-          if (localResizingFrameSize) {
-              isWaitingForSyncRef.current = true;
-              // 安全回退：如果 props 没更新，500ms 后强制清除
-              setTimeout(() => {
-                if (isWaitingForSyncRef.current) {
-                  setLocalResizingFrameSize(null);
-                  setLocalDraggingFramePos(null);
-                  isWaitingForSyncRef.current = false;
-                }
-              }, 500);
-              
-              onUpdateFrames?.(frames.map(f => 
-                  f.id === activeInteraction.id ? { ...f, ...localResizingFrameSize } : f
-              ));
-          }
-          resetInteraction(e.pointerId);
-          // setLocalResizingFrameSize(null); // 不立即清除，等待 props 更新
-          dragRectRef.current = null;
-          releasePointer(e.pointerId);
-          return;
-      }
-
-      // 如果正在调整图片大小，结束调整
-      if (activeInteraction.kind === 'resizing-image') {
-          if (localResizingImageSize) {
-              const note = notes.find(n => n.id === localResizingImageSize.id);
-              if (note) {
-                  onUpdateNote({
-                      ...note,
-                      boardX: localResizingImageSize.x,
-                      boardY: localResizingImageSize.y,
-                      imageWidth: localResizingImageSize.width,
-                      imageHeight: localResizingImageSize.height
-                  });
-              }
-              if (imageResizeSettleTimerRef.current) {
-                clearTimeout(imageResizeSettleTimerRef.current);
-              }
-              imageResizeSettleTimerRef.current = setTimeout(() => {
-                setLocalResizingImageSize(null);
-                imageResizeSettleTimerRef.current = null;
-              }, 500);
-          } else {
-              setLocalResizingImageSize(null);
-          }
-          resetInteraction(e.pointerId);
-          dragRectRef.current = null;
-          releasePointer(e.pointerId);
-          return;
-      }
-
-      // 如果正在拖动Frame，结束拖动
-      if (activeInteraction.kind === 'dragging-frame') {
-          if (localDraggingFramePos) {
-              isWaitingForSyncRef.current = true;
-              // 安全回退：如果 props 没更新，500ms 后强制清除
-              setTimeout(() => {
-                if (isWaitingForSyncRef.current) {
-                  setLocalResizingFrameSize(null);
-                  setLocalDraggingFramePos(null);
-                  isWaitingForSyncRef.current = false;
-                }
-              }, 500);
-
-              onUpdateFrames?.(frames.map(f => 
-                  f.id === activeInteraction.id ? { ...f, x: localDraggingFramePos.x, y: localDraggingFramePos.y } : f
-              ));
-          }
-          resetInteraction(e.pointerId);
-          // setLocalDraggingFramePos(null); // 不立即清除，等待 props 更新
-          dragRectRef.current = null;
-          releasePointer(e.pointerId);
-          return;
-      }
-      
-      // 结束当前框选拖拽（保持「多选/框选」按钮状态；Shift 临时框选本就不改 isBoxSelecting）
-      if (activeInteraction.kind === 'box-selecting') {
-          setBoxSelectStart(null);
-          setBoxSelectEnd(null);
-          resetInteraction(e.pointerId);
-          dragRectRef.current = null;
-          releasePointer(e.pointerId);
-          return;
-      }
-
-      if (activeInteraction.kind === 'drawing-frame') {
-          const end = drawingFrameEnd ?? activeInteraction.originBoard;
-          const minWidth = 100;
-          const minHeight = 100;
-          const newFrame: Frame = {
-              id: generateId(),
-              title: 'Frame',
-              x: Math.min(activeInteraction.originBoard.x, end.x),
-              y: Math.min(activeInteraction.originBoard.y, end.y),
-              width: Math.max(Math.abs(end.x - activeInteraction.originBoard.x), minWidth),
-              height: Math.max(Math.abs(end.y - activeInteraction.originBoard.y), minHeight),
-              color: 'rgba(255, 255, 255, 0.5)'
-          };
-
-          onUpdateFrames?.([...frames, newFrame]);
-          selectedNoteIds.forEach(noteId => {
-            const note = notes.find(n => n.id === noteId);
-            if (!note) return;
-            onUpdateNote({
-              ...note,
-              groupIds: [newFrame.id],
-              groupNames: [newFrame.title],
-              groupId: newFrame.id,
-              groupName: newFrame.title
-            });
-          });
-
-          resetInteraction(e.pointerId);
-          setIsDrawingFrame(false);
-          setDrawingFrameStart(null);
-          setDrawingFrameEnd(null);
-          setSelectedFrameId(newFrame.id);
-          setEditingFrameId(newFrame.id);
-          setEditingFrameTitle('Frame');
-          dragRectRef.current = null;
-          releasePointer(e.pointerId);
-          return;
-      }
-      
-      // 检查是否点击了UI元素（按钮、面板等）
-      const target = e.target as HTMLElement;
-      if (target) {
-          // 检查是否是交互元素
-          const interactiveTags = ['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A'];
-          if (interactiveTags.includes(target.tagName)) {
-              dragRectRef.current = null;
-              return;
-          }
-          
-          // 检查是否在UI容器内（通过检查z-index或特定类名）
-          let current: HTMLElement | null = target;
-          while (current) {
-              const zIndex = window.getComputedStyle(current).zIndex;
-              if (zIndex && (zIndex === '500' || parseInt(zIndex) >= 500)) {
-                  dragRectRef.current = null;
-                  return;
-              }
-              if (current.classList.contains('pointer-events-auto') && 
-                  (current.classList.contains('fixed') || current.classList.contains('absolute'))) {
-                  dragRectRef.current = null;
-                  return;
-              }
-              current = current.parentElement;
-          }
-      }
-      
-      // 检查是否有实际移动（点击 vs 拖动）
-      // 使用拖动开始时的位置来计算总移动距离
-      let hasMoved = false;
-      
-      if (interactionRef.current.kind === 'panning') {
-          hasMoved = movementFromOrigin(e.pointerId, pointerClient) > 5;
-      }
-      
-      // 结束panning状态
-      if (interactionRef.current.kind === 'panning') {
-          resetInteraction(e.pointerId);
-          releasePointer(e.pointerId);
-
-          // 如果刚才在拖拽背景，现在保存位置（类似MapPositionTracker的moveend事件）
-          if (onTransformChange) {
-              const currentTransform = transformRef.current;
-              onTransformChange(currentTransform.x, currentTransform.y, currentTransform.scale);
-          }
-      }
-      
-      // 点击空白处的退出逻辑（只在非拖动/非缩放状态下触发）
-      // 拖动完成后不再继续处理空白点击。
-      if (hasMoved) {
-          // 多选拖动的结束逻辑会在后面的代码中处理，不要在这里提前返回
-          if (!isMultiSelectDragging) {
-              dragRectRef.current = null;
-              return;
-          }
-      }
-      
-      // 只有在没有拖动（点击）且没有缩放时才执行退出逻辑
-      if (!hasMoved && !isZooming) {
-          // 0. 如果处于位置选择模式，在点击位置创建便签（最优先处理）
-          if (isSelectingNotePosition && (containerRef.current || dragRectRef.current)) {
-              const rect = dragRectRef.current || containerRef.current?.getBoundingClientRect();
-              if (rect) {
-                const boardPoint = clientToBoardPoint(pointerClient, rect, transform);
-                createNoteAtPosition(boardPoint.x, boardPoint.y);
-              }
-              dragRectRef.current = null;
-              releasePointer(e.pointerId);
-              return;
-          }
-          
-          // 0. 如果处于框选模式或frame创建模式，点击空白处退出这些模式（优先处理）
-          if (isBoxSelecting || isDrawingFrame) {
-              setIsBoxSelecting(false);
-              setIsDrawingFrame(false);
-              setBoxSelectStart(null);
-              setBoxSelectEnd(null);
-              setDrawingFrameStart(null);
-              setDrawingFrameEnd(null);
-              dragRectRef.current = null;
-              return;
-          }
-          
-          // 1. 如果有编辑中的Frame标题，先退出标题编辑
-          if (editingFrameId) {
-              setEditingFrameId(null);
-              dragRectRef.current = null;
-              return;
-          }
-          
-          // 2. 单击空白画布：统一只清空选中（编辑/非编辑一致）
-          // 为了避免破坏 Shift 多选与拖动手势，这里保留原有条件保护
-          if (selectedFrameId || selectedNoteId || selectedConnectionId || (selectedNoteIds.size > 0 && !isShiftPressed && !e.shiftKey && !hasMoved && !isMultiSelectDragging)) {
-              setSelectedFrameId(null);
-              setSelectedNoteId(null);
-              if (!isShiftPressed && !e.shiftKey && !hasMoved && !isMultiSelectDragging) {
-                setSelectedNoteIds(new Set());
-              }
-              setSelectedConnectionId(null);
-              dragRectRef.current = null;
-              return;
-          }
-          
-          // 3. 非编辑模式下，点击空白处清除过滤（图层 / 标签 / 时间）
-          if (
-            !workspaceEditMode &&
-            (filterFrameIds.size > 0 ||
-              boardFilterTagLabels.size > 0 ||
-              boardFilterIncludeUntagged ||
-              boardFilterTimeRange != null)
-          ) {
-              setFilterFrameIds(new Set());
-              setBoardFilterTagLabels(new Set());
-              setBoardFilterIncludeUntagged(false);
-              setBoardFilterTimeRange(null);
-              dragRectRef.current = null;
-              return;
-          }
-          
-          // 4. 编辑模式只通过双击空白画布退出。
-      }
-      
-      // 如果正在绘制Frame但还没有结束点，不处理（已在上面处理完成情况）
-      if (isDrawingFrame) {
-          dragRectRef.current = null;
-          return;
-      }
-      
-      dragRectRef.current = null;
-  };
+    },
+    [cancelTransientBoardInteraction, interactionRef]
+  );
 
   const handleBoardDoubleClick = (e: React.MouseEvent) => {
     // 仅空白画布生效：子元素（便签/连线/frame 等）上的双击由各自逻辑处理
@@ -2151,7 +1543,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setSelectedConnectionId(null);
     if (workspaceEditMode) {
       onWorkspaceEditModeChange(false);
-      setIsBoxSelecting(false);
+      setBoxSelectToolActive(false);
       setBoxSelectStart(null);
       setBoxSelectEnd(null);
       setIsDrawingFrame(false);
@@ -2336,7 +1728,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const exitBoardEditMode = useCallback(() => {
     if (isSelectingNotePosition) setIsSelectingNotePosition(false);
     onWorkspaceEditModeChange(false);
-    setIsBoxSelecting(false);
+    setBoxSelectToolActive(false);
     setBoxSelectStart(null);
     setBoxSelectEnd(null);
     setIsDrawingFrame(false);
@@ -2349,7 +1741,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setLocalResizingImageSize(null);
     setEditingFrameTitle('');
     setEditingFrameId(null);
-  }, [isSelectingNotePosition, onWorkspaceEditModeChange, resetInteraction]);
+  }, [isSelectingNotePosition, onWorkspaceEditModeChange, resetInteraction, setBoxSelectToolActive]);
 
   return (
     <div
@@ -2361,53 +1753,35 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                 : 'none'
         }}
     >
-      <div 
-        ref={containerRef}
-        className={`workspace-canvas workspace-canvas--dots w-full h-full overflow-hidden relative touch-none select-none ${
-          chromeAppearance === 'dark' ? 'workspace-canvas--dark ' : ''
-        }${
-          isPanning 
-            ? 'cursor-grabbing' 
-            : 'cursor-grab'
-        }`}
-        onPointerDown={handleBoardPointerDown}
-        onPointerMove={handleBoardPointerMove}
+      <BoardCanvasShell
+        containerRef={containerRef}
+        isDark={chromeAppearance === 'dark'}
+        isPanning={isPanning}
+        imageFileInputRef={boardImport.imageFileInputRef}
+        onImageInputChange={boardImport.handleImageInputChange}
+        onPointerDown={handleBoardPointerDownController}
+        onPointerMove={handleBoardPointerMoveController}
         onPointerLeave={() => {
-            clearBoardLongPress();
-            // 当鼠标离开画布时，清除位置预览
-            if (isSelectingNotePosition) {
-                setNotePositionPreview(null);
-            }
+          clearBoardLongPress();
+          if (isSelectingNotePosition) setNotePositionPreview(null);
         }}
         onDragEnter={boardImport.handleDragEnter}
         onDragOver={boardImport.handleDragOver}
         onDrop={boardImport.handleDrop}
-        onPointerUp={handleBoardPointerUp}
+        onPointerUpCapture={handleBoxSelectPointerUpCapture}
+        onPointerUp={handleBoardPointerUpController}
+        onPointerCancelCapture={handleBoxSelectPointerCancelCapture}
         onPointerCancel={(event) => cancelTransientBoardInteraction(event.pointerId)}
+        onLostPointerCapture={handleBoxSelectLostPointerCapture}
         onDoubleClick={handleBoardDoubleClick}
-        onContextMenu={(e) => e.preventDefault()}
       >
-        <input
-          type="file"
-          accept="image/*"
-          ref={boardImport.imageFileInputRef}
-          className="hidden"
-          onChange={boardImport.handleImageInputChange}
-        />
-        {/* Canvas Content */}
-        <div 
-          className="absolute top-0 left-0 w-full h-full origin-top-left pointer-events-none"
-          style={{
-            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-            // transform 会形成新的层叠上下文；拖动时需抬升整层，子卡片的 z-index 才能越过待定箱。
-            zIndex: draggingNoteId || isMultiSelectDragging ? 1200 : undefined
-          }}
-        >
+        <BoardScene transform={transform}>
           <BoardCanvasFeedback
             themeColor={themeColor}
             frameChromeStyle={frameChromeStyle}
             isSelectingNotePosition={isSelectingNotePosition}
             notePositionPreview={notePositionPreview}
+            isBoxSelectGestureActive={isBoxSelectGestureActive}
             boxSelectStart={boxSelectStart}
             boxSelectEnd={boxSelectEnd}
             isDrawingFrame={isDrawingFrame}
@@ -2443,16 +1817,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               resizingPreview: localResizingFrameSize
             });
 
-            const filterActive = filterFrameIds.size > 0;
-            const inFilter = filterFrameIds.has(frame.id);
-            const frameTitleTint =
-              filterActive && !inFilter
-                ? 'rgba(107, 114, 128, 0.32)'
-                : inFilter
-                  ? frameTintFromHex(themeColor, 0.52)
-                  : selectedFrameId === frame.id
-                    ? frameTintFromHex(themeColor, 0.48)
-                    : 'rgba(107, 114, 128, 0.26)';
+            const frameTitleTint = resolveBoardFrameTitleTint({
+              frameId: frame.id,
+              filterFrameIds,
+              selectedFrameId,
+              themeColor,
+              frameTint: frameTintFromHex
+            });
 
             return (
             <React.Fragment key={frame.id}>
@@ -2631,353 +2002,55 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             </React.Fragment>
           )          })}
 
-          {/* Board 视图不渲染连线（连线仅在 Graph 等视图展示） */}
-
-          {boardDisplayNotes
-            .filter(isNoteBoardPlaced)
-            .filter((note) => !leavingBoardNoteIds.has(note.id))
-            .filter((note) => notePassesBoardVisibilityFilters(note))
-            .filter((note) =>
+          <BoardNoteLayer
+            notes={boardDisplayNotes}
+            frames={frames}
+            leavingNoteIds={leavingBoardNoteIds}
+            isNoteVisible={(note) =>
+              notePassesBoardVisibilityFilters(note) &&
               isNoteVisibleInUnifiedLayer(note, mergedProjectBoardLayers, graphLayerGroupStandard)
-            )
-            .sort((a, b) => {
-              const oa = a.layerStackOrder ?? a.createdAt;
-              const ob = b.layerStackOrder ?? b.createdAt;
-              if (oa !== ob) return oa - ob;
-              return a.id.localeCompare(b.id);
-            })
-            .map((note) => {
-              // Check layer visibility based on note variant
-              const isImage = noteRendersAsBoardSticker(note);
-              // 淡黄明确表示“只存在于白板、没有可用地图坐标”。带有效坐标的
-              // 普通便签则保留自己的颜色，未设置颜色时回落到中性白。
-              const boardCardBackground = noteHasRenderableMapPosition(note)
-                ? note.color || '#FFFFFF'
-                : '#FFFDF5';
-              
-              let shouldShow = false;
-              if (isImage && layerVisibility.image) shouldShow = true;
-              else if (!isImage && layerVisibility.primary) shouldShow = true;
-              
-              if (!shouldShow) return null;
-              
-              const isDragging = draggingNoteId === note.id;
-              const isInMultiSelect = selectedNoteIds.has(note.id);
-              const noteMotionClass = introNote?.id === note.id && introNoteMotion === 'exit'
-                ? 'board-note-motion--exit'
-                : deletingNoteIds.has(note.id)
-                  ? 'board-note-motion--exit'
-                  : enteringNoteIds.has(note.id)
-                    ? 'board-note-motion--enter'
-                    : '';
-              const scalePreviewPos = selectionScalePreview?.get(note.id);
-              const imageResizePreview =
-                localResizingImageSize?.id === note.id ? localResizingImageSize : null;
-              const currentX =
-                imageResizePreview?.x ??
-                scalePreviewPos?.boardX ??
-                note.boardX +
-                  (isDragging ? dragOffset.x : 0) +
-                  (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.x : 0);
-              const currentY =
-                imageResizePreview?.y ??
-                scalePreviewPos?.boardY ??
-                note.boardY +
-                  (isDragging ? dragOffset.y : 0) +
-                  (isMultiSelectDragging && isInMultiSelect ? multiSelectDragOffset.y : 0);
-              
-              // 检查Note是否在任何Frame内
-              const containingFrame = frames.find(frame => isNoteInFrame(note, frame));
-              const isInFrame = !!containingFrame;
-
-              const { width: baseNoteWidth, height: baseNoteHeight } = boardNoteDimensions(note);
-              const noteWidth = imageResizePreview?.width ?? baseNoteWidth;
-              const noteHeight = imageResizePreview?.height ?? baseNoteHeight;
-
-              // Get global standard size scale, default to 1
-              const standardSizeScale = project?.standardSizeScale || 1;
-
-              if (isImage) {
-                const standardSizeScale = project?.standardSizeScale || 1;
-              return (
-                <div
-                  key={note.id}
-                    data-is-note="true"
-                  style={{ 
-                      position: 'absolute', 
-                      left: currentX, 
-                      top: currentY,
-                        zIndex: (isDragging || (isMultiSelectDragging && isInMultiSelect))
-                          ? 1200
-                          : (selectedNoteId === note.id || selectedNoteIds.has(note.id))
-                            ? 1000
-                          : 55,
-                      width: noteWidth,
-                      height: noteHeight,
-                        transform: `scale(${standardSizeScale})`,
-                        transformOrigin: 'center',
-                  }}
-                  className={`workspace-object-elevation workspace-object-elevation--interactive pointer-events-auto group ${noteMotionClass} ${(isDragging || isInMultiSelect) ? 'workspace-object-elevation--active' : ''} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'} ${imageResizePreview ? 'transition-none' : ''}`}
-                    onPointerDown={(e) => handleNotePointerDown(e, note.id, note)}
-                  onPointerMove={handleNotePointerMove}
-                  onPointerUp={(e) => handleNotePointerUp(e, note)}
-                  onPointerCancel={handleNotePointerCancel}
-                  onClick={(e) => {
-                    if (consumeSuppressedNoteClick(note.id)) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      return;
-                    }
-                    handleNoteClick(e, note);
-                  }}
-                  onDoubleClick={(e) => handleNoteDoubleClick(e, note)}
-                >
-                    <div 
-                        className={`w-full h-full flex flex-col overflow-visible group rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
-                            style={{ 
-                            backgroundColor: 'transparent'
-                        }}
-                    >
-                        <div
-                          className="w-full h-full relative flex items-center justify-center bg-transparent"
-                        >
-                          {(() => {
-                            const first = note.media?.[0];
-                            const stickerSrc =
-                              first?.kind === 'sketch'
-                                ? note.sketch
-                                : note.images?.[0] || note.sketch;
-                            if (!stickerSrc) return null;
-                            return (
-                            <img
-                              src={stickerSrc}
-                              className="board-sticker-elevation h-full w-full object-contain pointer-events-none"
-                              alt="board-image"
-                            />
-                            );
-                          })()}
-                        </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={note.id}
-                  data-is-note="true"
-                  style={{ 
-                      position: 'absolute', 
-                      left: currentX, 
-                      top: currentY,
-                      zIndex: (isDragging || (isMultiSelectDragging && isInMultiSelect))
-                        ? 1200
-                        : (selectedNoteId === note.id || selectedNoteIds.has(note.id))
-                          ? 1000
-                        : isImage
-                          ? 55
-                          : 50,
-                      width: noteWidth,
-                      height: noteHeight,
-                      transform: `scale(${standardSizeScale})`,
-                      transformOrigin: 'center',
-                  }}
-                  className={`workspace-object-elevation workspace-object-elevation--interactive pointer-events-auto group ${noteMotionClass} ${(isDragging || isInMultiSelect) ? 'workspace-object-elevation--active' : ''} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-105 transition-transform'}`}
-                  onPointerDown={(e) => handleNotePointerDown(e, note.id, note)}
-                  onPointerMove={handleNotePointerMove}
-                  onPointerUp={(e) => handleNotePointerUp(e, note)}
-                  onPointerCancel={handleNotePointerCancel}
-                  onClick={(e) => {
-                    if (consumeSuppressedNoteClick(note.id)) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      return;
-                    }
-                    handleNoteClick(e, note);
-                  }}
-                  onDoubleClick={(e) => handleNoteDoubleClick(e, note)}
-                >
-
-                  <div 
-                          className={`board-note-elevation flex h-full w-full flex-col overflow-hidden rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
-                          style={{
-                              transform: `rotate(${(parseInt(note.id.slice(-2), 36) % 6) - 3}deg)`,
-                              backgroundColor: boardCardBackground
-                          }}
-                      >
-                          <BoardPaperNoteContent note={note} contentWidth={noteWidth - 48} />
-                      </div>
-                </div>
-              );
-          })}
-
+            }
+            showImages={layerVisibility.image}
+            showNotes={layerVisibility.primary}
+            workspaceEditMode={workspaceEditMode}
+            standardSizeScale={project?.standardSizeScale || 1}
+            selectedNoteId={selectedNoteId}
+            selectedNoteIds={selectedNoteIds}
+            draggingNoteId={draggingNoteId}
+            dragOffset={dragOffset}
+            isMultiSelectDragging={isMultiSelectDragging}
+            multiSelectDragOffset={multiSelectDragOffset}
+            imageResizePreview={localResizingImageSize}
+            selectionScalePreview={selectionScalePreview}
+            introNoteId={introNote?.id ?? null}
+            introNoteMotion={introNoteMotion}
+            enteringNoteIds={enteringNoteIds}
+            deletingNoteIds={deletingNoteIds}
+            onPointerDown={handleNotePointerDown}
+            onPointerMove={handleNotePointerMove}
+            onPointerUp={handleNotePointerUp}
+            onPointerCancel={handleNotePointerCancel}
+            consumeSuppressedClick={consumeSuppressedNoteClick}
+            onClick={handleNoteClick}
+            onDoubleClick={handleNoteDoubleClick}
+          />
           {/* 选中包围盒：单选与多选同一套虚线描边 + 工具栏（编辑 / 浏览 Shift 共用） */}
           {selectedNoteIds.size >= 1 && (() => {
             // 被移进待定箱的记录即使父级项目更新尚未回写，也不能继续留在 Board 的选中框里。
-            const selectedNotes = notes.filter(
-              (note) =>
-                selectedNoteIds.has(note.id) &&
-                isNoteBoardPlaced(note)
-            );
+            const selectedNotes = selectedBoardNotes;
             if (selectedNotes.length === 0) return null;
             
-            // Calculate bounding box
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            selectedNotes.forEach(note => {
-              const imageResizePreview =
-                localResizingImageSize?.id === note.id ? localResizingImageSize : null;
-              const { width: baseNoteWidth, height: baseNoteHeight } = boardNoteDimensions(note);
-              const noteWidth = imageResizePreview?.width ?? baseNoteWidth;
-              const noteHeight = imageResizePreview?.height ?? baseNoteHeight;
-              const scalePreviewPos = selectionScalePreview?.get(note.id);
-              const dragDx = isMultiSelectDragging
-                ? multiSelectDragOffset.x
-                : draggingNoteId === note.id
-                  ? dragOffset.x
-                  : 0;
-              const dragDy = isMultiSelectDragging
-                ? multiSelectDragOffset.y
-                : draggingNoteId === note.id
-                  ? dragOffset.y
-                  : 0;
-              const noteX = imageResizePreview?.x ?? scalePreviewPos?.boardX ?? note.boardX + dragDx;
-              const noteY = imageResizePreview?.y ?? scalePreviewPos?.boardY ?? note.boardY + dragDy;
-              
-              minX = Math.min(minX, noteX);
-              minY = Math.min(minY, noteY);
-              maxX = Math.max(maxX, noteX + noteWidth);
-              maxY = Math.max(maxY, noteY + noteHeight);
-            });
-            
             const padding = 10;
-
-            const parseBatchTimeRange = (): { startYear?: number; endYear?: number } => {
-              const startStr = batchTimeStartStr.trim();
-              const endStr = batchTimeEndStr.trim();
-              const parsedStart = startStr ? parseInt(startStr, 10) : undefined;
-              const parsedEnd = endStr ? parseInt(endStr, 10) : undefined;
-              const nextStartYear =
-                parsedStart != null && !Number.isNaN(parsedStart) ? parsedStart : undefined;
-              const nextEndYear =
-                nextStartYear != null &&
-                parsedEnd != null &&
-                !Number.isNaN(parsedEnd) &&
-                parsedEnd !== nextStartYear
-                  ? parsedEnd
-                  : undefined;
-              return { startYear: nextStartYear, endYear: nextEndYear };
-            };
-
-            const applyBatchTags = () => {
-              const label = batchTagLabel.trim();
-              if (!label) return;
-              const color = TAG_COLORS[batchTagColorIndex % TAG_COLORS.length];
-              const ids = new Set(selectedNoteIds);
-              if (onUpdateProject && project) {
-                const nextNotes = project.notes.map(n => {
-                  if (!ids.has(n.id)) return n;
-                  return {
-                    ...n,
-                    tags: [...(n.tags || []), { id: generateId(), label, color }],
-                  };
-                });
-                onUpdateProject({ ...project, notes: nextNotes });
-              } else {
-                ids.forEach(id => {
-                  const n = notes.find(x => x.id === id);
-                  if (!n) return;
-                  onUpdateNote({
-                    ...n,
-                    tags: [...(n.tags || []), { id: generateId(), label, color }],
-                  });
-                });
-              }
-              setBatchTagLabel('');
-              setMultiBatchPanel('none');
-            };
-
-            const dismissBatchTagPanel = () => {
-              if (batchTagLabel.trim()) {
-                applyBatchTags();
-              } else {
-                setMultiBatchPanel('none');
-                setBatchTagLabel('');
-              }
-            };
-
-            const applyBatchTime = () => {
-              const { startYear, endYear } = parseBatchTimeRange();
-              const ids = new Set(selectedNoteIds);
-              if (onUpdateProject && project) {
-                const nextNotes = project.notes.map(n => {
-                  if (!ids.has(n.id)) return n;
-                  return { ...n, startYear, endYear };
-                });
-                onUpdateProject({ ...project, notes: nextNotes });
-              } else {
-                ids.forEach(id => {
-                  const n = notes.find(x => x.id === id);
-                  if (!n) return;
-                  onUpdateNote({ ...n, startYear, endYear });
-                });
-              }
-              setMultiBatchPanel('none');
-            };
-
-            const runBatchDelete = () => {
-              const idsToDelete = Array.from(selectedNoteIds);
-              if (idsToDelete.length === 0) return;
-              if (
-                idsToDelete.length > 1 &&
-                !confirm(
-                  `确定删除已选中的 ${idsToDelete.length} 个便签吗？\n此操作无法撤回。`
-                )
-              ) {
-                return;
-              }
-              deleteBoardNotesWithExit(idsToDelete);
-              setMultiBatchPanel('none');
-            };
-
-            const canGroup = workspaceEditMode && selectedNoteIds.size >= 2;
-            const canUngroup = workspaceEditMode && notes.some(n => selectedNoteIds.has(n.id) && n.noteGroupId);
-
-            const runGroupSelected = () => {
-              if (!canGroup || !project) return;
-              const newGroupId = generateId();
-              const updatedNotes = notes.map(n =>
-                selectedNoteIds.has(n.id) ? { ...n, noteGroupId: newGroupId } : n
-              );
-              onUpdateProject?.({ ...project, notes: updatedNotes });
-            };
-
-            const runUngroupSelected = () => {
-              if (!project) return;
-              const groupIdsInSelection = new Set(
-                notes
-                  .filter(n => selectedNoteIds.has(n.id) && n.noteGroupId)
-                  .map(n => n.noteGroupId!)
-              );
-              if (groupIdsInSelection.size === 0) return;
-              const updatedNotes = notes.map(n =>
-                n.noteGroupId && groupIdsInSelection.has(n.noteGroupId)
-                  ? { ...n, noteGroupId: undefined }
-                  : n
-              );
-              onUpdateProject?.({ ...project, notes: updatedNotes });
-              setSelectedNoteIds(new Set());
-            };
-
-            const exitMultiSelectToolbar = () => {
-              setSelectedNoteIds(new Set());
-              setSelectedNoteId(null);
-              setMultiBatchPanel('none');
-              setBatchTagLabel('');
-              setBatchTimeStartStr('');
-              setBatchTimeEndStr('');
-              setBrowseTagFilterPanelOpen(false);
-              setBrowseTimeFilterPanelOpen(false);
-            };
+            const selectionBounds = resolveBoardSelectionBounds(selectedNotes, {
+              padding,
+              imageResizePreview: localResizingImageSize,
+              selectionScalePreview,
+              draggingNoteId,
+              dragOffset,
+              isMultiSelectDragging,
+              multiSelectDragOffset
+            });
+            if (!selectionBounds) return null;
 
             const stopToolbarEvent = (e: React.SyntheticEvent) => {
               e.stopPropagation();
@@ -2986,12 +2059,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
             return (
               <BoardSelectionOverlay
-                bounds={{
-                  x: minX - padding,
-                  y: minY - padding,
-                  width: maxX - minX + padding * 2,
-                  height: maxY - minY + padding * 2
-                }}
+                bounds={selectionBounds}
                 themeColor={themeColor}
                 canvasScale={transform.scale}
                 showBoundary={workspaceEditMode && selectedNoteIds.size > 1}
@@ -3014,7 +2082,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   isDark={chromeAppearance === 'dark'}
                   inverseCanvasScale={1}
                   isEditMode={workspaceEditMode}
-                  placeBelow={minY - padding < 80 / Math.max(0.05, transform.scale)}
+                  placeBelow={selectionBounds.y < 80 / Math.max(0.05, transform.scale)}
                   portal
                   portalAnchorElement={selectionOverlayElement}
                   portalScope="board-selection"
@@ -3029,12 +2097,12 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                   }
                   onRunBatchDelete={runBatchDelete}
                   selectionCount={selectedNoteIds.size}
-                  onLocateOnMap={(() => {
-                    if (selectedNotes.length !== 1 || !onSwitchToMapView) return undefined;
-                    const n = selectedNotes[0];
-                    if (!n.coords || (n.coords.lat === 0 && n.coords.lng === 0)) return undefined;
-                    return () => onSwitchToMapView(n.coords);
-                  })()}
+                  onLocateOnMap={onLocateOnMap}
+                  canToggleNoteSize={selectedTextBoardNotes.length > 0}
+                  noteSizeExpanded={selectedTextNotesExpanded}
+                  onToggleNoteSize={toggleSelectedNoteSize}
+                  onBringToFront={() => applyBoardLayerOrder('front')}
+                  onSendToBack={() => applyBoardLayerOrder('back')}
                   canGroup={canGroup}
                   canUngroup={canUngroup}
                   onRunGroup={runGroupSelected}
@@ -3132,16 +2200,14 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               </BoardSelectionOverlay>
             );
           })()}
-        </div>
+        </BoardScene>
 
-        {/* 设置 + 图层：左上角（与 Mapping 一致） */}
-        {isUIVisible && (
-            <div
-                ref={boardToolbarRef}
-                data-allow-context-menu
-                className="fixed top-2 sm:top-4 ui-workspace-left z-[500] pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2"
-                onPointerDown={(e) => e.stopPropagation()}
-            >
+        <BoardTopChrome
+          visible={isUIVisible}
+          leftToolbarRef={boardToolbarRef}
+          onLeftPointerDown={(event) => event.stopPropagation()}
+          left={
+            <>
                 <ChromeIconButton
                   ref={settingsButtonRef}
                   themeColor={themeColor}
@@ -3266,11 +2332,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                     };
                   }}
                 />
-            </div>
-        )}
-
-        {isUIVisible && (
-          <BoardTopRightEditToggle
+            </>
+          }
+          right={
+            <BoardTopRightEditToggle
             isUIVisible={isUIVisible}
             isEditMode={workspaceEditMode}
             themeColor={themeColor}
@@ -3278,12 +2343,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             chromeHoverBackground={chHover}
             onEnterEditMode={enterBoardEditMode}
             onExitEditMode={exitBoardEditMode}
-          />
-        )}
-
-        {/* 窄屏编辑入口位于右上；宽屏仅在编辑模式显示顶部工具。 */}
-        {isUIVisible && (
-          <BoardTopCenterEditToolbar
+            />
+          }
+          center={
+            <BoardTopCenterEditToolbar
             isEditMode={workspaceEditMode}
             isSelectingNotePosition={isSelectingNotePosition}
             isDrawingFrame={isDrawingFrame}
@@ -3298,7 +2361,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               if (isSelectingNotePosition) {
                 setIsSelectingNotePosition(false);
               } else {
-                setIsBoxSelecting(false);
+                setBoxSelectToolActive(false);
                 setBoxSelectStart(null);
                 setBoxSelectEnd(null);
                 setIsDrawingFrame(false);
@@ -3314,27 +2377,31 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             onEnableDrawFrame={() => {
               if (isSelectingNotePosition) setIsSelectingNotePosition(false);
               setIsDrawingFrame(true);
-              setIsBoxSelecting(false);
+              setBoxSelectToolActive(false);
               setBoxSelectStart(null);
               setBoxSelectEnd(null);
               setSelectedFrameId(null);
             }}
             onToggleBoxSelect={() => {
-              setIsBoxSelecting(!isBoxSelecting);
-              if (!isBoxSelecting) {
+              const nextToolActive = !boxSelectToolActiveRef.current;
+              setBoxSelectToolActive(nextToolActive);
+              // Tool state (a) and gesture state (b) are never reused: a
+              // toggle always ends the current gesture without creating one.
+              resetInteraction();
+              setBoxSelectStart(null);
+              setBoxSelectEnd(null);
+              if (nextToolActive) {
                 setSelectedNoteIds(new Set());
                 setSelectedNoteId(null);
                 setIsDrawingFrame(false);
                 setDrawingFrameStart(null);
                 setDrawingFrameEnd(null);
                 setIsSelectingNotePosition(false);
-              } else {
-                setBoxSelectStart(null);
-                setBoxSelectEnd(null);
               }
             }}
-          />
-        )}
+            />
+          }
+        />
 
         
         {/* Hidden file inputs */}
@@ -3359,7 +2426,6 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           sourceNoteId={
             showLayerPanel && editingNote && !isIntroPending ? editingNote.id : null
           }
-          themeColor={themeColor ?? DEFAULT_THEME_COLOR}
           portal
           className="fixed inset-0 z-[var(--z-workspace-window-link)]"
         />
@@ -3377,7 +2443,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               'aria-label': '便签编辑器',
               ...editorSlot,
               children: (
-          <NoteEditor
+          <DeferredNoteEditor
               shell={false}
               isOpen={!!editingNote && !isIntroPending}
               onClose={closeEditor}
@@ -3404,6 +2470,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
               onDelete={(noteId) => deleteBoardNotesWithExit([noteId])}
               onSwitchToMapView={onSwitchToMapView}
+              mapStyleId={mapStyleId}
               themeColor={themeColor}
               mapUiChromeOpacity={mapUiChromeOpacity}
               mapUiChromeBlurPx={mapUiChromeBlurPx}
@@ -3454,7 +2521,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
         />
 
         <BoardImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />
-      </div>
+      </BoardCanvasShell>
 
       {/* 必须位于画布容器之外：Board 的原生双指/滚轮监听只属于画布，不能截获待定箱滚动。 */}
       <UnplacedNotesSidebar

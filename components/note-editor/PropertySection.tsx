@@ -83,7 +83,9 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
       }`}
       aria-label="属性"
     >
-      <div className="px-4 pt-2 pb-1 flex items-center justify-between gap-2">
+      <div
+        className="px-4 pt-2 pb-1 flex items-center justify-between gap-2"
+      >
         <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide shrink-0">
           属性
         </span>
@@ -125,6 +127,7 @@ export const PropertySection: React.FC<PropertySectionProps> = ({
         </div>
       </div>
       <TagPropertyEditor
+        reorderable={!standalone}
         tags={tags}
         editingTagId={editingTagId}
         isAddingTag={isAddingTag}

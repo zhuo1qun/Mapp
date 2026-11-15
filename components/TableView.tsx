@@ -3,13 +3,20 @@ import { Note, Project, Frame, Connection, type GraphLayerState } from '../types
 import { Trash2 } from 'lucide-react';
 import {
   clampConnectionWeight,
-  connectionDirection,
   DEFAULT_CONNECTION_WEIGHT
 } from '../utils/connections/connectionData';
-import { generateId, parseNoteContent } from '../utils';
+import { generateId } from '../utils';
+import {
+  buildTableCsv,
+  edgeDirectionHint,
+  formatTableNoteYearRange,
+  noteRowTitle,
+  sanitizeTableExportFilenamePart,
+  triggerTableCsvDownload
+} from '../utils/table/tableExport';
 import { mergeNoteLayerState, type NoteLayerGroupStandard } from '../utils/layer/noteLayerState';
 import { emojiLayerStateFromLegacyTagState, groupDisplayLabel, noteBelongsToLayerGroupKey } from '../utils/layer/unifiedNoteLayer';
-import { NoteEditor } from './NoteEditor';
+import { DeferredNoteEditor } from './note-editor/DeferredNoteEditor';
 import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
@@ -67,52 +74,6 @@ const TABLE_EDITOR_SIDE_WIDTH = 320;
 const TABLE_EDITOR_DETAIL_GAP = 12;
 const TABLE_EDITOR_DETAIL_WIDTH = 576;
 
-function noteRowTitle(note: Note | undefined): string {
-  if (!note) return '（便签已删除）';
-  return parseNoteContent(note.text || '').title || '无标题';
-}
-
-function edgeDirectionHint(c: Connection): string {
-  const d = connectionDirection(c);
-  if (d === 'forward') return '→';
-  if (d === 'backward') return '←';
-  if (d === 'both') return '↔';
-  return '—';
-}
-
-function sanitizeFilenamePart(s: string): string {
-  const t = s.trim().replace(/[/\\?%*:|"<>]/g, '_');
-  return t.slice(0, 80) || 'table';
-}
-
-function csvEscapeCell(v: string | number | undefined | null): string {
-  const s = v === undefined || v === null ? '' : String(v);
-  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function buildCsv(rows: (string | number | undefined | null)[][]): string {
-  const lines = rows.map((row) => row.map(csvEscapeCell).join(','));
-  return `\uFEFF${lines.join('\r\n')}`;
-}
-
-function triggerDownloadCsv(filename: string, csvBody: string) {
-  const blob = new Blob([csvBody], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function formatNoteYearRange(note: Note): string {
-  const { startYear, endYear } = note;
-  if (startYear != null && endYear != null) return `${startYear}-${endYear}`;
-  if (startYear != null) return String(startYear);
-  if (endYear != null) return String(endYear);
-  return '';
-}
 
 export const TableView: React.FC<TableViewProps> = ({
   project,
@@ -163,6 +124,7 @@ export const TableView: React.FC<TableViewProps> = ({
   } | null>(null);
   const editorWasOpenRef = useRef(false);
   const mediaDetailWasOpenRef = useRef(false);
+  const mediaDetailFocusTokenRef = useRef(0);
   const canvasAutoPanFrameRef = useRef<number | null>(null);
   const canvasAutoPanTimerRef = useRef<number | null>(null);
   const [isWideTableCanvas, setIsWideTableCanvas] = useState(
@@ -178,6 +140,7 @@ export const TableView: React.FC<TableViewProps> = ({
   canvasScaleRef.current = canvasScale;
   const [listWindowWidth, setListWindowWidth] = useState(576);
   const [isCanvasMediaDetailOpen, setIsCanvasMediaDetailOpen] = useState(false);
+  const [canvasMediaDetailFocusToken, setCanvasMediaDetailFocusToken] = useState(0);
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
   const [panelEditingKey, setPanelEditingKey] = useState<string | 'new'>('new');
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft>({
@@ -497,16 +460,24 @@ export const TableView: React.FC<TableViewProps> = ({
     }, 400);
   }, [detailCanvasSnapX, editorCanvasSnapX, isCanvasMediaDetailOpen, moreCanvasSnapX]);
 
-  const handleCanvasMediaDetailOpenChange = useCallback((open: boolean) => {
+  const handleCanvasMediaDetailOpenChange = useCallback((open: boolean, shouldFocus = false) => {
     setIsCanvasMediaDetailOpen(open);
+    if (open && shouldFocus) setCanvasMediaDetailFocusToken((token) => token + 1);
   }, []);
 
   useEffect(() => {
     const wasOpen = mediaDetailWasOpenRef.current;
+    const hasNewFocusRequest = canvasMediaDetailFocusToken !== mediaDetailFocusTokenRef.current;
     mediaDetailWasOpenRef.current = isCanvasMediaDetailOpen;
-    if (!isWideTableCanvas || !editorNoteId || wasOpen === isCanvasMediaDetailOpen) return;
-    commitWindowNavigator(isCanvasMediaDetailOpen ? 'detail' : 'more');
-  }, [commitWindowNavigator, editorNoteId, isCanvasMediaDetailOpen, isWideTableCanvas]);
+    mediaDetailFocusTokenRef.current = canvasMediaDetailFocusToken;
+    if (!isWideTableCanvas || !editorNoteId) return;
+    // 默认详情窗不抢走当前工作区；点击缩略图时才定位过去。
+    if (!isCanvasMediaDetailOpen && wasOpen) {
+      commitWindowNavigator('more');
+    } else if (isCanvasMediaDetailOpen && hasNewFocusRequest) {
+      commitWindowNavigator('detail');
+    }
+  }, [canvasMediaDetailFocusToken, commitWindowNavigator, editorNoteId, isCanvasMediaDetailOpen, isWideTableCanvas]);
 
   const textNotes = useMemo(
     () => project.notes.filter(note => note.variant !== 'image'),
@@ -597,7 +568,7 @@ export const TableView: React.FC<TableViewProps> = ({
   };
 
   const downloadCurrentTable = useCallback(() => {
-    const base = sanitizeFilenamePart(project.name);
+    const base = sanitizeTableExportFilenamePart(project.name);
     const ts = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_');
     if (activeSubView === 'points') {
       const header = ['分组', '节点ID', '标题', '正文', '时间段', '标签'];
@@ -619,12 +590,12 @@ export const TableView: React.FC<TableViewProps> = ({
             note.id,
             noteRowTitle(note),
             note.text || '',
-            formatNoteYearRange(note),
+            formatTableNoteYearRange(note),
             note.tags.map((t) => t.label).join('; '),
           ]);
         }
       }
-      triggerDownloadCsv(`${base}_节点表_${ts}.csv`, buildCsv(rows));
+      triggerTableCsvDownload(`${base}_节点表_${ts}.csv`, buildTableCsv(rows));
       return;
     }
     const header = ['起点ID', '起点标题', '方向', '终点ID', '终点标题', '关系说明', '连接ID'];
@@ -642,7 +613,7 @@ export const TableView: React.FC<TableViewProps> = ({
         c.id,
       ]);
     }
-    triggerDownloadCsv(`${base}_关联表_${ts}.csv`, buildCsv(rows));
+    triggerTableCsvDownload(`${base}_关联表_${ts}.csv`, buildTableCsv(rows));
   }, [activeSubView, textNotes, connections, noteById, project.name, project.graphLayerStandard, project.graphLayers, project.graphEmojiLayers, project.graphFrameLayers, project.frames]);
 
   const rowTrashBtn =
@@ -785,7 +756,7 @@ export const TableView: React.FC<TableViewProps> = ({
   );
 
   return (
-    <div className={`workspace-canvas relative h-full flex flex-col min-h-0 ${
+    <div className={`workspace-canvas workspace-canvas--table relative h-full flex flex-col min-h-0 ${
       chromeAppearance === 'dark' ? 'workspace-canvas--dark' : ''
     }`}>
       <TableTopLeftSettingsButton
@@ -829,7 +800,7 @@ export const TableView: React.FC<TableViewProps> = ({
       <div
         ref={canvasViewportRef}
         className={isWideTableCanvas
-          ? `table-node-canvas relative flex-1 min-h-0 overflow-hidden box-border ${
+            ? `table-node-canvas ${isCanvasDragging ? 'table-node-canvas--dragging ' : ''}relative flex-1 min-h-0 overflow-hidden box-border ${
               chromeAppearance === 'dark' ? 'workspace-canvas--dark ' : ''
             }${isCanvasDragging ? 'cursor-grabbing' : 'cursor-grab'}`
           : `flex-1 min-h-0 overflow-auto px-4 sm:px-6 box-border ${edgesTableEnabled ? 'pb-28' : 'pb-8'}`}
@@ -995,13 +966,11 @@ export const TableView: React.FC<TableViewProps> = ({
         {isWideTableCanvas && activeSubView === 'points' ? (
           <WorkspaceWindowLinkOverlay
             sourceNoteId={editorNoteId}
-            themeColor={themeColor}
-            portal
-            className="fixed inset-0 z-[var(--z-workspace-window-link)]"
+            className="absolute inset-0 z-20"
           />
         ) : null}
 
-        <NoteEditor
+        <DeferredNoteEditor
           initialNote={project.notes.find(n => n.id === editorNoteId)}
           isOpen={!!editorNoteId}
           onClose={() => setEditorNoteId(null)}
@@ -1020,6 +989,7 @@ export const TableView: React.FC<TableViewProps> = ({
           themeColor={themeColor}
           mapUiChromeOpacity={mapUiChromeOpacity}
           mapUiChromeBlurPx={mapUiChromeBlurPx}
+          mapStyleId={mapStyleId}
           presentation={isWideTableCanvas ? 'canvas-window' : 'modal'}
           onCanvasMediaDetailOpenChange={handleCanvasMediaDetailOpenChange}
         />

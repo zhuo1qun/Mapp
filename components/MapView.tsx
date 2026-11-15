@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, GeoJSON, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import { set } from 'idb-keyval';
 
@@ -21,6 +21,9 @@ import { useMapStyling } from '@/components/hooks/useMapStyling';
 import { useBorderSearch } from '@/components/hooks/useBorderSearch';
 import { useMapClustering } from '@/components/hooks/useMapClustering';
 import { useMapInitialization } from '@/components/hooks/useMapInitialization';
+import { useMapNoteIntro } from '@/components/hooks/useMapNoteIntro';
+import { useMapMarkerDrag } from '@/components/hooks/useMapMarkerDrag';
+import { useMapMarkerSelection } from '@/components/hooks/useMapMarkerSelection';
 import { useDataImport } from '@/components/hooks/useDataImport';
 import { useFileDrop } from '@/components/hooks/useFileDrop';
 import { useCsvImport } from '@/components/hooks/useCsvImport';
@@ -31,6 +34,13 @@ import { MapNavigationHandler } from './map/MapNavigationHandler';
 import { TextLabelsLayer } from './map/TextLabelsLayer';
 import { MapPositionTracker } from './map/MapPositionTracker';
 import { MapCenterHandler } from './map/MapCenterHandler';
+import {
+  MapAttributionPrefix,
+  MapCanvasBackground,
+  MapCrossfadeTileLayer,
+  MapTileDirectionalPrefetch,
+  getAdaptiveMapTileKeepBuffer
+} from './map/MapTileInfrastructure';
 import { MapControls, MapLocateCreateMenu } from './map/MapControls';
 import {
   PENDING_MAP_LOCATE_EVENT,
@@ -61,12 +71,9 @@ import { transferNotesSpatially } from '../utils/note/spatialTransfer';
 import { moveNoteToMapUnplaced, placeNoteOnMap } from '../utils/note/notePlacement';
 import { SettingsPanel } from './SettingsPanel';
 import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolbarSlot';
-import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { parseNoteContent } from '../utils';
-import { NoteEditor } from './NoteEditor';
 import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
-import { generateId } from '../utils';
 import { hexToRgb, isPhotoTakenRecently } from '../utils/map/mapUtils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
 import { loadImage, getViewPositionCache, setViewPositionCache } from '../utils/persistence/storage';
@@ -89,6 +96,7 @@ import {
   type MapChromeAppearance
 } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
+import { MapNoteSlot } from './map/overlays/MapNoteSlot';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -97,247 +105,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-/** Keep required basemap credits while removing Leaflet's non-essential UI prefix. */
-const MapAttributionPrefix: React.FC = () => {
-  const map = useMap();
-
-  useEffect(() => {
-    map.attributionControl?.setPrefix(false);
-  }, [map]);
-
-  return null;
-};
-
-/** MapContainer 的 style 仅在初始化时读取；底图切换后须直接同步实际地图容器的底色。 */
-const MapCanvasBackground: React.FC<{ color: string }> = ({ color }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    map.getContainer().style.backgroundColor = color;
-  }, [color, map]);
-
-  return null;
-};
-
-/**
- * A permanent, two-levels-lower tile layer beneath the real basemap.
- *
- * Leaflet already keeps tiles from the previous viewport during a zoom. This
- * layer covers the complementary case: when zooming out reveals land that was
- * never in the old viewport. It needs roughly one quarter as many requests as
- * the target zoom, so it arrives quickly as a pixelated but complete backdrop.
- */
-const MapTileZoomFallback: React.FC<{
-  url: string;
-  maxZoom: number;
-  maxNativeZoom?: number;
-}> = ({ url, maxZoom, maxNativeZoom }) => {
-  const map = useMap();
-  const activeLayerRef = useRef<L.TileLayer | null>(null);
-  const pendingLayerRef = useRef<L.TileLayer | null>(null);
-
-  useEffect(() => {
-    const sourceMaxZoom = maxNativeZoom ?? maxZoom;
-    const fallbackZoomForCurrentView = () =>
-      Math.min(
-        sourceMaxZoom,
-        Math.max(Math.ceil(map.getMinZoom()), Math.floor(map.getZoom()) - 2)
-      );
-    const createFallbackLayer = (fallbackZoom: number) =>
-      L.tileLayer(url, {
-        attribution: '',
-        // The normal TileLayer renders at z-index 1; this one is intentionally
-        // below it and remains visible only where high-detail tiles are absent.
-        zIndex: 0,
-        maxZoom,
-        minNativeZoom: fallbackZoom,
-        maxNativeZoom: fallbackZoom,
-        updateWhenZooming: false,
-        updateWhenIdle: true,
-        keepBuffer: 2
-      });
-
-    const initialLayer = createFallbackLayer(fallbackZoomForCurrentView());
-    activeLayerRef.current = initialLayer;
-    initialLayer.addTo(map);
-
-    const rebaseFallbackLayer = () => {
-      const activeLayer = activeLayerRef.current;
-      if (!activeLayer) return;
-      const fallbackZoom = fallbackZoomForCurrentView();
-      const activeZoom = activeLayer.options.maxNativeZoom;
-      if (activeZoom === fallbackZoom || Math.abs((activeZoom ?? fallbackZoom) - fallbackZoom) < 2) return;
-
-      const pendingLayer = pendingLayerRef.current;
-      if (pendingLayer?.options.maxNativeZoom === fallbackZoom) return;
-      pendingLayer?.remove();
-
-      // 绝不对现有层 redraw：它会先清空已显示瓦片。新层叠在旧层之上，
-      // 只有自身完整可用后才接管，再移除旧层，避免闪出纯底色。
-      const nextLayer = createFallbackLayer(fallbackZoom);
-      pendingLayerRef.current = nextLayer;
-      nextLayer.once('load', () => {
-        if (pendingLayerRef.current !== nextLayer) return;
-        pendingLayerRef.current = null;
-        const previousLayer = activeLayerRef.current;
-        activeLayerRef.current = nextLayer;
-        previousLayer?.remove();
-      });
-      nextLayer.addTo(map);
-    };
-
-    // Keep the parent grid stable throughout a gesture. Replacing it at every
-    // integer zoom would briefly clear precisely the fallback we need. Once
-    // the gesture has settled, rebase it in the background for the next move.
-    let rebaseTimer: ReturnType<typeof setTimeout> | null = null;
-    const cancelRebase = () => {
-      if (!rebaseTimer) return;
-      clearTimeout(rebaseTimer);
-      rebaseTimer = null;
-    };
-    const scheduleRebase = () => {
-      cancelRebase();
-      rebaseTimer = setTimeout(() => {
-        rebaseTimer = null;
-        if (map._mappSmoothZooming) {
-          scheduleRebase();
-          return;
-        }
-        rebaseFallbackLayer();
-        // 高精度层会在 zoomend 立刻请求；稍作让位后便补齐低清底图，
-        // 避免此前 900ms 的人为等待让缩小后的新区域长时间没有可用画面。
-      }, 180);
-    };
-    map.on('zoomstart', cancelRebase);
-    map.on('zoomend', scheduleRebase);
-
-    return () => {
-      cancelRebase();
-      map.off('zoomstart', cancelRebase);
-      map.off('zoomend', scheduleRebase);
-      activeLayerRef.current?.remove();
-      pendingLayerRef.current?.remove();
-      activeLayerRef.current = null;
-      pendingLayerRef.current = null;
-    };
-  }, [map, url, maxNativeZoom, maxZoom]);
-
-  return null;
-};
-
-/**
- * 一次平移结束后，低优先级预取移动方向前方的一列低清瓦片。
- * 不在拖动中发请求，且在省流量或低速网络时自动关闭，避免影响当前视口。
- */
-const MapTileDirectionalPrefetch: React.FC<{
-  url: string;
-  maxZoom: number;
-  maxNativeZoom?: number;
-}> = ({ url, maxZoom, maxNativeZoom }) => {
-  const map = useMap();
-  const previousCenterRef = useRef<L.LatLng | null>(null);
-  const prefetchedAtRef = useRef(new Map<string, number>());
-  const pendingImagesRef = useRef(new Map<string, HTMLImageElement>());
-
-  useEffect(() => {
-    const connection = (navigator as Navigator & {
-      connection?: { saveData?: boolean; effectiveType?: string };
-    }).connection;
-    if (connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') {
-      return;
-    }
-
-    const tileUrlFor = (x: number, y: number, z: number) => {
-      const subdomains = 'abc';
-      const s = subdomains[Math.abs((x + y) % subdomains.length)];
-      return L.Util.template(url, { x, y, z, s, r: '' });
-    };
-    const prunePrefetches = (now: number) => {
-      for (const [tileUrl, startedAt] of prefetchedAtRef.current) {
-        if (now - startedAt > 10 * 60 * 1000) prefetchedAtRef.current.delete(tileUrl);
-      }
-    };
-
-    let prefetchTimer: ReturnType<typeof setTimeout> | null = null;
-    const scheduleDirectionalPrefetch = () => {
-      if (prefetchTimer) clearTimeout(prefetchTimer);
-      prefetchTimer = setTimeout(() => {
-        prefetchTimer = null;
-        const center = map.getCenter();
-        const previousCenter = previousCenterRef.current;
-        previousCenterRef.current = center;
-        if (!previousCenter) return;
-
-        const targetZoom = Math.max(
-          map.getMinZoom(),
-          Math.min(maxNativeZoom ?? maxZoom, Math.floor(map.getZoom()) - 2)
-        );
-        const current = map.project(center, targetZoom);
-        const previous = map.project(previousCenter, targetZoom);
-        const dx = current.x - previous.x;
-        const dy = current.y - previous.y;
-        // 缩放但没有明显平移时，交给低清回退层处理，避免无方向预取。
-        if (Math.max(Math.abs(dx), Math.abs(dy)) < 32) return;
-
-        const bounds = map.getBounds();
-        const northWest = map.project(bounds.getNorthWest(), targetZoom).divideBy(256).floor();
-        const southEast = map.project(bounds.getSouthEast(), targetZoom).divideBy(256).floor();
-        const xDirection = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
-        const yDirection = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
-        const candidates: Array<[number, number]> = [];
-
-        if (xDirection !== 0) {
-          const x = xDirection > 0 ? southEast.x + 1 : northWest.x - 1;
-          for (let y = northWest.y; y <= southEast.y; y += 1) candidates.push([x, y]);
-        } else if (yDirection !== 0) {
-          const y = yDirection > 0 ? southEast.y + 1 : northWest.y - 1;
-          for (let x = northWest.x; x <= southEast.x; x += 1) candidates.push([x, y]);
-        }
-
-        const worldTiles = 2 ** targetZoom;
-        const now = Date.now();
-        prunePrefetches(now);
-        // 低清层的一列通常只需 2–4 张；超宽屏也保持这个上限。
-        candidates.slice(0, 4).forEach(([rawX, y]) => {
-          if (y < 0 || y >= worldTiles) return;
-          const x = ((rawX % worldTiles) + worldTiles) % worldTiles;
-          const tileUrl = tileUrlFor(x, y, targetZoom);
-          if (prefetchedAtRef.current.has(tileUrl) || pendingImagesRef.current.has(tileUrl)) return;
-
-          const image = new Image();
-          image.decoding = 'async';
-          image.fetchPriority = 'low';
-          const complete = () => pendingImagesRef.current.delete(tileUrl);
-          image.onload = complete;
-          image.onerror = complete;
-          pendingImagesRef.current.set(tileUrl, image);
-          prefetchedAtRef.current.set(tileUrl, now);
-          image.src = tileUrl;
-        });
-      }, 500);
-    };
-
-    previousCenterRef.current = map.getCenter();
-    map.on('moveend', scheduleDirectionalPrefetch);
-    return () => {
-      if (prefetchTimer) clearTimeout(prefetchTimer);
-      map.off('moveend', scheduleDirectionalPrefetch);
-      pendingImagesRef.current.forEach((image) => {
-        image.onload = null;
-        image.onerror = null;
-        image.src = '';
-      });
-      pendingImagesRef.current.clear();
-    };
-  }, [map, maxNativeZoom, maxZoom, url]);
-
-  return null;
-};
-
 /** 空项目自动定位按项目只发起一次，切视图卸载 MapView 后不重跑。 */
-// 长按期间只完成图钉的放大；松手后才进入回缩收稳，避免两段动画抢在一起。
-const MAP_NOTE_GROW_MS = 320;
-const MAP_NOTE_SETTLE_MS = 240;
 const MAP_NOTE_EXIT_MS = 220;
 
 interface MapViewProps {
@@ -481,20 +249,11 @@ export const MapView: React.FC<MapViewProps> = ({
     mapChromeTone
   );
   const mapChromeHoverBg = mapChromeControlHoverBackground(mapUiChromeOpacity, mapChromeTone);
-  const [editingNote, setEditingNote] = useState<Partial<Note> | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [pendingPersistedEditorNoteId, setPendingPersistedEditorNoteId] = useState<string | null>(null);
-  /** 与「当前位置新建」同路径；为 true 时 NoteEditor 打开后自动进入内嵌 +拍照 */
-  const [editorAutoOpenCamera, setEditorAutoOpenCamera] = useState(false);
   const mapNoteSaveRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
   const compactViewport = useCompactViewport();
-  const [introNote, setIntroNote] = useState<Partial<Note> | null>(null);
-  const [introNoteMotion, setIntroNoteMotion] = useState<'enter' | 'settle' | 'exit' | undefined>(undefined);
   // 所有退出路径（取消草稿、删除已有点）共用这一份状态，避免重复播放离场动画。
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
-  const introTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const introStartedAtRef = useRef(0);
-  const longPressPreviewNoteRef = useRef<Partial<Note> | null>(null);
   const deletingNoteIdsRef = useRef(new Set<string>());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(() => new Set());
@@ -507,6 +266,29 @@ export const MapView: React.FC<MapViewProps> = ({
   const [noteCoordOverrides, setNoteCoordOverrides] = useState<Record<string, Coordinates>>({});
   const isMarkerDraggingRef = useRef(false);
   const ignoreNextMarkerClickRef = useRef(false);
+  const {
+    editingNote,
+    setEditingNote,
+    isEditorOpen,
+    setIsEditorOpen,
+    editorAutoOpenCamera,
+    setEditorAutoOpenCamera,
+    introNote,
+    setIntroNote,
+    noteMotionById,
+    stageNewMapNote,
+    openNewNoteEditorAfterIntro,
+    stageLongPressNote,
+    finishLongPressNote,
+    cancelLongPressNote
+  } = useMapNoteIntro({
+    onToggleEditor,
+    onStageNote: (noteId) => {
+      setPreSelectedNotes(null);
+      setSelectedNoteIds(new Set([noteId]));
+      setSelectedNoteId(noteId);
+    }
+  });
 
   /**
    * 相册导入的点位先完成项目写入，再用实际已存在的 Note 打开编辑器。
@@ -515,10 +297,6 @@ export const MapView: React.FC<MapViewProps> = ({
   const queuePersistedNoteEditor = useCallback((note: Note) => {
     setPendingPersistedEditorNoteId(note.id);
   }, []);
-
-  useEffect(() => {
-    if (!isEditorOpen) setEditorAutoOpenCamera(false);
-  }, [isEditorOpen]);
 
   useEffect(() => {
     if (!pendingPersistedEditorNoteId) return;
@@ -535,26 +313,9 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [notes, onToggleEditor, pendingPersistedEditorNoteId]);
   const ignoreNextMapClickRef = useRef(false);
 
-  useEffect(
-    () => () => {
-      if (introTimerRef.current) clearTimeout(introTimerRef.current);
-      longPressPreviewNoteRef.current = null;
-    },
-    []
-  );
-
   const selectedNoteRaw = useMemo(
     () => (selectedNoteId ? notes.find((n) => n.id === selectedNoteId) : null),
     [selectedNoteId, notes]
-  );
-  const noteMotionById = useMemo<Readonly<Record<string, 'enter' | 'settle' | 'exit'>> | undefined>(
-    () =>
-      introNote?.id && introNoteMotion
-        ? {
-            [introNote.id]: introNoteMotion
-          }
-        : undefined,
-    [introNote?.id, introNoteMotion]
   );
   const inspectorNoteId = useMemo(() => {
     if (selectedNoteIds.size > 1) return null;
@@ -1381,6 +1142,48 @@ export const MapView: React.FC<MapViewProps> = ({
     clusterThreshold,
     forceSingleNoteIds
   });
+  const { handleMarkerClick, handleClusterClick } = useMapMarkerSelection({
+    isUIVisible,
+    showTextLabels,
+    connections,
+    selectedNoteId,
+    selectedNoteIds,
+    preSelectedNotes,
+    ignoreNextMarkerClickRef,
+    isMarkerDraggingRef,
+    selectionTimerRef,
+    closePanelsForPreview,
+    sortNotes,
+    setSelectedNoteId,
+    setSelectedNoteIds,
+    setPreSelectedNotes,
+    setConnectionHighlightNoteIds
+  });
+  const {
+    handleMarkerDrag,
+    handleMarkerDragEnd,
+    handleMarkerLongPressDragStart,
+    handleMarkerLongPressDrag,
+    handleMarkerLongPressDragEnd
+  } = useMapMarkerDrag({
+    canModifyNote,
+    denyEdit,
+    onUpdateNote,
+    moveMapNotesToUnplaced,
+    draggedNoteIdsFor,
+    updateUnplacedSidebarDropTarget,
+    closeMapChromeExcept,
+    onWorkspaceEditModeChange,
+    isMarkerDraggingRef,
+    ignoreNextMarkerClickRef,
+    lastMarkerDragPointerRef,
+    setNoteCoordOverrides,
+    setIsUnplacedSidebarDropTarget,
+    setUnplacedSidebarDropCount,
+    setPreSelectedNotes,
+    setSelectedNoteIds,
+    setSelectedNoteId
+  });
 
   // Map styling management hook
   const {
@@ -1396,141 +1199,7 @@ export const MapView: React.FC<MapViewProps> = ({
     onMapStyleChange
   });
 
-  /** 仅提示当前底图的首轮可见瓦片；完成后平移/缩放不再反复弹出。 */
-  const [initialTileProgress, setInitialTileProgress] = useState<number | null>(
-    effectiveMapStyle === 'blank' ? null : 8
-  );
-  const initialTilesCompleteRef = useRef(effectiveMapStyle === 'blank');
-  const initialTileTotalRef = useRef(0);
-  const initialTileSettledRef = useRef(0);
-  const initialTileHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (initialTileHideTimerRef.current) {
-      clearTimeout(initialTileHideTimerRef.current);
-      initialTileHideTimerRef.current = null;
-    }
-    initialTileTotalRef.current = 0;
-    initialTileSettledRef.current = 0;
-    initialTilesCompleteRef.current = effectiveMapStyle === 'blank';
-    setInitialTileProgress(effectiveMapStyle === 'blank' ? null : 8);
-
-    return () => {
-      if (initialTileHideTimerRef.current) clearTimeout(initialTileHideTimerRef.current);
-    };
-  }, [effectiveMapStyle, project.id]);
-
-  const handleInitialTilesLoading = useCallback(() => {
-    if (initialTilesCompleteRef.current) return;
-    setInitialTileProgress((current) => current ?? 8);
-  }, []);
-
-  const handleInitialTileStart = useCallback(() => {
-    if (initialTilesCompleteRef.current) return;
-    initialTileTotalRef.current += 1;
-    setInitialTileProgress((current) => Math.max(current ?? 8, 12));
-  }, []);
-
-  const handleInitialTileSettled = useCallback(() => {
-    if (initialTilesCompleteRef.current) return;
-    initialTileSettledRef.current += 1;
-    const total = Math.max(initialTileTotalRef.current, 1);
-    const ratio = initialTileSettledRef.current / total;
-    setInitialTileProgress((current) =>
-      Math.max(current ?? 12, Math.min(88, Math.round(16 + ratio * 72)))
-    );
-  }, []);
-
-  const handleInitialTilesLoaded = useCallback(() => {
-    if (initialTilesCompleteRef.current) return;
-    initialTilesCompleteRef.current = true;
-    setInitialTileProgress(100);
-    if (initialTileHideTimerRef.current) clearTimeout(initialTileHideTimerRef.current);
-    initialTileHideTimerRef.current = setTimeout(() => {
-      initialTileHideTimerRef.current = null;
-      setInitialTileProgress(null);
-    }, 360);
-  }, []);
-
-  const initialTileEventHandlers = useMemo(
-    () => ({
-      loading: handleInitialTilesLoading,
-      tileloadstart: handleInitialTileStart,
-      tileload: handleInitialTileSettled,
-      tileerror: handleInitialTileSettled,
-      load: handleInitialTilesLoaded
-    }),
-    [
-      handleInitialTileSettled,
-      handleInitialTileStart,
-      handleInitialTilesLoaded,
-      handleInitialTilesLoading
-    ]
-  );
-
-  const beginNewNoteIntro = useCallback((note: Partial<Note>) => {
-      if (introTimerRef.current) clearTimeout(introTimerRef.current);
-      setEditingNote(note);
-      setIntroNote(note);
-      setIntroNoteMotion('enter');
-      introStartedAtRef.current = Date.now();
-    }, []);
-
-  const openNewNoteEditorAfterIntro = useCallback(
-    (note: Partial<Note>, elapsedMs = 0) => {
-      const remainingGrowMs = Math.max(0, MAP_NOTE_GROW_MS - elapsedMs);
-      if (introTimerRef.current) clearTimeout(introTimerRef.current);
-      introTimerRef.current = setTimeout(() => {
-        setIntroNoteMotion('settle');
-        introTimerRef.current = setTimeout(() => {
-          introTimerRef.current = null;
-          setIsEditorOpen(true);
-          onToggleEditor(true);
-        }, MAP_NOTE_SETTLE_MS);
-      }, remainingGrowMs);
-    },
-    [onToggleEditor]
-  );
-
-  const createNewMapNote = useCallback(
-    (coords: Coordinates, overrides?: Partial<Note>): Partial<Note> => {
-      return {
-        id: generateId(),
-        createdAt: Date.now(),
-        coords,
-        fontSize: 3,
-        emoji: '',
-        text: '',
-        images: [],
-        tags: [],
-        variant: 'standard',
-        isFavorite: false,
-        color: '#FFFFFF',
-        // Mapping 创建的对象尚未进入 Board；0,0 只是兼容旧数据结构的内部哨兵。
-        boardX: 0,
-        boardY: 0,
-        isInitialPosition: true,
-        unplacedOrder: Date.now(),
-        ...overrides
-      };
-    },
-    []
-  );
-
-  /**
-   * 临时图钉只存在于当前 MapView；保存时以相同 id 写入项目，图层直接接手而不闪断。
-   */
-  const stageNewMapNote = useCallback(
-    (coords: Coordinates, overrides?: Partial<Note>): Partial<Note> => {
-      const note = createNewMapNote(coords, overrides);
-      setPreSelectedNotes(null);
-      setSelectedNoteIds(new Set([note.id]));
-      setSelectedNoteId(note.id);
-      beginNewNoteIntro(note);
-      return note;
-    },
-    [beginNewNoteIntro, createNewMapNote]
-  );
+  const mapTileKeepBuffer = useMemo(() => getAdaptiveMapTileKeepBuffer(), []);
 
   /**
    * 地图点位唯一的离场路径：先让图钉完成一次 exit，再移除临时点或提交持久化删除。
@@ -1612,293 +1281,20 @@ export const MapView: React.FC<MapViewProps> = ({
     void createNoteAtCurrentLocation({ autoOpenCamera: true });
   }, [createNoteAtCurrentLocation]);
 
-  const handleLongPress = useCallback(
-    (coords: Coordinates) => {
-      const newNote = stageNewMapNote(coords);
-      longPressPreviewNoteRef.current = newNote;
-    },
-    [stageNewMapNote]
-  );
-
-  const handleLongPressRelease = useCallback(() => {
-    const note = longPressPreviewNoteRef.current;
-    if (!note) return;
-    longPressPreviewNoteRef.current = null;
-    openNewNoteEditorAfterIntro(note, Date.now() - introStartedAtRef.current);
-  }, [openNewNoteEditorAfterIntro]);
+  const handleLongPress = stageLongPressNote;
+  const handleLongPressRelease = finishLongPressNote;
 
   const handleLongPressCancel = useCallback(() => {
-    const cancelledNoteId = longPressPreviewNoteRef.current?.id;
-    longPressPreviewNoteRef.current = null;
-    if (introTimerRef.current) clearTimeout(introTimerRef.current);
-    introTimerRef.current = null;
-    setEditingNote(null);
+    const cancelledNoteId = cancelLongPressNote();
     if (cancelledNoteId) {
       void exitMapNote(cancelledNoteId, false);
     }
-  }, [exitMapNote]);
+  }, [cancelLongPressNote, exitMapNote]);
 
   const handleImportFromPhotos = useCallback(() => {
     fileInputRef.current?.click();
   }, [fileInputRef]);
 
-  const handleMarkerClick = (note: Note, e?: L.LeafletMouseEvent) => {
-    if (ignoreNextMarkerClickRef.current || isMarkerDraggingRef.current) {
-      return;
-    }
-    // Prevent event propagation to avoid conflicts with map events
-    if (e) {
-      e.originalEvent?.stopPropagation();
-      e.originalEvent?.stopImmediatePropagation();
-    }
-
-    // 预览模式下的特殊交互处理
-    if (!isUIVisible) {
-      if (selectionTimerRef.current) {
-        clearTimeout(selectionTimerRef.current);
-        selectionTimerRef.current = null;
-      }
-      
-      setPreSelectedNotes(null);
-      // 预览模式下：点击点位时，只显示该点及其连线相邻点的 label
-      if (selectedNoteId === note.id) {
-        setSelectedNoteId(null);
-        setConnectionHighlightNoteIds(null);
-      } else {
-        closePanelsForPreview();
-        setSelectedNoteId(null);
-        // 计算与当前点通过连线相连的所有点（包括自身）
-        const relatedIds = new Set<string>();
-        relatedIds.add(note.id);
-        connections.forEach(conn => {
-          if (conn.fromNoteId === note.id || conn.toNoteId === note.id) {
-            relatedIds.add(conn.fromNoteId);
-            relatedIds.add(conn.toNoteId);
-          }
-        });
-        const idsArray = Array.from(relatedIds);
-        // label 显示模式下不收缩为仅连线相关 label，保持全部显示
-        setConnectionHighlightNoteIds(showTextLabels ? null : idsArray);
-
-        // 延迟设置新选中点，确保“先恢复”的视觉效果或逻辑
-        selectionTimerRef.current = setTimeout(() => {
-          setSelectedNoteId(note.id);
-          selectionTimerRef.current = null;
-        }, 50);
-      }
-      return;
-    }
-
-    // 已经是稳定单选时，再点同一图钉不应先关闭预览再重新选中。
-    // Shift 仍保留原有“从多选集合中切换”的语义。
-    const additive = !!e?.originalEvent?.shiftKey;
-    if (
-      !additive &&
-      selectedNoteId === note.id &&
-      selectedNoteIds.size === 1 &&
-      selectedNoteIds.has(note.id) &&
-      preSelectedNotes == null
-    ) {
-      return;
-    }
-    // 普通地图模式：单选会打开详情卡，故收起其它浮层；Shift 多选不打断当前工作流。
-    if (!additive) closePanelsForPreview();
-    setPreSelectedNotes(null);
-    let nextSet: Set<string>;
-    if (additive) {
-      nextSet = new Set(selectedNoteIds);
-      if (nextSet.has(note.id)) nextSet.delete(note.id);
-      else nextSet.add(note.id);
-    } else {
-      nextSet = new Set([note.id]);
-    }
-    setSelectedNoteIds(nextSet);
-    const primary =
-      nextSet.size === 0
-        ? null
-        : nextSet.has(note.id)
-          ? note.id
-          : Array.from(nextSet)[0];
-    setSelectedNoteId(primary);
-
-    const relatedIds = new Set<string>();
-    nextSet.forEach((id) => {
-      relatedIds.add(id);
-      connections.forEach((conn) => {
-        if (conn.fromNoteId === id || conn.toNoteId === id) {
-          relatedIds.add(conn.fromNoteId);
-          relatedIds.add(conn.toNoteId);
-        }
-      });
-    });
-    setConnectionHighlightNoteIds(showTextLabels ? null : Array.from(relatedIds));
-  };
-
-  // Handle cluster marker click - set up cluster navigation
-  const handleClusterClick = (clusterNotes: Note[], e?: L.LeafletMouseEvent) => {
-    // Prevent event propagation to avoid conflicts with map events
-    if (e) {
-      e.originalEvent?.stopPropagation();
-      e.originalEvent?.stopImmediatePropagation();
-    }
-    
-    // Sort notes: from south to north, from west to east
-    const sortedClusterNotes = sortNotes(clusterNotes);
-
-    if (!isUIVisible) {
-      // 预览模式：点击集合点时，仅在地图上展开该簇的标签
-      if (selectionTimerRef.current) {
-        clearTimeout(selectionTimerRef.current);
-        selectionTimerRef.current = null;
-      }
-      setSelectedNoteId(null);
-      setSelectedNoteIds(new Set());
-      setPreSelectedNotes(sortedClusterNotes);
-      return;
-    }
-
-    // 正常地图模式：点击集合点时，仅展开该簇内的 labels，由 TextLabelsLayer 处理二次点击
-    setSelectedNoteId(null);
-    setSelectedNoteIds(new Set());
-    setPreSelectedNotes(sortedClusterNotes);
-  };
-
-  const handleMarkerDrag = useCallback((note: Note, e: any) => {
-    const marker = e?.target as L.Marker | undefined;
-    const latLng = marker?.getLatLng?.();
-    if (!latLng) return;
-
-    isMarkerDraggingRef.current = true;
-    const pointer = e?.originalEvent as { clientX?: number; clientY?: number } | undefined;
-    if (typeof pointer?.clientX === 'number' && typeof pointer.clientY === 'number') {
-      lastMarkerDragPointerRef.current = { clientX: pointer.clientX, clientY: pointer.clientY };
-    }
-    updateUnplacedSidebarDropTarget(note, lastMarkerDragPointerRef.current ?? undefined);
-
-    setNoteCoordOverrides((prev) => ({
-      ...prev,
-      [note.id]: {
-        lat: latLng.lat,
-        lng: latLng.lng
-      }
-    }));
-  }, [updateUnplacedSidebarDropTarget]);
-
-  const handleMarkerDragEnd = useCallback((note: Note, e: L.DragEndEvent) => {
-    if (!canModifyNote(note)) {
-      denyEdit(note);
-      return;
-    }
-    const marker = e.target as L.Marker;
-    const latLng = marker.getLatLng();
-    if (!latLng) return;
-
-    const isDropTarget = updateUnplacedSidebarDropTarget(note, lastMarkerDragPointerRef.current ?? undefined);
-    lastMarkerDragPointerRef.current = null;
-    setIsUnplacedSidebarDropTarget(false);
-    setUnplacedSidebarDropCount(0);
-
-    if (isDropTarget) {
-      isMarkerDraggingRef.current = false;
-      ignoreNextMarkerClickRef.current = true;
-      setTimeout(() => {
-        ignoreNextMarkerClickRef.current = false;
-      }, 0);
-      moveMapNotesToUnplaced(draggedNoteIdsFor(note));
-      return;
-    }
-
-    // 乐观更新：先把坐标写到本地覆盖表，保证 marker 位置不会在聚类重算前回弹
-    setNoteCoordOverrides((prev) => ({
-      ...prev,
-      [note.id]: {
-        lat: latLng.lat,
-        lng: latLng.lng
-      }
-    }));
-
-    isMarkerDraggingRef.current = false;
-    ignoreNextMarkerClickRef.current = true;
-    // 允许 dragend 触发的 click 不再影响本次交互
-    setTimeout(() => {
-      ignoreNextMarkerClickRef.current = false;
-    }, 0);
-
-    onUpdateNote({
-      ...note,
-      coords: {
-        lat: latLng.lat,
-        lng: latLng.lng
-      }
-    });
-  }, [canModifyNote, denyEdit, draggedNoteIdsFor, moveMapNotesToUnplaced, onUpdateNote, updateUnplacedSidebarDropTarget]);
-
-  const handleMarkerLongPressDragStart = useCallback(
-    (note: Note) => {
-      if (!canModifyNote(note)) {
-        denyEdit(note);
-        return;
-      }
-      isMarkerDraggingRef.current = true;
-      lastMarkerDragPointerRef.current = null;
-      setPreSelectedNotes(null);
-      setSelectedNoteIds((current) =>
-        current.has(note.id) ? current : new Set([note.id])
-      );
-      setSelectedNoteId(note.id);
-      closeMapChromeExcept();
-      onWorkspaceEditModeChange(true);
-    },
-    [canModifyNote, closeMapChromeExcept, denyEdit, onWorkspaceEditModeChange]
-  );
-
-  const handleMarkerLongPressDrag = useCallback((note: Note, latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => {
-    isMarkerDraggingRef.current = true;
-    lastMarkerDragPointerRef.current = pointer;
-    updateUnplacedSidebarDropTarget(note, pointer);
-    setNoteCoordOverrides((prev) => ({
-      ...prev,
-      [note.id]: { lat: latLng.lat, lng: latLng.lng }
-    }));
-  }, [updateUnplacedSidebarDropTarget]);
-
-  const handleMarkerLongPressDragEnd = useCallback(
-    (note: Note, latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => {
-      if (!canModifyNote(note)) {
-        denyEdit(note);
-        return;
-      }
-      const isDropTarget = updateUnplacedSidebarDropTarget(note, pointer);
-      setIsUnplacedSidebarDropTarget(false);
-      setUnplacedSidebarDropCount(0);
-      lastMarkerDragPointerRef.current = null;
-      if (isDropTarget) {
-        isMarkerDraggingRef.current = false;
-        ignoreNextMarkerClickRef.current = true;
-        window.setTimeout(() => {
-          ignoreNextMarkerClickRef.current = false;
-        }, 0);
-        moveMapNotesToUnplaced(draggedNoteIdsFor(note));
-        return;
-      }
-      setNoteCoordOverrides((prev) => ({
-        ...prev,
-        [note.id]: { lat: latLng.lat, lng: latLng.lng }
-      }));
-      isMarkerDraggingRef.current = false;
-      ignoreNextMarkerClickRef.current = true;
-      window.setTimeout(() => {
-        ignoreNextMarkerClickRef.current = false;
-      }, 0);
-      onUpdateNote({
-        ...note,
-        coords: { lat: latLng.lat, lng: latLng.lng }
-      });
-    },
-    [canModifyNote, denyEdit, draggedNoteIdsFor, moveMapNotesToUnplaced, onUpdateNote, updateUnplacedSidebarDropTarget]
-  );
-
-  
   const handleSaveNote = async (noteData: Partial<Note>) => {
     if (noteData.id && notes.some(n => n.id === noteData.id)) {
       // 确保保留原始note的variant
@@ -2015,6 +1411,36 @@ export const MapView: React.FC<MapViewProps> = ({
     onToggleEditor(true);
     closeMapChromeExcept();
   }, [canModifyNote, closeMapChromeExcept, denyEdit, isUIVisible, notes, onToggleEditor]);
+
+  const handleMapMarkerClick = useCallback(
+    (note: Note, event?: L.LeafletMouseEvent) => {
+      const repeatedSingleSelection =
+        !event?.originalEvent?.shiftKey &&
+        !isMapToolbarEditMode &&
+        isUIVisible &&
+        selectedNoteId === note.id &&
+        selectedNoteIds.size === 1 &&
+        selectedNoteIds.has(note.id) &&
+        preSelectedNotes == null;
+
+      if (repeatedSingleSelection) {
+        event?.originalEvent?.stopPropagation();
+        event?.originalEvent?.stopImmediatePropagation();
+        handleEditNoteFromLabel(note.id);
+        return;
+      }
+      handleMarkerClick(note, event);
+    },
+    [
+      handleEditNoteFromLabel,
+      handleMarkerClick,
+      isMapToolbarEditMode,
+      isUIVisible,
+      preSelectedNotes,
+      selectedNoteId,
+      selectedNoteIds
+    ]
+  );
 
   const handleMapShiftBoxSelectClaimed = useCallback(() => {
     ignoreNextMapClickRef.current = true;
@@ -2200,37 +1626,20 @@ export const MapView: React.FC<MapViewProps> = ({
           />
         )}
         {effectiveMapStyle !== 'blank' && (
-          <MapTileZoomFallback
-            url={tileLayerConfig.url}
-            maxZoom={tileLayerConfig.maxZoom}
-            maxNativeZoom={tileLayerConfig.maxNativeZoom}
-          />
-        )}
-        {effectiveMapStyle !== 'blank' && (
           <MapTileDirectionalPrefetch
             url={tileLayerConfig.url}
             maxZoom={tileLayerConfig.maxZoom}
             maxNativeZoom={tileLayerConfig.maxNativeZoom}
           />
         )}
-        <TileLayer 
-          key={effectiveMapStyle}
-          {...tileLayerConfig}
-          eventHandlers={initialTileEventHandlers}
-          // 回退层显式为 0；主图层也必须显式抬高，不能依赖 DOM 挂载顺序。
-          // 否则回退层中心的大瓦片会偶尔盖在已到达的高精瓦片上，出现
-          // “中间低清、周围高清”的反直觉画面。
-          zIndex={1}
-          tileSize={256}
-          zoomOffset={0}
-          // 原生双指缩放在跨越整数层级时开始补图；自定义桌面平滑缩放会拦截
-          // 中间层级更新，因此不会产生错误坐标的瓦片请求。
-          updateWhenZooming
-          // Leaflet 对移动端的推荐策略是等拖动停下再补图；桌面端则实时补图，
-          // 让长距离平移无需等到松手才出现新区域。
-          updateWhenIdle={isTouchFirstInput}
-          keepBuffer={6}
-        />
+        {effectiveMapStyle !== 'blank' ? (
+          <MapCrossfadeTileLayer
+            styleId={effectiveMapStyle}
+            {...tileLayerConfig}
+            updateWhenIdle={isTouchFirstInput}
+            keepBuffer={mapTileKeepBuffer}
+          />
+        ) : null}
         
         <MapLongPressHandler
           onLongPress={handleLongPress}
@@ -2327,10 +1736,21 @@ export const MapView: React.FC<MapViewProps> = ({
           noteCoordOverrides={noteCoordOverrides}
           mapUiChromeOpacity={mapUiChromeOpacity}
           mapUiChromeBlurPx={mapUiChromeBlurPx}
+          chromeAppearance={mapChromeTone}
           onLabelDoubleClickEdit={
             isUIVisible && isMapToolbarEditMode ? handleEditNoteFromLabel : undefined
           }
           onSelectNote={(noteId) => {
+            if (
+              !isMapToolbarEditMode &&
+              selectedNoteId === noteId &&
+              selectedNoteIds.size === 1 &&
+              selectedNoteIds.has(noteId) &&
+              preSelectedNotes == null
+            ) {
+              handleEditNoteFromLabel(noteId);
+              return;
+            }
             closePanelsForPreview();
             setSelectedNoteIds(new Set([noteId]));
             setSelectedNoteId(noteId);
@@ -2441,7 +1861,7 @@ export const MapView: React.FC<MapViewProps> = ({
           pinSize={pinSize}
           themeColor={themeColor}
           mapInstance={mapInstance}
-          onMarkerClick={handleMarkerClick}
+          onMarkerClick={handleMapMarkerClick}
           onClusterClick={handleClusterClick}
           onMarkerHover={(note) => setHoveredNoteId(note?.id ?? null)}
           noteCoordOverrides={noteCoordOverrides}
@@ -2620,6 +2040,7 @@ export const MapView: React.FC<MapViewProps> = ({
                       children: onUpdateProject ? (
                         <ProjectNotesLayerPanel
                           themeColor={themeColor}
+                          panelChromeStyle={mapChromeContentSurface}
                           chromeAppearance={mapChromeTone}
                           variant="dock"
                           flow
@@ -2740,38 +2161,6 @@ export const MapView: React.FC<MapViewProps> = ({
         }}
       /> : null}
 
-      {isUIVisible && initialTileProgress !== null ? (
-        <div
-          className="pointer-events-none absolute left-0 right-0 top-20 z-[900] flex justify-center px-4"
-          role="status"
-          aria-live="polite"
-          data-mapp-export-ui=""
-        >
-          <div
-            className={`w-full max-w-56 rounded-xl border border-gray-100/80 px-3 py-2 shadow-lg map-chrome-content-${mapChromeTone}`}
-            style={mapChromeControlSurface}
-          >
-            <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium">
-              <span>正在加载地图瓦片</span>
-              <span className="tabular-nums opacity-65">{initialTileProgress}%</span>
-            </div>
-            <div
-              className="h-1 overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
-              role="progressbar"
-              aria-label="加载地图瓦片"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={initialTileProgress}
-            >
-              <div
-                className="h-full rounded-full transition-[width] duration-200 ease-out"
-                style={{ width: `${initialTileProgress}%`, backgroundColor: themeColor }}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {showMapConnectionPanel && onUpdateConnections && isUIVisible && (
         <GraphConnectionPanel
           isOpen
@@ -2821,76 +2210,35 @@ export const MapView: React.FC<MapViewProps> = ({
       )}
       
       {isUIVisible ? (
-        <ChromeNoteSlot
+        <MapNoteSlot
           kind={mapNoteKind}
           onClose={closeMapNoteSlot}
           appearance={mapChromeTone}
           motionAnchor={noteEditorAnimationAnchor}
-          dismissIgnoreRefs={
-            mapNoteKind === 'preview'
-              ? [mapToolbarRef, mapMarkerPaneDismissIgnoreRef]
-              : [mapToolbarRef]
-          }
-          resolve={(kind) => {
-            const pagePad = compactViewport ? '0.5rem' : '1rem';
-            const previewLeft = `calc(var(--workspace-ui-left-inset, 0px) + ${pagePad})`;
-            if (kind === 'editor') {
-              const editorSlot = chromeNoteEditorSlotLayout(
-                compactViewport,
-                mapChromeContentSurface
-              );
-              return {
-                backdropLabel: '关闭编辑器',
-                'aria-label': '便签编辑器',
-                ...editorSlot,
-                children: (
-                  <NoteEditor
-                    shell={false}
-                    isOpen
-                    saveDraftRef={mapNoteSaveRef}
-                    onClose={() => closeEditorAndDismissNoteSlot('discarded')}
-                    onSaveClose={() => closeEditorAndDismissNoteSlot('saved')}
-                    onSave={handleSaveNote}
-                    onDelete={handleDeleteNoteWithExit}
-                    initialNote={editingNote || {}}
-                    isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
-                    autoOpenCamera={editorAutoOpenCamera}
-                    onSwitchToBoardView={(coords) => onSwitchToBoardView?.(coords, mapInstance)}
-                    themeColor={themeColor}
-                    mapUiChromeOpacity={mapUiChromeOpacity}
-                    mapUiChromeBlurPx={mapUiChromeBlurPx}
-                    chromeAppearance={mapChromeTone}
-                  />
-                )
-              };
-            }
-            return {
-              backdropLabel: '关闭预览',
-              'aria-label': '便签预览',
-              className: 'flex min-h-0 flex-col',
-              style: {
-                top: mapToolbarMenuTop ?? 56,
-                left: previewLeft,
-                width: 'min(20rem, calc(100vw - 1rem))',
-                // 为与固定编辑器工作区的形变提供明确的起点；内容仍由 maxHeight 截断。
-                height: 'auto',
-                maxHeight: 'min(52dvh, 28rem)',
-                ...mapChromeContentSurface
-              },
-              children: stickySelectedNote ? (
-                <NotePreviewCard
-                  hosted
-                  note={stickySelectedNote}
-                  currentImageIndex={currentPreviewImageIndex}
-                  onImageIndexChange={setCurrentPreviewImageIndex}
-                  chromeAppearance={mapChromeTone}
-                  themeColor={themeColor}
-                  onOpenEditor={canModifyNote(stickySelectedNote) ? handleEditNoteFromLabel : undefined}
-                  onDelete={isMapToolbarEditMode && canModifyNote(stickySelectedNote) ? handleDeleteNoteWithExit : undefined}
-                />
-              ) : null
-            };
-          }}
+          toolbarRef={mapToolbarRef}
+          markerPaneRef={mapMarkerPaneDismissIgnoreRef}
+          compactViewport={compactViewport}
+          contentSurfaceStyle={mapChromeContentSurface}
+          menuTop={mapToolbarMenuTop}
+          saveDraftRef={mapNoteSaveRef}
+          onDiscard={() => closeEditorAndDismissNoteSlot('discarded')}
+          onSaveClose={() => closeEditorAndDismissNoteSlot('saved')}
+          onSave={handleSaveNote}
+          onDelete={handleDeleteNoteWithExit}
+          editingNote={editingNote}
+          notes={notes}
+          autoOpenCamera={editorAutoOpenCamera}
+          onSwitchToBoardView={onSwitchToBoardView}
+          mapInstance={mapInstance}
+          themeColor={themeColor}
+          mapUiChromeOpacity={mapUiChromeOpacity}
+          mapUiChromeBlurPx={mapUiChromeBlurPx}
+          selectedNote={stickySelectedNote}
+          currentImageIndex={currentPreviewImageIndex}
+          onImageIndexChange={setCurrentPreviewImageIndex}
+          canModifyNote={canModifyNote}
+          onOpenSelectedNote={handleEditNoteFromLabel}
+          isEditMode={isMapToolbarEditMode}
         />
       ) : null}
 

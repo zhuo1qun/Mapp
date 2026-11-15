@@ -4,6 +4,7 @@ import { getNoteCardTypography } from '../../utils/note/cardTypography';
 
 type Props = {
   text: string;
+  emoji?: string;
   fontSize?: number;
   isBold?: boolean;
   /** 卡片减去内边距后的文字可用宽度，单位 px。 */
@@ -11,20 +12,25 @@ type Props = {
   compact?: boolean;
   /** 待定位箱的展开态以实占尺寸缩小，文字同步缩小而不重新写一套规则。 */
   visualScale?: number;
+  expanded?: boolean;
+  detailLineCount?: number;
   className?: string;
   emptyClassName?: string;
 };
 
 /**
- * 纸质便签的共用文字区。容器负责背景、图标和标签；这里仅负责标题与正文的层级。
+ * 纸质便签的共用文字区。图标作为标题前缀参与排版；容器负责背景和标签。
  */
 export function NoteCardTextContent({
   text,
+  emoji = '',
   fontSize,
   isBold = false,
   contentWidth,
   compact = false,
   visualScale = 1,
+  expanded = false,
+  detailLineCount,
   className = '',
   emptyClassName = 'text-base'
 }: Props) {
@@ -33,7 +39,9 @@ export function NoteCardTextContent({
     fontSize,
     title,
     contentWidth,
-    compact
+    compact,
+    expanded,
+    detailLineCountOverride: detailLineCount
   });
   const typography = {
     ...baseTypography,
@@ -46,25 +54,27 @@ export function NoteCardTextContent({
       Math.round(baseTypography.detailFontSize * visualScale * 10) / 10
     )
   };
-  const hasContent = Boolean(title || detail);
+  const visibleDetail = expanded ? detail : '';
+  const hasContent = Boolean(emoji || title || visibleDetail);
 
   return (
     <div className={`note-card-content ${className}`}>
       {hasContent ? (
         <>
-          {title ? (
+          {title || emoji ? (
             <span
               title={title}
-              className={`note-card-title shrink-0 ${isBold ? 'font-bold' : 'font-medium'}`}
+              className={`note-card-title ${expanded ? 'note-card-title--expanded' : ''} shrink-0 ${isBold ? 'font-bold' : 'font-medium'}`}
               style={{
                 fontSize: `${typography.titleFontSize}px`,
                 lineHeight: typography.titleLineHeight
               }}
             >
+              {emoji ? <span className="note-card-title-emoji" aria-hidden>{emoji}</span> : null}
               {title}
             </span>
           ) : null}
-          {detail ? (
+          {visibleDetail ? (
             <div
               className="note-card-detail markdown-board-preview min-h-0 flex-1 opacity-90"
               style={{
@@ -73,7 +83,7 @@ export function NoteCardTextContent({
                 '--note-detail-lines': typography.detailLineCount
               } as React.CSSProperties}
             >
-              <ReactMarkdown>{detail}</ReactMarkdown>
+              <ReactMarkdown>{visibleDetail}</ReactMarkdown>
             </div>
           ) : null}
         </>

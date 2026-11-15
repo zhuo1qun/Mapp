@@ -64,7 +64,7 @@ async function run() {
     let tree: ReturnType<typeof create>;
     await act(async () => {
       tree = create(<NoteHeader themeColor="#abcdef" isFavorite={false} onToggleFavorite={() => {}}
-        showUpgrade={false} showLocateBoard={false} showLocateMap={false}
+        showUpgrade={false} showLocateBoard={false}
         discardDraft={isNoteContentEmpty(empty)}
         onSave={() => { throw new Error('Empty note must use discard action'); }}
         onDiscardDraft={async () => { result = await submitNoteDraft(empty, { ...actions, isNewNote }); }} />);

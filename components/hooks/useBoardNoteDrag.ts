@@ -487,11 +487,18 @@ export function useBoardNoteDrag({
     clearNotePressTracking();
   }, [cancelBrowseLongPress, clearNotePressTracking]);
 
+  // 坐标写回命中的这次 render 不能再把旧 offset 叠加到新坐标上。
+  // useLayoutEffect 仍负责清理内部状态，但渲染值在此提前收口，避免 DOM 短暂经过
+  // “已提交坐标 + 拖拽偏移”的双重位移，并被重新启用的 left/top transition 捕捉。
+  const dragVisualHasSettled = pendingSettleRef.current
+    ? pendingMatched(notes, pendingSettleRef.current)
+    : false;
+
   return {
-    draggingNoteId,
-    dragOffset,
-    isMultiSelectDragging,
-    multiSelectDragOffset,
+    draggingNoteId: dragVisualHasSettled ? null : draggingNoteId,
+    dragOffset: dragVisualHasSettled ? { x: 0, y: 0 } : dragOffset,
+    isMultiSelectDragging: dragVisualHasSettled ? false : isMultiSelectDragging,
+    multiSelectDragOffset: dragVisualHasSettled ? { x: 0, y: 0 } : multiSelectDragOffset,
     handleNotePointerDown,
     handleNotePointerMove,
     handleNotePointerUp,

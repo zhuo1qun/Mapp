@@ -5,6 +5,7 @@ import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Downl
 import { generateId, formatDate, compressImageFromBase64 } from '../utils';
 import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
+import { isSupabaseEnabled } from '../utils/supabaseEnv';
 import { downloadMappVizJson } from '../utils/export/mappVizJson';
 import {
   formatImportErrorMessage,
@@ -12,6 +13,12 @@ import {
   formatUnexpectedImportError,
   validateFullProjectImportPayload
 } from '../utils/import/importErrorFormat';
+import {
+  areProjectNotesDuplicates,
+  createImportedProjectShell,
+  mergeImportedProject,
+  regenerateImportedProjectContent
+} from '../utils/import/fullProjectImport';
 import { AnimatePresence } from 'framer-motion';
 import {
   DEFAULT_THEME_COLOR,
@@ -33,6 +40,7 @@ import { MotionDiv } from './ui/MotionDiv';
 import { ChromeMenuItem } from './ui/ChromeMenuItem';
 import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
 import { ChromeMenuShell } from './ui/ChromeMenuShell';
+import { ProjectMoreMenu } from './projects/ProjectMoreMenu';
 import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
@@ -109,146 +117,6 @@ function computeProjectMoreMenuFixedStyle(
   }
   return { ...base, top: button.bottom + gap, bottom: 'auto' };
 }
-
-/** 更多菜单：mapChrome 实色 + 模糊由 surfaceStyle 提供；几何由 fixedPlacementStyle（portal fixed） */
-const MenuDropdown: React.FC<{
-  project: Project;
-  onRename: (projectId: string) => void;
-  onDuplicate: (project: Project) => void;
-  onExportData: (project: Project) => void;
-  onExportFullProject: (project: Project) => void;
-  onExportMappViz: (project: Project) => void;
-  onCompressImages: (project: Project) => void;
-  onUpdateBuiltinExample?: (project: Project) => void;
-  onCheckData?: () => Promise<void>;
-  onCleanupBrokenReferences?: (project: Project) => Promise<void>;
-  onDelete: (id: string) => void;
-  onClose: () => void;
-  surfaceStyle: React.CSSProperties;
-  fixedPlacementStyle: React.CSSProperties;
-  motionOriginClass: 'origin-top' | 'origin-top-right';
-  hoverBackground: string;
-  canDelete?: boolean;
-  canUpdateBuiltinExample?: boolean;
-}> = ({
-  project,
-  onRename,
-  onDuplicate,
-  onExportData,
-  onExportFullProject,
-  onExportMappViz,
-  onCompressImages,
-  onUpdateBuiltinExample,
-  onCheckData,
-  onCleanupBrokenReferences,
-  onDelete,
-  onClose,
-  surfaceStyle,
-  fixedPlacementStyle,
-  motionOriginClass,
-  hoverBackground,
-  canDelete = true,
-  canUpdateBuiltinExample = false
-}) => {
-  return (
-    <ChromeMenuShell
-      data-pm-more-menu
-      className={`overflow-y-auto theme-surface-scrollbar animate-in fade-in zoom-in-95 ${motionOriginClass}`}
-      style={{ ...surfaceStyle, ...fixedPlacementStyle }}
-      onClick={(e) => e.stopPropagation()}
-      role="menu"
-    >
-      <ChromeMenuItem
-        icon={<Edit2 size={16} />}
-        hoverBackground={hoverBackground}
-        onClick={() => { onRename(project.id); onClose(); }}
-      >
-        Rename
-      </ChromeMenuItem>
-      <ChromeMenuItem
-        icon={<Copy size={16} />}
-        hoverBackground={hoverBackground}
-        onClick={() => { onDuplicate(project); onClose(); }}
-      >
-        Duplicate Project
-      </ChromeMenuItem>
-      {canUpdateBuiltinExample && onUpdateBuiltinExample ? (
-        <ChromeMenuItem
-          icon={<RefreshCw size={16} />}
-          hoverBackground={hoverBackground}
-          onClick={() => { onUpdateBuiltinExample(project); onClose(); }}
-        >
-          更新示例
-        </ChromeMenuItem>
-      ) : null}
-      <ChromeMenuItem
-        icon={<Download size={16} />}
-        hoverBackground={hoverBackground}
-        onClick={() => { onExportData(project); onClose(); }}
-      >
-        Export Data (CSV)
-      </ChromeMenuItem>
-      <ChromeMenuItem
-        icon={<Download size={16} />}
-        hoverBackground={hoverBackground}
-        onClick={() => { onExportFullProject(project); onClose(); }}
-      >
-        Export Full Project (JSON)
-      </ChromeMenuItem>
-      <ChromeMenuItem
-        icon={<Download size={16} />}
-        hoverBackground={hoverBackground}
-        onClick={() => { onExportMappViz(project); onClose(); }}
-      >
-        Export Bibliometrics (.viz.json)
-      </ChromeMenuItem>
-      <ChromeMenuItem
-        icon={<ImageIcon size={16} />}
-        hoverBackground={hoverBackground}
-        onClick={() => { onCompressImages(project); onClose(); }}
-      >
-        Compress Images
-      </ChromeMenuItem>
-      {onCheckData && (
-        <ChromeMenuItem
-          icon={<Palette size={16} />}
-          hoverBackground={hoverBackground}
-          onClick={async () => {
-            await onCheckData();
-            onClose();
-          }}
-        >
-          Check Data
-        </ChromeMenuItem>
-      )}
-      {onCleanupBrokenReferences && (
-        <ChromeMenuItem
-          icon={<Trash2 size={16} />}
-          hoverBackground={hoverBackground}
-          onClick={async () => {
-            await onCleanupBrokenReferences(project);
-            onClose();
-          }}
-        >
-          Clean Broken Links
-        </ChromeMenuItem>
-      )}
-      {canDelete ? (
-        <ChromeMenuItem
-          icon={<Trash2 size={16} />}
-          destructive
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(project.id);
-            onClose();
-          }}
-        >
-          Delete Project
-        </ChromeMenuItem>
-      ) : null}
-    </ChromeMenuShell>
-  );
-};
 
 interface ProjectManagerProps {
   projects: Project[];
@@ -411,6 +279,24 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     width: number;
     height: number;
   } | null>(null);
+  /** 首页左上角按钮复用项目列表的单张移动 Window。 */
+  const [hoveredHomeActionId, setHoveredHomeActionId] = useState<string | null>(null);
+  const homeActionsRef = useRef<HTMLDivElement>(null);
+  const homeActionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [homeActionSelectionRect, setHomeActionSelectionRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [hoveredSidebarLeftActionId, setHoveredSidebarLeftActionId] = useState<string | null>(null);
+  const sidebarLeftActionsRef = useRef<HTMLDivElement>(null);
+  const sidebarLeftActionRefs = useRef(new Map<string, HTMLElement>());
+  const [sidebarLeftSelectionRect, setSidebarLeftSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [hoveredSidebarRightActionId, setHoveredSidebarRightActionId] = useState<string | null>(null);
+  const sidebarRightActionsRef = useRef<HTMLDivElement>(null);
+  const sidebarRightActionRefs = useRef(new Map<string, HTMLElement>());
+  const [sidebarRightSelectionRect, setSidebarRightSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -438,6 +324,68 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     openMenuId ??
     (!clearSelectionInTransition ? currentProjectId : null);
   const rosterProjectIdsKey = displayProjects.map((project) => project.id).join('|');
+
+  const selectedHomeActionId =
+    hoveredHomeActionId ??
+    (showHomeSettings ? 'settings' : null) ??
+    (easterEggMode ? 'easter-egg' : null) ??
+    (exampleDevMaintenanceMode ? 'dev' : null);
+
+  useLayoutEffect(() => {
+    const group = homeActionsRef.current;
+    const button = selectedHomeActionId ? homeActionRefs.current.get(selectedHomeActionId) : null;
+    if (!group || !button) {
+      setHomeActionSelectionRect(null);
+      return;
+    }
+    const updateRect = () => setHomeActionSelectionRect({
+      x: button.offsetLeft,
+      y: button.offsetTop,
+      width: button.offsetWidth,
+      height: button.offsetHeight
+    });
+    updateRect();
+    const resizeObserver = new ResizeObserver(updateRect);
+    resizeObserver.observe(group);
+    resizeObserver.observe(button);
+    return () => resizeObserver.disconnect();
+  }, [selectedHomeActionId]);
+
+  const selectedSidebarLeftActionId = hoveredSidebarLeftActionId ?? (showHomeSettings ? 'settings' : null);
+
+  useLayoutEffect(() => {
+    const group = sidebarLeftActionsRef.current;
+    const item = selectedSidebarLeftActionId ? sidebarLeftActionRefs.current.get(selectedSidebarLeftActionId) : null;
+    if (!group || !item) {
+      setSidebarLeftSelectionRect(null);
+      return;
+    }
+    const updateRect = () => setSidebarLeftSelectionRect({
+      x: item.offsetLeft, y: item.offsetTop, width: item.offsetWidth, height: item.offsetHeight
+    });
+    updateRect();
+    const observer = new ResizeObserver(updateRect);
+    observer.observe(group);
+    observer.observe(item);
+    return () => observer.disconnect();
+  }, [selectedSidebarLeftActionId]);
+
+  useLayoutEffect(() => {
+    const group = sidebarRightActionsRef.current;
+    const item = hoveredSidebarRightActionId ? sidebarRightActionRefs.current.get(hoveredSidebarRightActionId) : null;
+    if (!group || !item) {
+      setSidebarRightSelectionRect(null);
+      return;
+    }
+    const updateRect = () => setSidebarRightSelectionRect({
+      x: item.offsetLeft, y: item.offsetTop, width: item.offsetWidth, height: item.offsetHeight
+    });
+    updateRect();
+    const observer = new ResizeObserver(updateRect);
+    observer.observe(group);
+    observer.observe(item);
+    return () => observer.disconnect();
+  }, [hoveredSidebarRightActionId]);
 
   useLayoutEffect(() => {
     const list = rosterListRef.current;
@@ -773,7 +721,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       let duplicateCount = 0;
       const dedupedNotes: Note[] = [];
       for (const note of project.notes) {
-        const found = dedupedNotes.find((n) => isDuplicateNote(n, note));
+        const found = dedupedNotes.find((n) => areProjectNotesDuplicates(n, note));
         if (found) {
           duplicateCount++;
           continue;
@@ -841,14 +789,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     }
   };
 
-  // Check if two notes are duplicates (same location and content)
-  const isDuplicateNote = (note1: any, note2: any): boolean => {
-    if (note1.text !== note2.text) return false;
-    const latDiff = Math.abs(note1.coords?.lat - note2.coords?.lat);
-    const lngDiff = Math.abs(note1.coords?.lng - note2.coords?.lng);
-    return latDiff < 0.0001 && lngDiff < 0.0001;
-  };
-
   // Import project from JSON data（merge 必须用参数传入：拖放时 setState 异步，不能依赖 isImportingFromData）
   const reportImportError = (message: string) => {
     setImportErrorMessage(message);
@@ -880,43 +820,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         return;
       }
       
-      // Generate new ID to avoid conflicts
-      const newProjectId = generateId();
-      const newProject: Project = {
-        id: newProjectId,
-        name: `${importedProject.name} (Imported)`,
-        type: 'map',
-        projectKind: 'mapping',
-        createdAt: Date.now(),
-        notes: importedProject.notes || [],
-        frames: importedProject.frames || [],
-        connections: importedProject.connections || [],
-        themeColor: importedProject.themeColor,
-        backgroundOpacity: importedProject.backgroundOpacity
-      };
+      const newProject = createImportedProjectShell(importedProject);
 
       // If importing into existing project (merge mode)
       if (mergeIntoCurrent && activeProject) {
-        // Create ID mapping for notes, frames, and connections
-        const noteIdMap = new Map<string, string>();
-        const duplicateNoteIdMap = new Map<string, string>();
-        const frameIdMap = new Map<string, string>();
-        
-        // Generate new IDs for imported notes (import ALL notes including compact and text)
-        const importedNotes = (newProject.notes || []).map(note => {
-          const newId = generateId();
-          noteIdMap.set(note.id, newId);
-          // 不要根据内容自动判断 variant，保持原始 variant 或默认为 standard
-          const raw = (note as Note & { variant?: string }).variant || 'standard';
-          const variant: 'standard' | 'image' = raw === 'image' ? 'image' : 'standard';
-          return { ...note, id: newId, variant };
-        });
-        
-        const noteCounts = {
-          standard: importedNotes.filter(n => n.variant === 'standard').length,
-          image: importedNotes.filter(n => n.variant === 'image').length,
-          total: importedNotes.length
-        };
+        const mergedImport = mergeImportedProject(activeProject, newProject);
+        const { noteCounts } = mergedImport;
         console.log('Merging notes into existing project:', {
           totalNotes: noteCounts.total,
           standard: noteCounts.standard,
@@ -924,138 +833,35 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           frames: (newProject.frames || []).length,
           connections: (newProject.connections || []).length
         });
-        
-        // Generate new IDs for imported frames
-        const importedFrames = (newProject.frames || []).map(frame => {
-          const newId = generateId();
-          frameIdMap.set(frame.id, newId);
-          return { ...frame, id: newId };
-        });
-        
-        // Update note groupId / groupIds to new frame IDs
-        importedNotes.forEach(note => {
-          if (note.groupId && frameIdMap.has(note.groupId)) {
-            note.groupId = frameIdMap.get(note.groupId)!;
-          }
-          if (note.groupIds?.length) {
-            note.groupIds = note.groupIds
-              .map(gid => (frameIdMap.has(gid) ? frameIdMap.get(gid)! : gid));
-          }
-        });
-        
-        // Merge notes with duplicate detection
-        if (activeProject) {
-          const uniqueImportedNotes = importedNotes.filter(importedNote => {
-            const match = activeProject.notes.find(existingNote =>
-              isDuplicateNote(importedNote, existingNote)
-            );
-            if (match) {
-              duplicateNoteIdMap.set(importedNote.id, match.id);
-              return false;
-            }
-            return true;
-          });
-          
-          const mergedNotes = [...activeProject.notes, ...uniqueImportedNotes];
 
-          const resolveMergedNoteId = (oldImportedId: string): string | undefined => {
-            if (noteIdMap.has(oldImportedId)) return noteIdMap.get(oldImportedId)!;
-            if (duplicateNoteIdMap.has(oldImportedId)) return duplicateNoteIdMap.get(oldImportedId)!;
-            return oldImportedId;
-          };
+        // Save project using new storage system (this will handle image separation)
+        await saveProject(mergedImport.project);
 
-          const importedConnections = (newProject.connections || []).map(conn => ({
-            ...conn,
-            id: generateId(),
-            fromNoteId: resolveMergedNoteId(conn.fromNoteId) ?? conn.fromNoteId,
-            toNoteId: resolveMergedNoteId(conn.toNoteId) ?? conn.toNoteId
-          })).filter(conn =>
-            mergedNotes.some(n => n.id === conn.fromNoteId) &&
-            mergedNotes.some(n => n.id === conn.toNoteId)
-          );
+        // Reload the project to get the version with image IDs (not Base64)
+        const savedProject = await loadProject(mergedImport.project.id, false);
+        if (savedProject && onUpdateProject) {
+          onUpdateProject(savedProject);
+        } else if (onUpdateProject) {
+          // Fallback: use original project if reload fails
+          onUpdateProject(mergedImport.project);
+        }
 
-          const mergedFrames = [...(activeProject.frames || []), ...importedFrames];
-          const mergedConnections = [...(activeProject.connections || []), ...importedConnections];
-
-          const updatedProject = {
-            ...activeProject,
-            notes: mergedNotes,
-            frames: mergedFrames,
-            connections: mergedConnections
-          };
-          
-          // Save project using new storage system (this will handle image separation)
-          await saveProject(updatedProject);
-          
-          // Reload the project to get the version with image IDs (not Base64)
-          const savedProject = await loadProject(updatedProject.id, false);
-          if (savedProject && onUpdateProject) {
-            onUpdateProject(savedProject);
-          } else if (onUpdateProject) {
-            // Fallback: use original project if reload fails
-            onUpdateProject(updatedProject);
-          }
-          
-          const duplicateCount = importedNotes.length - uniqueImportedNotes.length;
-          if (duplicateCount > 0) {
-            alert(`Successfully merged ${uniqueImportedNotes.length} new notes. ${duplicateCount} duplicate(s) were skipped.`);
-          } else {
-            alert(`Successfully merged ${uniqueImportedNotes.length} new note(s).`);
-          }
+        const importedNoteCount = noteCounts.total - mergedImport.duplicateCount;
+        if (mergedImport.duplicateCount > 0) {
+          alert(`Successfully merged ${importedNoteCount} new notes. ${mergedImport.duplicateCount} duplicate(s) were skipped.`);
+        } else {
+          alert(`Successfully merged ${importedNoteCount} new note(s).`);
         }
       } else {
         // Create as new project - regenerate IDs 并保持 frame / 连线与便签 ID 一致
-        const noteIdMap = new Map<string, string>();
-        const frameIdMap = new Map<string, string>();
-
-        const regeneratedNotes = (newProject.notes || []).map(note => {
-          const raw = (note as Note & { variant?: string }).variant || 'standard';
-          const variant: 'standard' | 'image' = raw === 'image' ? 'image' : 'standard';
-          const newId = generateId();
-          noteIdMap.set(note.id, newId);
-          return {
-            ...note,
-            id: newId,
-            variant
-          };
-        });
-
-        const regeneratedFrames = (newProject.frames || []).map(frame => {
-          const newId = generateId();
-          frameIdMap.set(frame.id, newId);
-          return { ...frame, id: newId };
-        });
-
-        regeneratedNotes.forEach(note => {
-          if (note.groupId && frameIdMap.has(note.groupId)) {
-            note.groupId = frameIdMap.get(note.groupId)!;
-          }
-          if (note.groupIds?.length) {
-            note.groupIds = note.groupIds.map(gid =>
-              frameIdMap.has(gid) ? frameIdMap.get(gid)! : gid
-            );
-          }
-        });
-
-        const regeneratedConnections = (newProject.connections || []).map(conn => ({
-          ...conn,
-          id: generateId(),
-          fromNoteId: noteIdMap.get(conn.fromNoteId) ?? conn.fromNoteId,
-          toNoteId: noteIdMap.get(conn.toNoteId) ?? conn.toNoteId
-        }));
-        
-        // Debug: count notes by variant
-        const noteCounts = {
-          standard: regeneratedNotes.filter(n => n.variant === 'standard').length,
-          image: regeneratedNotes.filter(n => n.variant === 'image').length,
-          total: regeneratedNotes.length
-        };
+        const regeneratedContent = regenerateImportedProjectContent(newProject);
+        const { noteCounts } = regeneratedContent;
         
         const projectToCreate = {
           ...newProject,
-          notes: regeneratedNotes,
-          frames: regeneratedFrames,
-          connections: regeneratedConnections
+          notes: regeneratedContent.notes,
+          frames: regeneratedContent.frames,
+          connections: regeneratedContent.connections
         };
         
         // Save project using new storage system (this will handle image separation)
@@ -1096,9 +902,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           onCreateProject(projectWithFramesAndConnections);
           
           const itemCounts = [];
-          if (regeneratedNotes.length > 0) itemCounts.push(`${regeneratedNotes.length} note(s)`);
-          if (regeneratedFrames.length > 0) itemCounts.push(`${regeneratedFrames.length} frame(s)`);
-          if (regeneratedConnections.length > 0) itemCounts.push(`${regeneratedConnections.length} connection(s)`);
+          if (regeneratedContent.notes.length > 0) itemCounts.push(`${regeneratedContent.notes.length} note(s)`);
+          if (regeneratedContent.frames.length > 0) itemCounts.push(`${regeneratedContent.frames.length} frame(s)`);
+          if (regeneratedContent.connections.length > 0) itemCounts.push(`${regeneratedContent.connections.length} connection(s)`);
           
           const message = itemCounts.length > 0 
             ? `Successfully created new project "${newProject.name}" with ${itemCounts.join(', ')}.`
@@ -1374,6 +1180,28 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [openMenuId]);
 
+  const renderSharedActionWindow = (
+    rect: { x: number; y: number; width: number; height: number } | null
+  ) => (
+    <MotionDiv
+      aria-hidden="true"
+      className={`project-list-roster-selection pointer-events-none absolute left-0 top-0 z-0 rounded-xl shadow-lg ${MAP_CHROME_SURFACE_BORDER_CLASS}`}
+      initial={{ opacity: 0, scale: 0.92 }}
+      animate={rect ? {
+        x: rect.x, y: rect.y, width: rect.width, height: rect.height, opacity: 1, scale: 1
+      } : { opacity: 0, scale: 0.92 }}
+      transition={{
+        x: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+        y: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+        width: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+        height: { type: 'spring', stiffness: 460, damping: 34, mass: 0.55 },
+        opacity: { duration: 0.16, ease: 'easeOut' },
+        scale: { duration: 0.16, ease: 'easeOut' }
+      }}
+      style={{ ...mapChromeSurface, transformOrigin: 'center', willChange: 'transform, width, height, opacity' }}
+    />
+  );
+
   const mainHomeChrome = (
     <>
       {/* 全屏启动页或侧栏展成主页布局：设置入口与 chrome 设定一致，与当前是否打开项目无关 */}
@@ -1385,14 +1213,26 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         onMapUiChromeBlurPxChange && (
         <>
           {!isSidebar || expandToHomeLayout ? (
-            <div className="absolute top-4 left-4 z-[2010] flex items-center gap-2 pointer-events-auto">
+            <div
+              ref={homeActionsRef}
+              className="absolute top-4 left-4 z-[2010] flex items-center gap-2 pointer-events-auto"
+              onMouseLeave={() => setHoveredHomeActionId(null)}
+            >
+              {renderSharedActionWindow(homeActionSelectionRect)}
               <button
+                ref={(element) => {
+                  if (element) homeActionRefs.current.set('settings', element);
+                  else homeActionRefs.current.delete('settings');
+                }}
                 type="button"
                 onClick={() => {
                   setShowAppearanceSettingsBlockInSettings(true);
                   setShowHomeSettings(true);
                 }}
-                className={`${themeChromeInteractiveClass} flex h-10 w-10 items-center justify-center rounded-xl`}
+                className={`${themeChromeInteractiveClass} shared-window-hover-item relative z-[1] flex h-10 w-10 items-center justify-center rounded-xl`}
+                onMouseEnter={() => setHoveredHomeActionId('settings')}
+                onFocus={() => setHoveredHomeActionId('settings')}
+                onBlur={() => setHoveredHomeActionId(null)}
                 title="设置"
                 aria-expanded={showHomeSettings}
               >
@@ -1400,9 +1240,16 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </button>
               {onToggleEasterEggMode && !activeProject ? (
                 <button
+                  ref={(element) => {
+                    if (element) homeActionRefs.current.set('easter-egg', element);
+                    else homeActionRefs.current.delete('easter-egg');
+                  }}
                   type="button"
                   onClick={() => onToggleEasterEggMode()}
-                  className={`${themeChromeInteractiveClass} flex h-10 w-10 items-center justify-center rounded-xl`}
+                  className={`${themeChromeInteractiveClass} shared-window-hover-item relative z-[1] flex h-10 w-10 items-center justify-center rounded-xl`}
+                  onMouseEnter={() => setHoveredHomeActionId('easter-egg')}
+                  onFocus={() => setHoveredHomeActionId('easter-egg')}
+                  onBlur={() => setHoveredHomeActionId(null)}
                   title="彩蛋"
                   aria-pressed={easterEggMode}
                 >
@@ -1413,9 +1260,16 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               typeof window !== 'undefined' &&
               (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? (
                 <button
+                  ref={(element) => {
+                    if (element) homeActionRefs.current.set('dev', element);
+                    else homeActionRefs.current.delete('dev');
+                  }}
                   type="button"
                   onClick={() => onExampleDevMaintenanceModeToggle()}
-                  className={`${themeChromeInteractiveClass} flex h-10 w-10 items-center justify-center rounded-xl`}
+                  className={`${themeChromeInteractiveClass} shared-window-hover-item relative z-[1] flex h-10 w-10 items-center justify-center rounded-xl`}
+                  onMouseEnter={() => setHoveredHomeActionId('dev')}
+                  onFocus={() => setHoveredHomeActionId('dev')}
+                  onBlur={() => setHoveredHomeActionId(null)}
                   aria-pressed={exampleDevMaintenanceMode}
                   title="dev"
                 >
@@ -1477,19 +1331,38 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
 
       {isSidebar && !expandToHomeLayout && !transitionListOnly && (
         <>
-          <div className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex flex-nowrap items-center gap-2">
+          <div
+            ref={sidebarLeftActionsRef}
+            className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex flex-nowrap items-center gap-2"
+            onMouseLeave={() => setHoveredSidebarLeftActionId(null)}
+          >
+            {renderSharedActionWindow(sidebarLeftSelectionRect)}
               <button
+                ref={(element) => {
+                  if (element) sidebarLeftActionRefs.current.set('home', element);
+                  else sidebarLeftActionRefs.current.delete('home');
+                }}
                 onClick={() => {
                   if (onBackToHome) onBackToHome();
               }}
-              className={`${themeChromeInteractiveClass} project-sidebar-action p-2 rounded-xl`}
+              className={`${themeChromeInteractiveClass} shared-window-hover-item project-sidebar-action relative z-[1] p-2 rounded-xl`}
+              onMouseEnter={() => setHoveredSidebarLeftActionId('home')}
+              onFocus={() => setHoveredSidebarLeftActionId('home')}
+              onBlur={() => setHoveredSidebarLeftActionId(null)}
               >
               <Home size={24} />
             </button>
             <button
+              ref={(element) => {
+                if (element) sidebarLeftActionRefs.current.set('create', element);
+                else sidebarLeftActionRefs.current.delete('create');
+              }}
               type="button"
               onClick={() => setIsCreating(true)}
-              className={`${themeChromeInteractiveClass} project-sidebar-action p-2 rounded-xl`}
+              className={`${themeChromeInteractiveClass} shared-window-hover-item project-sidebar-action relative z-[1] p-2 rounded-xl`}
+              onMouseEnter={() => setHoveredSidebarLeftActionId('create')}
+              onFocus={() => setHoveredSidebarLeftActionId('create')}
+              onBlur={() => setHoveredSidebarLeftActionId(null)}
               title="新建项目"
               aria-label="新建项目"
             >
@@ -1500,12 +1373,19 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               onMapUiChromeOpacityBottomChange &&
               onMapUiChromeBlurPxChange && (
                 <button
+                  ref={(element) => {
+                    if (element) sidebarLeftActionRefs.current.set('settings', element);
+                    else sidebarLeftActionRefs.current.delete('settings');
+                  }}
                   type="button"
                   onClick={() => {
                     setShowAppearanceSettingsBlockInSettings(true);
                     setShowHomeSettings(true);
                   }}
-                  className={`${themeChromeInteractiveClass} project-sidebar-action p-2 rounded-xl`}
+                  className={`${themeChromeInteractiveClass} shared-window-hover-item project-sidebar-action relative z-[1] p-2 rounded-xl`}
+                  onMouseEnter={() => setHoveredSidebarLeftActionId('settings')}
+                  onFocus={() => setHoveredSidebarLeftActionId('settings')}
+                  onBlur={() => setHoveredSidebarLeftActionId(null)}
                   title="设置"
                   aria-expanded={showHomeSettings}
                 >
@@ -1513,18 +1393,35 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 </button>
               )}
           </div>
-          <div className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-4 z-[2000] flex flex-nowrap items-center gap-2">
-            {activeProject && syncStatus === 'idle' && getLastSyncTime() && (
+          <div
+            ref={sidebarRightActionsRef}
+            className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-4 z-[2000] flex flex-nowrap items-center gap-2"
+            onMouseLeave={() => setHoveredSidebarRightActionId(null)}
+          >
+            {renderSharedActionWindow(sidebarRightSelectionRect)}
+            {isSupabaseEnabled() && activeProject && syncStatus === 'idle' && getLastSyncTime() && (
               <div
-                className={`${themeChromeInteractiveClass} project-sidebar-action project-sidebar-sync-status flex items-center justify-center w-10 h-10 rounded-xl cursor-help`}
+                ref={(element) => {
+                  if (element) sidebarRightActionRefs.current.set('sync', element);
+                  else sidebarRightActionRefs.current.delete('sync');
+                }}
+                className={`${themeChromeInteractiveClass} shared-window-hover-item project-sidebar-action project-sidebar-sync-status relative z-[1] flex items-center justify-center w-10 h-10 rounded-xl cursor-help`}
+                onMouseEnter={() => setHoveredSidebarRightActionId('sync')}
                 title={`Synced: ${new Date(getLastSyncTime()!).toLocaleString('en-US')}`}
               >
                 <Cloud size={20} />
               </div>
             )}
             <button 
+              ref={(element) => {
+                if (element) sidebarRightActionRefs.current.set('close', element);
+                else sidebarRightActionRefs.current.delete('close');
+              }}
               onClick={onCloseSidebar} 
-              className={`${themeChromeInteractiveClass} project-sidebar-action w-10 h-10 p-2 rounded-xl flex items-center justify-center`}
+              className={`${themeChromeInteractiveClass} shared-window-hover-item project-sidebar-action relative z-[1] w-10 h-10 p-2 rounded-xl flex items-center justify-center`}
+              onMouseEnter={() => setHoveredSidebarRightActionId('close')}
+              onFocus={() => setHoveredSidebarRightActionId('close')}
+              onBlur={() => setHoveredSidebarRightActionId(null)}
             >
           <X size={24} />
         </button>
@@ -1818,7 +1715,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 className="relative z-[1] flex w-full items-center gap-3 text-left"
               >
                 <Plus size={22} strokeWidth={2} aria-hidden />
-                <span className="project-list-title text-lg font-bold leading-tight">新建项目</span>
+                <span className="project-list-title text-base font-semibold leading-none">新建项目</span>
               </button>
             </MotionDiv>
           ) : null}
@@ -2326,7 +2223,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   const isBuiltinExample = builtinExampleIds.has(pm.id);
                   const canDelete = !isBuiltinExample || exampleDevMaintenanceMode;
                   return (
-                <MenuDropdown
+                <ProjectMoreMenu
                   project={pm}
                   onRename={handleRename}
                   onDuplicate={handleDuplicateProject}

@@ -72,6 +72,7 @@ import { WorkspaceErrorBoundary } from './components/ui/WorkspaceErrorBoundary';
 import { installBuiltinExamples } from './utils/builtinExamples/install';
 import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
 import { dismissWorkspaceTransients } from './utils/ui/workspaceTransientDismiss';
+import { hasSupabaseClientConfig, isSupabaseEnabled } from './utils/supabaseEnv';
 
 type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
 
@@ -162,7 +163,10 @@ export default function App() {
   /** 仅开发者维护内置示例项目（增删/列表显示等）；默认对普通用户隐藏 */
   const [exampleDevMaintenanceMode, setExampleDevMaintenanceMode] = useState(false);
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(
-    () => typeof window !== 'undefined' && window.location.pathname === '/playground'
+    () =>
+      isSupabaseEnabled() &&
+      typeof window !== 'undefined' &&
+      window.location.pathname === '/playground'
   );
   const expandToHomeProjectIdRef = useRef<string | null>(null);
   /**
@@ -1072,8 +1076,8 @@ export default function App() {
             }
         
             // 云端同步（后台执行）
-        // 检查 Supabase 是否配置，避免不必要的尝试
-        const hasSupabaseConfig = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY;
+        // 服务暂停时，即使环境仍留有密钥也不发起任何云端请求。
+        const hasSupabaseConfig = hasSupabaseClientConfig();
         
         if (hasSupabaseConfig) {
           try {
@@ -1290,8 +1294,8 @@ export default function App() {
     if (!isLoading && projects.length > 0) {
       // Note: Projects are now automatically saved by useProjectState hook
       
-      // 2. 延迟同步到云端（防抖，避免频繁同步，仅在 Supabase 配置时执行）
-      const hasSupabaseConfig = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY;
+      // 2. 延迟同步到云端（服务暂停时该分支完全跳过）
+      const hasSupabaseConfig = hasSupabaseClientConfig();
       
       if (hasSupabaseConfig) {
         if (syncTimeoutRef.current) {
@@ -1554,6 +1558,7 @@ export default function App() {
   };
 
   const openPlayground = useCallback(() => {
+    if (!isSupabaseEnabled()) return;
     window.history.pushState({}, '', '/playground');
     setIsPlaygroundOpen(true);
   }, []);
@@ -1564,7 +1569,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const syncRoute = () => setIsPlaygroundOpen(window.location.pathname === '/playground');
+    const syncRoute = () => {
+      const wantsPlayground = window.location.pathname === '/playground';
+      if (wantsPlayground && !isSupabaseEnabled()) {
+        window.history.replaceState({}, '', '/');
+        setIsPlaygroundOpen(false);
+        return;
+      }
+      setIsPlaygroundOpen(wantsPlayground);
+    };
+    syncRoute();
     window.addEventListener('popstate', syncRoute);
     return () => window.removeEventListener('popstate', syncRoute);
   }, []);
@@ -1716,7 +1730,7 @@ export default function App() {
                   onDuplicateProject={handleDuplicateProject}
                   onCloseSidebar={closeProjectSidebar}
                   onBackToHome={handleBackToHome}
-                  onOpenPlayground={openPlayground}
+                  onOpenPlayground={isSupabaseEnabled() ? openPlayground : undefined}
                   viewMode={viewMode}
                   activeProject={activeProject}
                   onExportCSV={handleExportCSV}

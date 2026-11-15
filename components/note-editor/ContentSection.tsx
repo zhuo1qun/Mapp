@@ -13,6 +13,7 @@ interface ContentSectionProps {
   updateCursorPosition: () => void;
   editor: Editor | null;
   themeColor: string;
+  cornerOverlay?: React.ReactNode;
 }
 
 /** Content：正文 Markdown（标题由卡片左上角统一展示）。 */
@@ -26,9 +27,10 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
   textareaRef,
   updateCursorPosition,
   editor,
-  themeColor
+  themeColor,
+  cornerOverlay
 }) => (
-  <section className="flex flex-col flex-1 min-h-0" aria-label="正文">
+  <section className="relative flex flex-col flex-1 min-h-0" aria-label="正文">
     <EditorArea
       isPreviewMode={isPreviewMode}
       text={text}
@@ -40,6 +42,12 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
       updateCursorPosition={updateCursorPosition}
       editor={editor}
       themeColor={themeColor}
+      reserveBottomCorner={!!cornerOverlay}
     />
+    {cornerOverlay ? (
+      <div className="absolute bottom-3 right-3 z-10 h-28 w-28 overflow-hidden rounded-xl shadow-lg">
+        {cornerOverlay}
+      </div>
+    ) : null}
   </section>
 );

@@ -10,6 +10,7 @@
 import type { Note } from '../../types';
 import { isNoteBoardPlaced } from '../note/notePlacement';
 import { noteRendersAsBoardSticker } from '../persistence/mediaDisplay';
+import { getExpandedNoteLayout, EXPANDED_NOTE_WIDTH, EXPANDED_NOTE_MAX_HEIGHT } from '../note/expandedNoteLayout';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,8 @@ export const PLACEMENT_WRAP_COLS = 6;
 
 export const PLACEMENT_NOTE_W = 256;
 export const PLACEMENT_NOTE_H = 256;
+export const EXPANDED_NOTE_W = EXPANDED_NOTE_WIDTH;
+export const EXPANDED_NOTE_H = EXPANDED_NOTE_MAX_HEIGHT;
 
 /** 媒体贴纸保持完整比例，并以便签的最长边作为默认显示尺度。 */
 export function fitBoardMediaDimensions(
@@ -59,6 +62,10 @@ export interface GridAllocator {
 export function boardNoteDimensions(note: Note): { width: number; height: number } {
   if (noteRendersAsBoardSticker(note)) {
     return { width: note.imageWidth || 256, height: note.imageHeight || 256 };
+  }
+  if (note.boardSize === 'expanded') {
+    const layout = getExpandedNoteLayout(note);
+    return { width: layout.width, height: layout.height };
   }
   return { width: 256, height: 256 };
 }

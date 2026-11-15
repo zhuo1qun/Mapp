@@ -48,7 +48,7 @@ export const ModuleLoadProgress: React.FC<ModuleLoadProgressProps> = ({
     >
       <div className="flex w-full max-w-[20rem] flex-col items-center text-center text-theme-chrome-fg">
         {icon ? (
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--theme-chrome-fg)_14%,transparent)]">
+          <div className="mb-3 flex items-center justify-center">
             {icon}
           </div>
         ) : null}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Note, NoteMediaItem, NormPoint } from '../../types';
 import { fileToBase64 } from '../../utils';
 import { loadImage, loadSketch, saveImage, saveSketch } from '../../utils/persistence/storage';
-import { isMediaRefId } from '../../utils/persistence/imageAssetStore';
+import { blobToDataUrl, isMediaRefId } from '../../utils/persistence/imageAssetStore';
 import { isDisplayableImageSrc, isMediaItemCropActive, noteNeedsMediaResolve } from '../../utils/persistence/mediaDisplay';
 import {
   ensureNoteMediaSynced,
@@ -57,7 +57,7 @@ export function useMediaHandler({
 }: UseMediaHandlerArgs) {
   const [mediaItems, setMediaItems] = useState<NoteMediaItem[]>(() => buildInitialMedia(initialNote));
   const [displaySrcs, setDisplaySrcs] = useState<string[]>(() =>
-    buildInitialMedia(initialNote).map(() => '')
+    buildInitialMedia(initialNote).map((item) => item.source?.kind === 'remote' ? item.source.url : '')
   );
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isResolvingMedia, setIsResolvingMedia] = useState(false);
@@ -105,6 +105,7 @@ export function useMediaHandler({
         .filter((m) => m.kind === 'image')
         .map((m) => ({
           assetId: m.assetId,
+          source: m.source,
           variantId: m.variantId,
           variantEnabled: m.variantEnabled
         })),
@@ -224,7 +225,7 @@ export function useMediaHandler({
     }
 
     const needsResolve = noteNeedsMediaResolve(probe) || items.some((m) => isMediaRefId(m.assetId));
-    setDisplaySrcs(items.map(() => ''));
+    setDisplaySrcs(items.map((m) => m.source?.kind === 'remote' ? m.source.url : ''));
     if (!needsResolve) {
       setIsResolvingMedia(false);
       return;
@@ -238,6 +239,7 @@ export function useMediaHandler({
         if (loadGenRef.current !== gen) return;
         const srcs = await Promise.all(
           items.map(async (m) => {
+            if (m.source?.kind === 'remote') return m.source.url;
             if (!isMediaRefId(m.assetId)) return '';
             try {
               const url = await resolveNoteImageRefUrl({
@@ -282,6 +284,38 @@ export function useMediaHandler({
       return nextItems;
     });
   }, []);
+
+  /** 将远程图片下载到本地资产。跨域禁止下载时保留远程引用并向调用方返回失败。 */
+  const materializeRemoteAt = useCallback(async (index: number): Promise<boolean> => {
+    const item = mediaItems[index];
+    const remoteUrl = item?.source?.kind === 'remote' ? item.source.url : null;
+    if (!remoteUrl) return true;
+    setIsProcessingImages(true);
+    try {
+      const response = await fetch(remoteUrl, { mode: 'cors', credentials: 'omit' });
+      if (!response.ok) throw new Error(`Image download failed: ${response.status}`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('Remote resource is not an image');
+      const dataUrl = await blobToDataUrl(blob);
+      const assetId = await saveImage(dataUrl);
+      setMediaItems((prev) => prev.map((entry, i) => i === index ? {
+        ...entry,
+        assetId,
+        source: { kind: 'local' as const }
+      } : entry));
+      setDisplaySrcs((prev) => prev.map((src, i) => i === index ? dataUrl : src));
+      return true;
+    } catch (error) {
+      console.warn('Failed to save remote image locally', error);
+      setMediaItems((prev) => prev.map((entry, i) => i === index && entry.source?.kind === 'remote' ? {
+        ...entry,
+        source: { ...entry.source, cacheStatus: 'failed' as const }
+      } : entry));
+      return false;
+    } finally {
+      setIsProcessingImages(false);
+    }
+  }, [mediaItems]);
 
   const removeMediaAt = useCallback((index: number) => {
     setMediaItems((prev) => prev.filter((_, i) => i !== index));
@@ -448,6 +482,10 @@ export function useMediaHandler({
       const m = mediaItems[i];
       const src = displaySrcs[i] || '';
       let assetId = m.assetId;
+      if (m.source?.kind === 'remote') {
+        nextItems.push(m);
+        continue;
+      }
       if (!isMediaRefId(assetId) && isDisplayableImageSrc(src)) {
         assetId = await ensureAssetIdForKind(src, m.kind, m.assetId);
       }
@@ -566,6 +604,7 @@ export function useMediaHandler({
     clearLassoSticker,
     loadOriginalImageSrc,
     persistMediaForSave,
+    materializeRemoteAt,
     isCropActiveAt: (index: number) => isMediaItemCropActive(mediaItems[index]),
     previewImage,
     setPreviewImage,

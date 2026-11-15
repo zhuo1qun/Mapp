@@ -26,6 +26,10 @@ export function isMediaRefId(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.startsWith('img-');
 }
 
+export function isRemoteImageUrl(value: string | null | undefined): boolean {
+  return typeof value === 'string' && /^https?:\/\//i.test(value);
+}
+
 /** 从 img- id 或整段字符串提取资产 id */
 export function extractMediaId(imageData: string): string | null {
   if (isMediaRefId(imageData)) return imageData;
@@ -39,16 +43,22 @@ export function noteImageRefsFromIds(ids: string[]): NoteImageRef[] {
 /** 由 images[] 同步 imageRefs；保留已有 variantId */
 export function syncNoteImageRefs(note: Note): Note {
   const existingByAsset = new Map(
-    (note.imageRefs || []).filter((r) => isMediaRefId(r.assetId)).map((r) => [r.assetId, r] as const)
+    (note.imageRefs || [])
+      .filter((r) => isMediaRefId(r.assetId) || r.source?.kind === 'remote' || isRemoteImageUrl(r.assetId))
+      .map((r) => [r.assetId, r] as const)
   );
-  const ids = (note.images || []).filter(isMediaRefId);
+  const ids = (note.images || []).filter((value) => isMediaRefId(value) || isRemoteImageUrl(value));
   const fromRefs = [...existingByAsset.keys()];
   const merged = ids.length > 0 ? ids : fromRefs;
   const unique = [...new Set(merged)];
   return {
     ...note,
     images: unique,
-    imageRefs: unique.map((assetId) => existingByAsset.get(assetId) ?? { assetId })
+    imageRefs: unique.map((assetId) => existingByAsset.get(assetId) ?? (
+      isRemoteImageUrl(assetId)
+        ? { assetId, source: { kind: 'remote', url: assetId, cacheStatus: 'none' } }
+        : { assetId }
+    ))
   };
 }
 

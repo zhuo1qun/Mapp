@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, RotateCcw, X } from 'lucide-react';
 import type { NormPoint } from '../../types';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
@@ -60,6 +60,32 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
       previewImage.startsWith('http://') ||
       previewImage.startsWith('https://'));
   const showCropControls = typeof onCropEnabledChange === 'function';
+  const [mediaAspect, setMediaAspect] = useState(1);
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === 'undefined' ? 1024 : window.innerWidth,
+    height: typeof window === 'undefined' ? 768 : window.innerHeight
+  }));
+
+  useEffect(() => {
+    setMediaAspect(1);
+  }, [previewImage]);
+
+  useEffect(() => {
+    const updateViewport = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  const mediaDetailSize = useMemo(() => {
+    if (isLassoMode) return undefined;
+    const headerAndFooterHeight = images.length > 1 ? 88 : 56;
+    const maxHeight = Math.max(260, Math.min(672, viewport.height - 128));
+    const maxWidth = Math.max(240, Math.min(576, viewport.width - 32));
+    const imageMaxHeight = Math.max(180, maxHeight - headerAndFooterHeight);
+    const width = Math.min(maxWidth, Math.max(240, Math.round(imageMaxHeight * mediaAspect)));
+    const height = Math.min(maxHeight, Math.max(260, Math.round(width / mediaAspect) + headerAndFooterHeight));
+    return { width, height };
+  }, [images.length, isLassoMode, mediaAspect, viewport.height, viewport.width]);
 
   return (
     <ChromePresence open={open} kind="dialog">
@@ -67,22 +93,26 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
         const surface = (
           <section
             data-table-canvas-window={isCanvasWindow ? 'media-detail' : undefined}
+            data-workspace-link-target={isCanvasWindow ? 'media-detail' : undefined}
             role="dialog"
             aria-modal={isCanvasWindow ? undefined : true}
             aria-label={isLassoMode ? '套索裁剪' : '媒体详情'}
-            className={`note-editor-media-detail map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} flex h-[min(42rem,calc(100dvh-8rem))] min-h-0 w-[min(36rem,calc(100vw-2rem))] flex-col overflow-hidden ${
+            className={`note-editor-media-detail ${isCanvasWindow ? 'note-editor-aux-panel' : ''} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} flex min-h-0 flex-col overflow-hidden ${
               isCanvasWindow
-                ? `chrome-dialog-${phase} shrink-0`
-                : `media-detail-window-surface--modal relative z-10 chrome-responsive-sheet-${phase}`
+                ? `chrome-dialog-${phase} shrink-0 ${isLassoMode ? 'h-[min(42rem,calc(100dvh-8rem))] w-[min(36rem,calc(100vw-2rem))]' : 'transition-[width,height] duration-200 ease-out'}`
+                : `media-detail-window-surface--modal relative z-10 chrome-responsive-sheet-${phase} ${isLassoMode ? 'h-[min(42rem,calc(100dvh-8rem))] w-[min(36rem,calc(100vw-2rem))]' : 'transition-[width,height] duration-200 ease-out'}`
             }`}
-            style={panelChromeStyle}
+            style={{ ...panelChromeStyle, ...mediaDetailSize }}
             onPointerDown={(event) => event.stopPropagation()}
             onPointerMove={(event) => event.stopPropagation()}
             onPointerUp={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
           >
-            <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-gray-100/80 px-3 py-2.5 sm:min-h-12 sm:px-4">
+            <header
+              data-workspace-link-anchor={isCanvasWindow ? 'media-detail-title' : undefined}
+              className="flex min-h-10 shrink-0 items-center gap-2 px-4 pb-1 pt-2"
+            >
               {isLassoMode ? (
                 <button
                   type="button"
@@ -97,7 +127,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
               ) : null}
 
               <div className="min-w-0 flex-1">
-                <h3 className="truncate text-sm font-semibold text-gray-800">
+                <h3 className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-400">
                   {isLassoMode ? '套索裁剪' : '媒体详情'}
                 </h3>
                 {isLassoMode ? (
@@ -152,7 +182,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
               />
             ) : (
               <>
-                <div className="chrome-inset relative flex min-h-[18rem] flex-1 items-center justify-center overflow-hidden p-4">
+                <div className="relative flex min-h-[18rem] flex-1 items-center justify-center overflow-hidden p-4">
                   {images.length > 1 && previewIndex > 0 ? (
                     <button
                       type="button"
@@ -167,7 +197,13 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
                     <img
                       src={previewImage}
                       alt="媒体预览"
-                      className="max-h-[calc(100dvh-10rem)] max-w-full object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.24)] sm:max-h-[calc(90dvh-8rem)]"
+                      onLoad={(event) => {
+                        const { naturalWidth, naturalHeight } = event.currentTarget;
+                        if (naturalWidth > 0 && naturalHeight > 0) {
+                          setMediaAspect(naturalWidth / naturalHeight);
+                        }
+                      }}
+                      className="max-h-full max-w-full object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.24)]"
                     />
                   ) : (
                     <div className="px-8 py-12 text-sm text-gray-500">图片加载中…</div>
@@ -184,7 +220,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
                   ) : null}
                 </div>
                 {images.length > 1 ? (
-                  <footer className="shrink-0 border-t border-gray-100/80 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center text-xs text-gray-500 sm:pb-2">
+                  <footer className="mx-3 mb-2 shrink-0 px-4 py-1 text-center text-[11px] text-gray-400">
                     {previewIndex + 1} / {images.length}
                   </footer>
                 ) : null}

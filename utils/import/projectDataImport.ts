@@ -73,6 +73,7 @@ export function buildNewNotesFromProjectJsonRaws(rawNotes: Note[], existingNotes
       imageWidth: raw.imageWidth,
       imageHeight: raw.imageHeight,
       layoutScale: raw.layoutScale,
+      boardSize: raw.boardSize === 'expanded' ? 'expanded' : undefined,
       groupId: raw.groupId,
       groupName: raw.groupName,
       groupIds: raw.groupIds,

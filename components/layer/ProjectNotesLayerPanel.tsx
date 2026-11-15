@@ -1080,6 +1080,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
         <TagAddPanel
           themeColor={themeColor}
           panelChromeStyle={panelChromeStyle}
+          chromeAppearance={chromeAppearance}
           title={`批量修改标签「${groupDisplayLabel(tagColorBatchEditor.tagLabelKey, 'tag', framesById)}」颜色`}
           label={tagColorBatchEditor.tagLabelKey}
           hideLabelInput
@@ -1108,6 +1109,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
         <TagAddPanel
           themeColor={themeColor}
           panelChromeStyle={panelChromeStyle}
+          chromeAppearance={chromeAppearance}
           title={`修改簇「${groupDisplayLabel(frameColorEditor.frameId, 'frame', framesById)}」颜色`}
           label={frameColorEditor.frameId}
           hideLabelInput
@@ -1132,6 +1134,7 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
         <TagAddPanel
           themeColor={themeColor}
           panelChromeStyle={panelChromeStyle}
+          chromeAppearance={chromeAppearance}
           title="编辑便签标签"
           label={tableTagEditDraft.draftLabel}
           onLabelChange={(v) =>

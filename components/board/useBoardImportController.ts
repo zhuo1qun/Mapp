@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ChangeEvent, type Dispatch, type DragEvent, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, type ChangeEvent, type Dispatch, type DragEvent, type RefObject, type SetStateAction } from 'react';
 import type { Note } from '../../types';
 import { fileToBase64, generateId } from '../../utils';
 import { saveImage, saveSketch, loadImage } from '../../utils/persistence/storage';
@@ -16,6 +16,8 @@ import { buildNewNotesFromProjectJsonRaws, parseProjectJsonNotesPayloadResult } 
 import { formatImportErrorMessage, formatUnexpectedImportError } from '../../utils/import/importErrorFormat';
 import { clientPoint, clientToBoardPoint } from '../../utils/board/boardCoordinates';
 import { isNoteBoardPlaced } from '../../utils/note/notePlacement';
+import { enrichLinkPreview, fallbackLinkPreview, isEditablePasteTarget, parseClipboardData } from '../../utils/clipboard/parseClipboard';
+import { generateNoteMediaItemId } from '../../utils/persistence/noteMediaSync';
 
 type BoardTransform = { x: number; y: number; scale: number };
 
@@ -80,6 +82,24 @@ export function useBoardImportController({
   onCsvImport
 }: UseBoardImportControllerProps) {
   const imageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const lastPointerClientRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    const rememberPointer = (event: PointerEvent) => {
+      lastPointerClientRef.current = { x: event.clientX, y: event.clientY };
+    };
+    root.addEventListener('pointermove', rememberPointer, { passive: true });
+    return () => root.removeEventListener('pointermove', rememberPointer);
+  }, [containerRef]);
+
+  const clipboardAnchor = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    const client = lastPointerClientRef.current ?? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    return clientToBoardPoint(clientPoint(client.x, client.y), rect, transform);
+  }, [containerRef, transform]);
 
   const createImageNote = useCallback((
     base64: string,
@@ -113,6 +133,62 @@ export function useBoardImportController({
     };
     onAddNote(note);
   }, [containerRef, onAddNote, transform]);
+
+  const createRemoteImageNote = useCallback(async (url: string, position: { x: number; y: number }) => {
+    let raw = { width: 320, height: 240 };
+    try { raw = await loadImageElementDimensions(url); } catch { /* remote host may refuse hotlinking */ }
+    const dimensions = fitBoardMediaDimensions(raw.width, raw.height);
+    const source = { kind: 'remote' as const, url, cacheStatus: 'none' as const, thumbnailUrl: url };
+    onAddNote({
+      id: generateId(), createdAt: Date.now(), coords: { lat: 0, lng: 0 }, emoji: '', text: '', fontSize: 3,
+      images: [url], imageRefs: [{ assetId: url, source }],
+      media: [{ id: generateNoteMediaItemId(), kind: 'image', assetId: url, source }], tags: [],
+      boardX: position.x - dimensions.width / 2, boardY: position.y - dimensions.height / 2,
+      variant: 'image', color: 'transparent', imageWidth: dimensions.width, imageHeight: dimensions.height
+    });
+  }, [onAddNote]);
+
+  const createTextNote = useCallback((text: string, position: { x: number; y: number }, link?: { url: string; label?: string }) => {
+    const note: Note = {
+      id: generateId(), createdAt: Date.now(), coords: { lat: 0, lng: 0 }, emoji: link ? '🔗' : '',
+      text: link ? `${link.label ? `${link.label}\n` : ''}${link.url}` : text,
+      linkPreview: link ? fallbackLinkPreview(link.url, link.label) : undefined,
+      fontSize: 3, images: [], tags: [], boardX: position.x - 128, boardY: position.y - 128,
+      variant: 'standard', color: '#FFFDF5'
+    };
+    onAddNote(note);
+    if (link) {
+      void enrichLinkPreview(link.url, link.label).then((linkPreview) => {
+        onUpdateNote({ ...note, linkPreview });
+      });
+    }
+  }, [onAddNote, onUpdateNote]);
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      if (!event.clipboardData || isEditablePasteTarget(event.target) || editingNote) return;
+      const parsed = parseClipboardData(event.clipboardData);
+      if (!parsed) return;
+      event.preventDefault();
+      const anchor = clipboardAnchor();
+      if (parsed.kind === 'text') return void createTextNote(parsed.text, anchor);
+      if (parsed.kind === 'link') return void createTextNote(parsed.url, anchor, parsed);
+      if (parsed.kind === 'remote-images') {
+        parsed.urls.forEach((url, index) => void createRemoteImageNote(url, { x: anchor.x + index * 28, y: anchor.y + index * 28 }));
+        return;
+      }
+      void (async () => {
+        try {
+          for (const [index, file] of parsed.files.entries()) {
+            const image = await compressImageToBase64(file, 512);
+            createImageNote(image.base64, image.width, image.height, { x: anchor.x + index * 28, y: anchor.y + index * 28 });
+          }
+        } catch (error) { console.error('Failed to paste images onto board', error); }
+      })();
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [clipboardAnchor, createImageNote, createRemoteImageNote, createTextNote, editingNote]);
 
   const handleDataImport = useCallback(async (file: File) => {
     try {
@@ -184,7 +260,7 @@ export function useBoardImportController({
   const appendImagesToEditingNote = useCallback(async (files: File[]) => {
     if (!editingNote || editingNote.variant === 'image') return;
     try {
-      const images = await Promise.all(files.map(fileToBase64));
+      const images = await Promise.all(files.map((file) => fileToBase64(file)));
       const updated = { ...editingNote, images: [...(editingNote.images ?? []), ...images] };
       onUpdateNote(updated);
       setEditingNote(updated);

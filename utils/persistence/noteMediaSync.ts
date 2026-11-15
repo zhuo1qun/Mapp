@@ -3,7 +3,7 @@
  * media[] 为权威顺序；可含多个 sketch。legacy.sketch 仅保留 media 中第一个 sketch 以兼容旧路径。
  */
 import type { Note, NoteImageRef, NoteMediaItem } from '../../types';
-import { extractMediaId, isMediaRefId, syncNoteImageRefs } from './imageAssetStore';
+import { extractMediaId, isMediaRefId, isRemoteImageUrl, syncNoteImageRefs } from './imageAssetStore';
 import { noteHasActiveFirstMediaCrop } from './mediaDisplay';
 
 export function generateNoteMediaItemId(): string {
@@ -24,35 +24,39 @@ export function syncNoteMediaFromLegacy(note: Note): Note {
   const refs: NoteImageRef[] =
     synced.imageRefs && synced.imageRefs.length > 0
       ? synced.imageRefs
-      : (synced.images || []).filter(isMediaRefId).map((assetId) => ({ assetId }));
+      : (synced.images || [])
+          .filter((value) => isMediaRefId(value) || isRemoteImageUrl(value))
+          .map((assetId) => ({ assetId, source: isRemoteImageUrl(assetId) ? { kind: 'remote' as const, url: assetId, cacheStatus: 'none' as const } : undefined }));
 
   if (prevMedia.length > 0) {
     const refByAsset = new Map(refs.map((r) => [r.assetId, r]));
     const usedImage = new Set(
-      prevMedia.filter((m) => m.kind === 'image' && isMediaRefId(m.assetId)).map((m) => m.assetId)
+      prevMedia.filter((m) => m.kind === 'image').map((m) => m.assetId)
     );
     const usedSketch = new Set(
       prevMedia.filter((m) => m.kind === 'sketch' && isMediaRefId(m.assetId)).map((m) => m.assetId)
     );
 
     const media: NoteMediaItem[] = prevMedia.map((m) => {
-      if (m.kind === 'image' && isMediaRefId(m.assetId) && refByAsset.has(m.assetId)) {
+      if (m.kind === 'image' && refByAsset.has(m.assetId)) {
         const r = refByAsset.get(m.assetId)!;
         return {
           ...m,
           variantId: r.variantId ?? m.variantId,
-          variantEnabled: r.variantEnabled ?? m.variantEnabled
+          variantEnabled: r.variantEnabled ?? m.variantEnabled,
+          source: r.source ?? m.source
         };
       }
       return m;
     });
 
     for (const ref of refs) {
-      if (!isMediaRefId(ref.assetId) || usedImage.has(ref.assetId)) continue;
+      if ((!isMediaRefId(ref.assetId) && !isRemoteImageUrl(ref.assetId)) || usedImage.has(ref.assetId)) continue;
       media.push({
         id: generateNoteMediaItemId(),
         kind: 'image',
         assetId: ref.assetId,
+        source: ref.source,
         variantId: ref.variantId,
         variantEnabled: ref.variantEnabled
       });
@@ -75,13 +79,14 @@ export function syncNoteMediaFromLegacy(note: Note): Note {
   const usedIds = new Set<string>();
 
   for (const ref of refs) {
-    if (!isMediaRefId(ref.assetId)) continue;
+    if (!isMediaRefId(ref.assetId) && !isRemoteImageUrl(ref.assetId)) continue;
     const id = generateNoteMediaItemId();
     usedIds.add(id);
     next.push({
       id,
       kind: 'image',
       assetId: ref.assetId,
+      source: ref.source,
       variantId: ref.variantId,
       variantEnabled: ref.variantEnabled
     });
@@ -107,7 +112,8 @@ export function syncNoteLegacyFromMedia(note: Note): Note {
   let sketch: string | undefined;
 
   for (const m of media) {
-    if (!isMediaRefId(m.assetId)) continue;
+    const isRemote = m.kind === 'image' && (m.source?.kind === 'remote' || isRemoteImageUrl(m.assetId));
+    if (!isMediaRefId(m.assetId) && !isRemote) continue;
     if (m.kind === 'sketch') {
       if (!sketch) sketch = m.assetId;
       continue;
@@ -115,6 +121,7 @@ export function syncNoteLegacyFromMedia(note: Note): Note {
     images.push(m.assetId);
     imageRefs.push({
       assetId: m.assetId,
+      source: m.source ?? (isRemote ? { kind: 'remote', url: m.assetId, cacheStatus: 'none' } : undefined),
       variantId: m.variantId,
       variantEnabled: m.variantEnabled
     });

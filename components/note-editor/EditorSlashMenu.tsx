@@ -102,6 +102,8 @@ export function EditorSlashMenu({ editor }: EditorSlashMenuProps) {
   );
 
   useEffect(() => {
+    if (editor.isDestroyed) return;
+    const editorDom = editor.view.dom;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!menu || visibleCommands.length === 0) return;
       if (event.key === 'ArrowDown') {
@@ -118,8 +120,8 @@ export function EditorSlashMenu({ editor }: EditorSlashMenuProps) {
         setMenu(null);
       }
     };
-    editor.view.dom.addEventListener('keydown', onKeyDown);
-    return () => editor.view.dom.removeEventListener('keydown', onKeyDown);
+    editorDom.addEventListener('keydown', onKeyDown);
+    return () => editorDom.removeEventListener('keydown', onKeyDown);
   }, [activeIndex, editor, menu, runCommand, visibleCommands]);
 
   if (!menu || visibleCommands.length === 0) return null;

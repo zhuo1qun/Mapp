@@ -3,6 +3,7 @@ import type { Note } from '../../../types';
 import { noteRendersAsBoardSticker } from '../../../utils/persistence/mediaDisplay';
 import { BoardMultiSelectToolbar } from '../../board/BoardMultiSelectToolbar';
 import { BoardPaperNoteContent } from '../../note/BoardPaperNoteContent';
+import { BoardNoteObject, boardNoteMediaSource } from '../../note/BoardNoteObject';
 
 type Props = {
   open: boolean;
@@ -34,8 +35,7 @@ type DepartingCard = {
 const UNPLACED_DROP_ACCEPTED_EVENT = 'mapp:unplaced-note-drop-accepted';
 
 function mediaSource(note: Note): string | null {
-  const first = note.media?.[0];
-  const src = first?.kind === 'sketch' ? note.sketch : note.images?.[0] || note.sketch;
+  const src = boardNoteMediaSource(note);
   return src && /^(data:|blob:|https?:)/.test(src) ? src : null;
 }
 
@@ -442,7 +442,7 @@ export function UnplacedNotesSidebar({
             };
             const paperScale = isSticker ? 1 : displayCardSize.width / 256;
             const cardStyle: React.CSSProperties = {
-              borderColor: selected ? themeColor : 'transparent',
+              borderColor: 'transparent',
               // Board 的图片是独立贴纸，而不是被白色卡片包住。
               ...(isSticker ? null : { backgroundColor: '#FFFDF5' }),
               ...(isSticker ? displayCardSize : {
@@ -477,61 +477,52 @@ export function UnplacedNotesSidebar({
                 style={{ width: displayCardSize.width, height: displayCardSize.height, ...stackCardShellStyle }}
               >
                 <div data-unplaced-card-motion className="h-full w-full">
-                  <button
-                    type="button"
-                    draggable={canInteractWithCard}
-                  onDragStart={(event) => {
-                    if (!canInteractWithCard) {
-                      event.preventDefault();
-                      return;
-                    }
-                    event.dataTransfer.effectAllowed = 'move';
-                    const draggedIds = selected ? selectedIds : [note.id];
-                    setBoardSizedDragPreview(event, note, isSticker);
-                    draggedIds.forEach((id) => skipDepartureForDraggedIdsRef.current.add(id));
-                    setDraggedNoteIds(new Set(draggedIds));
-                    event.dataTransfer.setData(placementDragMime, JSON.stringify(draggedIds));
-                    event.dataTransfer.setData('text/plain', draggedIds.join(','));
-                  }}
-                  onDragEnd={() => {
-                    setDraggedNoteIds(new Set());
-                    if (dragReleaseTimerRef.current) clearTimeout(dragReleaseTimerRef.current);
-                    dragReleaseTimerRef.current = setTimeout(() => {
-                      skipDepartureForDraggedIdsRef.current.clear();
-                      dragReleaseTimerRef.current = null;
-                    }, 500);
-                  }}
-                  onClick={(event) => {
-                    if (!isExpanded) {
-                      setIsExpanded(true);
-                      clearSelection();
-                      return;
-                    }
-                    selectNote(note.id, event.shiftKey);
-                  }}
-                  className={`workspace-object-elevation workspace-object-elevation--interactive group relative box-border border-[3px] text-left transition-[border-color,transform] focus-visible:outline-none ${
-                    canInteractWithCard ? 'hover:scale-[1.02]' : ''
-                  } ${selected ? 'workspace-object-elevation--active' : ''} ${isSticker ? '' : 'board-note-elevation'}`}
-                  style={cardStyle}
-                  aria-pressed={selected}
-                  >
-                    {isSticker ? (
-                      <div className="flex h-full w-full items-center justify-center bg-transparent">
-                        {src ? (
-                          <img
-                            src={src}
-                            alt=""
-                            draggable={false}
-                            className="board-sticker-elevation h-full w-full object-contain"
-                          />
-                        ) : (
-                          <span className="text-5xl">{note.emoji || '🖼️'}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <BoardPaperNoteContent note={note} contentWidth={208} />
-                    )}
-                  </button>
+                  <BoardNoteObject
+                    note={note}
+                    selected={selected}
+                    contentWidth={208}
+                    rootAs="button"
+                    paperBackground="#FFFDF5"
+                    mediaSrc={src}
+                    expandedContent={false}
+                    fallbackMedia={<span className="text-5xl">{note.emoji || '🖼️'}</span>}
+                    className="relative box-border border-[3px] text-left focus-visible:outline-none"
+                    style={cardStyle}
+                    rootProps={{
+                      type: 'button',
+                      draggable: canInteractWithCard,
+                      'aria-pressed': selected,
+                      onDragStart: (event: React.DragEvent<HTMLButtonElement>) => {
+                        if (!canInteractWithCard) {
+                          event.preventDefault();
+                          return;
+                        }
+                        event.dataTransfer.effectAllowed = 'move';
+                        const draggedIds = selected ? selectedIds : [note.id];
+                        setBoardSizedDragPreview(event, note, isSticker);
+                        draggedIds.forEach((id) => skipDepartureForDraggedIdsRef.current.add(id));
+                        setDraggedNoteIds(new Set(draggedIds));
+                        event.dataTransfer.setData(placementDragMime, JSON.stringify(draggedIds));
+                        event.dataTransfer.setData('text/plain', draggedIds.join(','));
+                      },
+                      onDragEnd: () => {
+                        setDraggedNoteIds(new Set());
+                        if (dragReleaseTimerRef.current) clearTimeout(dragReleaseTimerRef.current);
+                        dragReleaseTimerRef.current = setTimeout(() => {
+                          skipDepartureForDraggedIdsRef.current.clear();
+                          dragReleaseTimerRef.current = null;
+                        }, 500);
+                      },
+                      onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+                        if (!isExpanded) {
+                          setIsExpanded(true);
+                          clearSelection();
+                          return;
+                        }
+                        selectNote(note.id, event.shiftKey);
+                      }
+                    }}
+                  />
                 </div>
                 {isExpanded && lastSelectedNoteId === note.id && toolbarNoteIds.length > 0 ? (
                   <BoardMultiSelectToolbar

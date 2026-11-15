@@ -1,5 +1,5 @@
 import React, { CSSProperties, RefObject } from 'react';
-import { Clock, Tag as TagIcon, Trash2, Undo2, Pencil, Group, Ungroup, MapPin } from 'lucide-react';
+import { Clock, Tag as TagIcon, Trash2, Undo2, Pencil, Group, Ungroup, MapPin, Maximize2, Minimize2, BringToFront, SendToBack } from 'lucide-react';
 import { AnchoredTransientOverlay } from '../ui/AnchoredTransientOverlay';
 
 type MultiBatchPanel = 'none' | 'tag' | 'time';
@@ -18,6 +18,11 @@ export type BoardMultiSelectToolbarProps = {
   /** 1 = 单选（与多选同一套工具栏，文案/追踪入口不同）。 */
   selectionCount: number;
   onLocateOnMap?: () => void;
+  canToggleNoteSize?: boolean;
+  noteSizeExpanded?: boolean;
+  onToggleNoteSize?: () => void;
+  onBringToFront?: () => void;
+  onSendToBack?: () => void;
 
   canGroup?: boolean;
   canUngroup?: boolean;
@@ -61,6 +66,11 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
     onRunBatchDelete,
     selectionCount,
     onLocateOnMap,
+    canToggleNoteSize = false,
+    noteSizeExpanded = false,
+    onToggleNoteSize,
+    onBringToFront,
+    onSendToBack,
     canGroup,
     canUngroup,
     onRunGroup,
@@ -133,7 +143,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
         }`}
         style={panelChromeStyle}
       >
-        {isEditMode ? (
+        {isMulti ? (isEditMode ? (
           <>
             <button
               type="button"
@@ -143,7 +153,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
               }}
               onPointerDown={stopToolbarEvent}
               className={iconButtonClass}
-              title={isMulti ? '退出多选' : '取消选中'}
+              title="退出多选"
             >
               <Undo2 size={16} />
             </button>
@@ -156,7 +166,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
               onPointerDown={stopToolbarEvent}
               className={`${multiBatchPanel === 'tag' ? activeButtonClass : iconButtonClass}`}
               style={multiBatchPanel === 'tag' ? { boxShadow: `inset 0 0 0 1px ${themeColor}` } : undefined}
-              title={isMulti ? '批量添加标签' : '添加标签'}
+              title="批量添加标签"
             >
               <TagIcon size={16} />
             </button> : null}
@@ -169,7 +179,7 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
               onPointerDown={stopToolbarEvent}
               className={`${multiBatchPanel === 'time' ? activeButtonClass : iconButtonClass}`}
               style={multiBatchPanel === 'time' ? { boxShadow: `inset 0 0 0 1px ${themeColor}` } : undefined}
-              title={isMulti ? '批量修改起止时间' : '修改起止时间'}
+              title="批量修改起止时间"
             >
               <Clock size={16} />
             </button> : null}
@@ -185,16 +195,31 @@ export const BoardMultiSelectToolbar: React.FC<BoardMultiSelectToolbarProps> = (
               onClick={(e) => { stopToolbarEvent(e); onRunBatchDelete(); }}
               onPointerDown={stopToolbarEvent}
               className={`cursor-pointer border-0 p-2 rounded-lg transition-colors ${isDark ? 'text-red-300 hover:bg-red-500/15' : 'text-red-600 hover:bg-red-50'}`}
-              title={isMulti ? '批量删除' : '删除'}
+              title="批量删除"
             ><Trash2 size={16} /></button> : null}
           </>
         ) : (
           <>
-            <button type="button" onClick={(e) => { stopToolbarEvent(e); onExitMultiSelectToolbar(); }} onPointerDown={stopToolbarEvent} className={iconButtonClass} title={isMulti ? '退出多选' : '取消选中'}><Undo2 size={16} /></button>
+            <button type="button" onClick={(e) => { stopToolbarEvent(e); onExitMultiSelectToolbar(); }} onPointerDown={stopToolbarEvent} className={iconButtonClass} title="退出多选"><Undo2 size={16} /></button>
             <button ref={boardBrowseTagFilterButtonRef} type="button" onClick={(e) => { stopToolbarEvent(e); onOpenBrowseTagFilterPanel(); }} onPointerDown={stopToolbarEvent} className={browseTagFilterPanelOpen ? activeButtonClass : iconButtonClass} style={browseTagFilterPanelOpen ? { boxShadow: `inset 0 0 0 1px ${themeColor}` } : undefined} title="按标签筛选"><TagIcon size={16} /></button>
             <button ref={boardBrowseTimeFilterButtonRef} type="button" onClick={(e) => { stopToolbarEvent(e); onOpenBrowseTimeFilterPanel(); }} onPointerDown={stopToolbarEvent} className={browseTimeFilterPanelOpen ? activeButtonClass : iconButtonClass} style={browseTimeFilterPanelOpen ? { boxShadow: `inset 0 0 0 1px ${themeColor}` } : undefined} title="按起止年筛选"><Clock size={16} /></button>
             {locateButtons}
             <button type="button" onClick={(e) => { stopToolbarEvent(e); onEnterEditModeFromBrowse(); }} onPointerDown={stopToolbarEvent} className={iconButtonClass} title="进入编辑模式"><Pencil size={16} /></button>
+          </>
+        )) : (
+          <>
+            {onSendToBack ? (
+              <button type="button" onClick={(e) => { stopToolbarEvent(e); onSendToBack(); }} onPointerDown={stopToolbarEvent} className={iconButtonClass} title="置于底层 (⌘⇧[)"><SendToBack size={16} /></button>
+            ) : null}
+            {onBringToFront ? (
+              <button type="button" onClick={(e) => { stopToolbarEvent(e); onBringToFront(); }} onPointerDown={stopToolbarEvent} className={iconButtonClass} title="置于顶层 (⌘⇧])"><BringToFront size={16} /></button>
+            ) : null}
+            {canToggleNoteSize ? (
+              <button type="button" onClick={(e) => { stopToolbarEvent(e); onToggleNoteSize?.(); }} onPointerDown={stopToolbarEvent} className={iconButtonClass} title={noteSizeExpanded ? '收起便签' : '展开便签'}>
+                {noteSizeExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            ) : null}
+            {!isEditMode ? <button type="button" onClick={(e) => { stopToolbarEvent(e); onEnterEditModeFromBrowse(); }} onPointerDown={stopToolbarEvent} className={iconButtonClass} title="进入编辑模式"><Pencil size={16} /></button> : null}
           </>
         )}
       </div>

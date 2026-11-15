@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
+import L from 'leaflet';
 import type { Note } from '../../types';
 import {
   fetchBoundaryGeoJSON,
@@ -130,8 +131,7 @@ export function useBorderSearch({
         }
 
         if (mapInstance) {
-          const L = await import('leaflet');
-          const layer = L.default.geoJSON(geojson as any);
+          const layer = L.geoJSON(geojson as any);
           mapInstance.fitBounds(layer.getBounds(), { padding: [20, 20], duration: 1.5 });
         }
 

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { Download, X } from 'lucide-react';
 import type { NoteMediaItem } from '../../types';
 import { isDisplayableImageSrc } from '../../utils/persistence/mediaDisplay';
 
@@ -7,7 +7,7 @@ import { isDisplayableImageSrc } from '../../utils/persistence/mediaDisplay';
 const THUMB_SLOT =
   'relative w-[5.25rem] h-[5.25rem] flex items-center justify-center flex-shrink-0 overflow-visible';
 const THUMB_IMG =
-  'max-w-[4.25rem] max-h-[4.25rem] w-auto h-auto object-contain pointer-events-none select-none drop-shadow-[0_6px_14px_rgba(15,23,42,0.32)]';
+  'max-w-[4.25rem] max-h-[4.25rem] w-auto h-auto object-contain pointer-events-none select-none drop-shadow-[0_8px_10px_rgba(0,0,0,0.10)]';
 
 interface MediaSectionProps {
   standalone?: boolean;
@@ -16,6 +16,7 @@ interface MediaSectionProps {
   onReorder: (next: NoteMediaItem[]) => void;
   onPreview: (index: number) => void;
   onRemove: (index: number) => void;
+  onSaveRemoteCopy?: (index: number) => unknown | Promise<unknown>;
   onDismissOverlays?: () => void;
   moreActionsSlot?: React.ReactNode;
   mediaLoading?: boolean;
@@ -29,6 +30,7 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
   onReorder,
   onPreview,
   onRemove,
+  onSaveRemoteCopy,
   onDismissOverlays,
   moreActionsSlot,
   mediaLoading = false
@@ -138,7 +140,10 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
       }`}
       aria-label="媒体"
     >
-      <div className="px-4 pt-2 pb-1 flex items-center justify-between gap-2">
+      <div
+        data-workspace-link-anchor="editor-media-title"
+        className="px-4 pt-2 pb-1 flex items-center justify-between gap-2"
+      >
         <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">媒体</span>
         {moreActionsSlot}
       </div>
@@ -172,12 +177,28 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
                 onClick={() => openPreview(index, src)}
               >
                 {showImg ? (
-                  <img src={src} alt="媒体" draggable={false} className={THUMB_IMG} />
+                  <img src={src} alt="媒体" draggable={false} referrerPolicy="no-referrer" className={THUMB_IMG} />
                 ) : (
                   <div className="text-[10px] text-gray-400 pointer-events-none">
                     {mediaLoading ? '加载中' : '无法显示'}
                   </div>
                 )}
+                {item.source?.kind === 'remote' ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dismiss();
+                      void onSaveRemoteCopy?.(index);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="absolute bottom-0.5 left-0.5 z-10 rounded-full border-0 bg-white/90 p-1 text-gray-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 cursor-pointer"
+                    title="保存本地副本"
+                    aria-label="保存本地副本"
+                  >
+                    <Download size={12} />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={(e) => {

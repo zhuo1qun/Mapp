@@ -1,0 +1,1526 @@
+{
+  "version": "1.0",
+  "project": {
+    "id": "urban-river-social-innovation-map",
+    "name": "城市河流社会创新地图",
+    "type": "map",
+    "projectKind": "mapping",
+    "createdAt": 1794574676223,
+    "notes": [
+      {
+        "id": "case-6",
+        "createdAt": 1794574676223,
+        "coords": {
+          "lat": 52.401,
+          "lng": 4.905
+        },
+        "emoji": "💧",
+        "text": "# De Ceuvel 循环创意码头\n\n*阿姆斯特丹，荷兰 · 2012–至今*\n\n## 项目定位\n\n循环系统设计 × 社会企业试验场\n\n## 项目\n\n污染旧船厂被转化为运河畔创意与社会企业工作地；再用旧船、植物修复和离网循环设施成为可参观的城市实验。\n\n## 背景\n\nIJ 河支运河旁船厂停产、土壤污染、工业边角地闲置。\n\n## 行动\n\n设计团队、社会企业、文化活动与邻里在临时租期内共同运营，并把场地作为绿色创新网络与公共文化节点。\n\n## 设计\n\n将净化、能源、水循环、旧船再利用和高架步道整合为可学习的系统。项目方持续监测土壤并称大部分场地已清洁，但未公开修复前后的浓度对比。\n\n## 产业\n\n旧船厂转为创意与社会企业工作地，循环技术、修复和文化经营成为新的生产与服务组合；这是小尺度、可验证的绿色创业试验场。\n\n## 成果与数据\n\n- **26.5 MWh/年** — [能源系统评估的年度光伏产量；约为总用电的 23%](https://www.metabolic.nl/publication/new-strategies-for-smart-integrated-decentralised-energy-systems/)\n- **70–80%** — [项目报告的废水营养盐回收率；阶段性循环系统成效](https://www.metabolic.nl/wp-content/uploads/2019/02/CircularCities_designing-post-industrial-Amsterdam_final_web-sm.pdf)\n- **大部分** — [项目方称植物修复后场地已清洁；未公开浓度对比](https://deceuvel.nl/en/toekomst/)\n\n## 图片来源\n\n- [图片 1](https://www.geo.de/reisen/reisewissen/-de-ceuvel--in-amsterdam--wie-auf-verseuchtem-land-ein-paradies-entstand-35873780.html)；署名：GEO\n- [Verslag rondleiding de Ceuvel](https://de-maatschappij.nl/nieuws/verslag-rondleiding-de-ceuvel)；署名：De Maatschappij\n- [Cleantech Playground](https://www.clicproject.eu/historic-urban-landscape-hul-workshop/)；署名：CLIC Project\n\n## 参考来源\n\n- [项目方：背景与城市设计](https://deceuvel.nl/en/about/general-information/)\n- [项目方：土壤修复进展](https://deceuvel.nl/en/toekomst/)\n- [能源系统评估：De Ceuvel 微电网](https://www.metabolic.nl/publication/new-strategies-for-smart-integrated-decentralised-energy-systems/)\n- [循环绩效：Circular Cities](https://www.metabolic.nl/wp-content/uploads/2019/02/CircularCities_designing-post-industrial-Amsterdam_final_web-sm.pdf)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://image.geo.de/35892328/t/8u/v3/w1440/r1.3333/-/h00143854460-001336229299.jpg",
+          "https://de-maatschappij.nl/uploads/cropped/1667816277.png",
+          "https://www.clicproject.eu/wp-content/uploads/2018/05/IMG_20180530_152338.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://image.geo.de/35892328/t/8u/v3/w1440/r1.3333/-/h00143854460-001336229299.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://image.geo.de/35892328/t/8u/v3/w1440/r1.3333/-/h00143854460-001336229299.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://de-maatschappij.nl/uploads/cropped/1667816277.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://de-maatschappij.nl/uploads/cropped/1667816277.png",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.clicproject.eu/wp-content/uploads/2018/05/IMG_20180530_152338.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.clicproject.eu/wp-content/uploads/2018/05/IMG_20180530_152338.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-6-1",
+            "kind": "image",
+            "assetId": "https://image.geo.de/35892328/t/8u/v3/w1440/r1.3333/-/h00143854460-001336229299.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://image.geo.de/35892328/t/8u/v3/w1440/r1.3333/-/h00143854460-001336229299.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-6-2",
+            "kind": "image",
+            "assetId": "https://de-maatschappij.nl/uploads/cropped/1667816277.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://de-maatschappij.nl/uploads/cropped/1667816277.png",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-6-3",
+            "kind": "image",
+            "assetId": "https://www.clicproject.eu/wp-content/uploads/2018/05/IMG_20180530_152338.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.clicproject.eu/wp-content/uploads/2018/05/IMG_20180530_152338.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-6-1",
+            "label": "主体 · 社会企业",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-6-2",
+            "label": "方法 · 循环设计",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2012,
+        "boardX": 100,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 17
+      },
+      {
+        "id": "case-2",
+        "createdAt": 1794574676224,
+        "coords": {
+          "lat": 18.779,
+          "lng": 98.989
+        },
+        "emoji": "💧",
+        "text": "# 湄卡运河生物文化步道｜Mae Kha Canal\n\n*清迈，泰国 · 2022–2025（研究与共创）*\n\n## 项目定位\n\n参与式景观设计 × 在地植物知识\n\n## 项目\n\n围绕退化的城市运河，研究团队、社区和市政行动将民族植物学、河道历史与共创工作坊连接为“活态文化基础设施”。局部污水管理和浮床试验显示水质、垃圾拦截成效，但全河水质尚未稳定恢复。\n\n## 背景\n\n古老的防洪、灌溉与生计水系经历污染、侵占及文化记忆流失；长期监测显示不少城区河段仍处于重度有机污染状态。\n\n## 行动\n\n居民、长者、手工艺者与青年参与步行调查、叙事与空间共创；城市学习实验室把参与延续为协商平台，并参与垃圾减量与运河守护。\n\n## 设计\n\n以 149 种文化植物的地方知识组织生态文化步道，并结合截污、垃圾网和香根草浮床试验。景观设计师从总控者转为知识调解者；局部效果不能替代全河水质修复。\n\n## 成果与数据\n\n- **500 → 200 kg/周** — [垃圾网收集量下降，反映沿岸减废与协作](https://www.mdpi.com/2073-4441/17/7/1105)\n- **17.00–38.70 → 9.00–12.67 mg/L** — [香根草浮床试验期 BOD 区间下降；局部成效](https://www.mdpi.com/2073-4441/17/7/1105)\n- **0.00–2.40 → 0.80–6.00 mg/L** — [同一试验期 DO 区间上升；全河改善尚不稳定](https://www.mdpi.com/2073-4441/17/7/1105)\n- **149 种 / 71 科** — [3.5 km 调查段的生物文化植物记录，非新增物种数](https://www.mdpi.com/2673-7159/5/3/45)\n\n## 图片来源\n\n- [图片 1](https://thecityateyelevel.com/stories/reimagining-new-city-development-in-maekha/)；署名：The City at Eye Level\n- [คลองแม่ข่า โฉมใหม่ “โอตารุเมืองไทย”](https://www.thaipost.net/environment-news/205342/)；署名：Thai Post\n- [The FWS wastewater treatment system using vetiver grass platforms.](https://www.mdpi.com/2073-4441/17/7/1105)；署名：Water\n\n## 参考来源\n\n- [生物文化步道：Living Cultural Infrastructure…](https://www.mdpi.com/2673-7159/5/3/45) — Living Cultural Infrastructure as a Model for Biocultural Conservation: A Case Study of the Maekha Canal, Chiang Mai, Thailand\n- [水质与景观准实验研究](https://www.mdpi.com/2073-4441/17/7/1105)\n- [2020–2024 水质长期监测](https://www.mdpi.com/2073-4441/18/10/1219)\n- [Mae Kha City Lab](https://chiangmailearningcity.com/%E0%B9%81%E0%B8%A1%E0%B9%88%E0%B8%82%E0%B9%88%E0%B8%B2%E0%B9%80%E0%B8%9B%E0%B8%A5%E0%B8%B5%E0%B9%88%E0%B8%A2%E0%B8%99-%E0%B9%80%E0%B8%8A%E0%B8%B5%E0%B8%A2%E0%B8%87%E0%B9%83%E0%B8%AB%E0%B8%A1/)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://thecityateyelevel.com/app/uploads/2020/10/The-New-Bridge-1280x675.jpg",
+          "https://storage-wp.thaipost.net/2022/08/%E0%B9%82%E0%B8%AD%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B8%E0%B9%80%E0%B8%A1%E0%B8%B7%E0%B8%AD%E0%B8%87%E0%B9%84%E0%B8%97%E0%B8%A2.jpg",
+          "https://mdpi-res.com/water/water-17-01105/article_deploy/html/images/water-17-01105-g005.png"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://thecityateyelevel.com/app/uploads/2020/10/The-New-Bridge-1280x675.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://thecityateyelevel.com/app/uploads/2020/10/The-New-Bridge-1280x675.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://storage-wp.thaipost.net/2022/08/%E0%B9%82%E0%B8%AD%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B8%E0%B9%80%E0%B8%A1%E0%B8%B7%E0%B8%AD%E0%B8%87%E0%B9%84%E0%B8%97%E0%B8%A2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://storage-wp.thaipost.net/2022/08/%E0%B9%82%E0%B8%AD%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B8%E0%B9%80%E0%B8%A1%E0%B8%B7%E0%B8%AD%E0%B8%87%E0%B9%84%E0%B8%97%E0%B8%A2.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://mdpi-res.com/water/water-17-01105/article_deploy/html/images/water-17-01105-g005.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://mdpi-res.com/water/water-17-01105/article_deploy/html/images/water-17-01105-g005.png",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-2-1",
+            "kind": "image",
+            "assetId": "https://thecityateyelevel.com/app/uploads/2020/10/The-New-Bridge-1280x675.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://thecityateyelevel.com/app/uploads/2020/10/The-New-Bridge-1280x675.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-2-2",
+            "kind": "image",
+            "assetId": "https://storage-wp.thaipost.net/2022/08/%E0%B9%82%E0%B8%AD%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B8%E0%B9%80%E0%B8%A1%E0%B8%B7%E0%B8%AD%E0%B8%87%E0%B9%84%E0%B8%97%E0%B8%A2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://storage-wp.thaipost.net/2022/08/%E0%B9%82%E0%B8%AD%E0%B8%95%E0%B8%B2%E0%B8%A3%E0%B8%B8%E0%B9%80%E0%B8%A1%E0%B8%B7%E0%B8%AD%E0%B8%87%E0%B9%84%E0%B8%97%E0%B8%A2.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-2-3",
+            "kind": "image",
+            "assetId": "https://mdpi-res.com/water/water-17-01105/article_deploy/html/images/water-17-01105-g005.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://mdpi-res.com/water/water-17-01105/article_deploy/html/images/water-17-01105-g005.png",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-2-1",
+            "label": "方法 · 共同设计",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-case-2-2",
+            "label": "背景 · 生态知识流失",
+            "color": "#F59E0B"
+          }
+        ],
+        "startYear": 2022,
+        "endYear": 2025,
+        "boardX": 406,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 16
+      },
+      {
+        "id": "case-9",
+        "createdAt": 1794574676225,
+        "coords": {
+          "lat": 1.363,
+          "lng": 103.846
+        },
+        "emoji": "💧",
+        "text": "# 碧山—宏茂桥公园｜Kallang River\n\n*新加坡 · 2009–2012；持续运营*\n\n## 项目定位\n\n跨机构蓝绿基础设施 × 社区亲水\n\n## 项目\n\n作为 ABC Waters 旗舰项目，原本笔直的混凝土排水渠被自然化为可漫溢河流与公园，兼顾防洪、生境和日常休闲。更新后年访问量由约 300 万增至约 600 万，且多个来源记录生物多样性约提升 30%。\n\n## 背景\n\n高密住区中的加冷河被工程化为 2.7 公里混凝土渠，防洪功能与生态、公共生活割裂。\n\n## 行动\n\n公共事业局与国家公园局协作，并以工作坊、展览和学习步道让周边居民参与理解和使用水系统；这是强政府主导的制度创新，不是草根发起。\n\n## 设计\n\n以可淹没洪泛平原、生物工程、河畔看台和亲水路径替代硬质渠化，让单一排水设施同时提供生态服务、教育、社群活动和公共健康价值。官方资料记录 150 种野花、最高 155 种鸟类及 38 种蜻蜓/豆娘。\n\n## 成果与数据\n\n- **+30%** — [公园生物多样性提升](https://www.c40.org/case-studies/singapore-bio-engineering-works-at-bishan-ang-mo-kio-park-to-prevent-urban-flooding/)\n- **3 → 6 百万/年** — [更新后年访问量约翻倍](https://www.planning.nsw.gov.au/government-architect-nsw/research-and-case-studies/public-projects/bishan-ang-mo-kio-park-singapore)\n- **155 种** — [2023 年记录鸟类（eBird 数据）](https://www.nparks.gov.sg/docs/default-source/resources/2023/handbook-on-habitat-restoration-%28full-book%29-compressed.pdf)\n- **38 种** — [蜻蜓及豆娘记录](https://www.nparks.gov.sg/docs/default-source/resources/2023/handbook-on-habitat-restoration-%28full-book%29-compressed.pdf)\n\n## 图片来源\n\n- [图片 1](https://www.dreiseitlconsulting.com/bishan-ang-mo-kio-park)；署名：Dreiseitlconsulting\n- [Kallang River at Bishan-AMK Park](https://lkyspp.nus.edu.sg/gia/article/can-chiang-mai-look-to-singapore-for-solutions-to-overcome-its-urbanisation-woes)；署名：NUS Lee Kuan Yew School\n- [Before and After of Bishan Park](https://commons.wikimedia.org/wiki/File:Before_and_After_of_Bishan_Park.jpg)；署名：Atelier Dreiseitl / Wikimedia Commons\n\n## 参考来源\n\n- [新加坡 PUB 官方案例](https://www.pub.gov.sg/Public/Places-of-Interest/Our-Reservoirs-and-Waterways/Bishan-Ang-Mo-Kio-Park)\n- [新加坡 NParks：生境修复手册](https://www.nparks.gov.sg/docs/default-source/resources/2023/handbook-on-habitat-restoration-%28full-book%29-compressed.pdf)\n- [NSW 规划案例：访问量与多样性](https://www.planning.nsw.gov.au/government-architect-nsw/research-and-case-studies/public-projects/bishan-ang-mo-kio-park-singapore)\n- [C40：参与过程](https://www.c40.org/case-studies/singapore-bio-engineering-works-at-bishan-ang-mo-kio-park-to-prevent-urban-flooding/)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://images.squarespace-cdn.com/content/v1/5b008764710699f45ff1e509/b7b52fe3-b54b-456b-aa42-e9e7980cf8c8/DJI_0517.JPG",
+          "https://lkyspp.nus.edu.sg/images/default-source/gia-images/kallang-river-at-bishan-amk-park.jpg",
+          "https://upload.wikimedia.org/wikipedia/commons/3/3d/Before_and_After_of_Bishan_Park.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/5b008764710699f45ff1e509/b7b52fe3-b54b-456b-aa42-e9e7980cf8c8/DJI_0517.JPG",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/5b008764710699f45ff1e509/b7b52fe3-b54b-456b-aa42-e9e7980cf8c8/DJI_0517.JPG",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://lkyspp.nus.edu.sg/images/default-source/gia-images/kallang-river-at-bishan-amk-park.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://lkyspp.nus.edu.sg/images/default-source/gia-images/kallang-river-at-bishan-amk-park.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Before_and_After_of_Bishan_Park.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Before_and_After_of_Bishan_Park.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-9-1",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/5b008764710699f45ff1e509/b7b52fe3-b54b-456b-aa42-e9e7980cf8c8/DJI_0517.JPG",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/5b008764710699f45ff1e509/b7b52fe3-b54b-456b-aa42-e9e7980cf8c8/DJI_0517.JPG",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-9-2",
+            "kind": "image",
+            "assetId": "https://lkyspp.nus.edu.sg/images/default-source/gia-images/kallang-river-at-bishan-amk-park.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://lkyspp.nus.edu.sg/images/default-source/gia-images/kallang-river-at-bishan-amk-park.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-9-3",
+            "kind": "image",
+            "assetId": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Before_and_After_of_Bishan_Park.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Before_and_After_of_Bishan_Park.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-9-1",
+            "label": "主体 · 跨机构协作",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-9-2",
+            "label": "方法 · 蓝绿基础设施",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2009,
+        "endYear": 2012,
+        "boardX": 712,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 15
+      },
+      {
+        "id": "case-1",
+        "createdAt": 1794574676226,
+        "coords": {
+          "lat": 3.139,
+          "lng": 101.704
+        },
+        "emoji": "💧",
+        "text": "# 巴生河社区艺术节｜Klang River Festival\n\n*吉隆坡，马来西亚 · 2022–至今（年办）*\n\n## 项目定位\n\n创意社群策展 × 沿河公共文化再发现\n\n## 项目\n\nKongsiKL 发起的沿巴生河开放式艺术节，以艺术、导览、装置、小额种子项目和社区活动，回应一条被城市开发长期忽视、却参与吉隆坡矿业与城市形成的河流。2025 报告记录了更清洁、安全、可达的河岸与环境意识提升，但尚未公开可核验的水质、垃圾量或客流变化。\n\n## 背景\n\n巴生河连接吉隆坡与巴生港，沿线曾有采锡聚落；道路和开发令日常生活与河流脱节。\n\n## 行动\n\n民间策展方以开放征集、种子资金和合作伙伴网络，将艺术家、社区与机构汇到河边；2025 年有大学建筑学院参与的社区城市更新项目。\n\n## 设计\n\n把历史建筑、桥下与河岸作为“可被共同使用的文化基础设施”：策展、临时装置和参与式空间活动让河流重新成为文化生产与公共交往的媒介。2025–2026 方案提出 1.868 km 的长期激活走廊，属规划范围而非既有生态修复量。\n\n## 成果与数据\n\n- **3 天** — [2025 年社区城市更新活动期](https://sdg.ucsiuniversity.edu.my/wp-content/uploads/2026/04/SDG_Report25.pdf)\n- **1.868 km** — [2025–2026 长期激活走廊；属规划范围](https://sdg.ucsiuniversity.edu.my/report/KRF_2025_Proposal-KPKT_250609.pdf)\n- **86,452 m²** — [2025–2026 方案影响范围；属规划范围](https://sdg.ucsiuniversity.edu.my/report/KRF_2025_Proposal-KPKT_250609.pdf)\n\n## 图片来源\n\n- [图片 1](https://www.klangriverfestival.com/)；署名：Klang River Festival\n- [Flow. Klang River Fest](https://www.klangriverfestival.com/flow-klang-river-fest)；署名：Klang River Festival\n- [klang river festival](https://www.3nitydesign.com/work/klang-river-festival)；署名：3nity\n\n## 参考来源\n\n- [艺术节官方（2022）](https://www.klangriverfestival.com/2022-festival)\n- [2025 实施报告：河岸改善](https://sdg.ucsiuniversity.edu.my/wp-content/uploads/2026/04/SDG_Report25.pdf)\n- [2025–2026 激活方案与范围](https://sdg.ucsiuniversity.edu.my/report/KRF_2025_Proposal-KPKT_250609.pdf)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/0e10dd1f-4069-4d48-a72d-e490f13e1afd/%26%2BThe%2BRiver.jpg",
+          "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/301c4cfa-36d6-4a3e-9ef4-6e8eaf087498/flow_9.jpg",
+          "https://cdn.prod.website-files.com/654c21af683033e089ec71ab/677f387aefaa9a37dfd40d97_KRF2024_08.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/0e10dd1f-4069-4d48-a72d-e490f13e1afd/%26%2BThe%2BRiver.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/0e10dd1f-4069-4d48-a72d-e490f13e1afd/%26%2BThe%2BRiver.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/301c4cfa-36d6-4a3e-9ef4-6e8eaf087498/flow_9.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/301c4cfa-36d6-4a3e-9ef4-6e8eaf087498/flow_9.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://cdn.prod.website-files.com/654c21af683033e089ec71ab/677f387aefaa9a37dfd40d97_KRF2024_08.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://cdn.prod.website-files.com/654c21af683033e089ec71ab/677f387aefaa9a37dfd40d97_KRF2024_08.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-1-1",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/0e10dd1f-4069-4d48-a72d-e490f13e1afd/%26%2BThe%2BRiver.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/0e10dd1f-4069-4d48-a72d-e490f13e1afd/%26%2BThe%2BRiver.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-1-2",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/301c4cfa-36d6-4a3e-9ef4-6e8eaf087498/flow_9.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/62b028ef48274b090d9ef010/301c4cfa-36d6-4a3e-9ef4-6e8eaf087498/flow_9.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-1-3",
+            "kind": "image",
+            "assetId": "https://cdn.prod.website-files.com/654c21af683033e089ec71ab/677f387aefaa9a37dfd40d97_KRF2024_08.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://cdn.prod.website-files.com/654c21af683033e089ec71ab/677f387aefaa9a37dfd40d97_KRF2024_08.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-1-1",
+            "label": "主体 · 独立策展",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-1-2",
+            "label": "方法 · 艺术介入",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2022,
+        "boardX": 1018,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 14
+      },
+      {
+        "id": "case-13",
+        "createdAt": 1794574676227,
+        "coords": {
+          "lat": 40.421,
+          "lng": -79.942
+        },
+        "emoji": "💧",
+        "text": "# Hazelwood Green／Mill 19\n\n*匹兹堡，美国 · 2017–至今*\n\n## 项目定位\n\n钢铁棕地再用 × 先进制造与社区共创\n\n## 项目\n\n莫农加希拉河畔的旧钢厂被改造成机器人、先进制造与研发载体；保留钢构骨架的公共廊道和雨洪景观，让过去封闭的工业地重新连接社区与河岸。\n\n## 背景\n\nJones & Laughlin 钢厂停产后，0.72 平方公里河岸棕地长期闲置，土壤污染、雨洪负担和就业流失叠加。\n\n## 行动\n\n项目持续举行社区组织会议、专项活动和公共艺术工作坊；艺术家由社区参与选择，施工方也应居民要求发布工作机会。\n\n## 设计\n\n“壳中建屋”保留 414 米钢结构，在其下嵌入高技术研发、公共步道、原构件再利用和雨水收集景观；设计同时服务劳动记忆、技能培训与开放河岸。\n\n## 产业\n\n钢铁制造遗址转为机器人、先进制造、研发和技能培训载体；产业升级与社区就业被作为河岸棕地再开发的核心目标。\n\n## 成果与数据\n\n- **0.72 km²** — [Hazelwood Green 河岸棕地范围](https://www.aia.org/design-excellence/award-winners/ridc-mill-19-buildings-b)\n- **414 m** — [保留的 Mill 19 钢结构长度（由 1,360 英尺换算）](https://www.aia.org/design-excellence/award-winners/ridc-mill-19-buildings-b)\n- **178 个** — [首期创造的全职等效岗位](https://www.ura.org/media/W1siZiIsIjIwMjMvMTAvMjMvMmVsZXZ1Z3VpYV8yMDIzX0ZpbmFsX1BVSV9SZXBvcnQucGRmIl1d/2023%20Final%20PUI%20Report.pdf)\n\n## 图片来源\n\n- [图片 1](https://www.almono.org/mill19)；署名：Hazelwood Green / Almono\n- [Mill 19 at Hazelwood Green](https://www.almono.org/mill19)；署名：Hazelwood Green / Almono\n- [Mill 19 brownfield redevelopment](https://19january2021snapshot.epa.gov/brownfields/supporting-brownfields-redevelopment-using-tax-incentives-and-credits-0_.html)；署名：US EPA / ReMake Group\n\n## 参考来源\n\n- [AIA：Mill 19 设计与社区过程](https://www.aia.org/design-excellence/award-winners/ridc-mill-19-buildings-b)\n- [RIDC：旧钢厂转型为先进制造](https://ridc.org/case-study/mill-19-a-pittsburgh-industrial-hallmark/)\n- [匹兹堡城市更新就业资料](https://www.ura.org/media/W1siZiIsIjIwMjMvMTAvMjMvMmVsZXZ1Z3VpYV8yMDIzX0ZpbmFsX1BVSV9SZXBvcnQucGRmIl1d/2023%20Final%20PUI%20Report.pdf)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/a90f76fc-6cef-49ef-93ec-006b12746fd7/Panorama2.jpg",
+          "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/f9f49a13-8ace-4b6f-817d-d737acfb9f67/DJI_0199%2B%281%29.jpg",
+          "https://19january2021snapshot.epa.gov/sites/static/files/styles/large/public/2019-10/image-4.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/a90f76fc-6cef-49ef-93ec-006b12746fd7/Panorama2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/a90f76fc-6cef-49ef-93ec-006b12746fd7/Panorama2.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/f9f49a13-8ace-4b6f-817d-d737acfb9f67/DJI_0199%2B%281%29.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/f9f49a13-8ace-4b6f-817d-d737acfb9f67/DJI_0199%2B%281%29.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://19january2021snapshot.epa.gov/sites/static/files/styles/large/public/2019-10/image-4.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://19january2021snapshot.epa.gov/sites/static/files/styles/large/public/2019-10/image-4.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-13-1",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/a90f76fc-6cef-49ef-93ec-006b12746fd7/Panorama2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/a90f76fc-6cef-49ef-93ec-006b12746fd7/Panorama2.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-13-2",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/f9f49a13-8ace-4b6f-817d-d737acfb9f67/DJI_0199%2B%281%29.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/59dfa54851a584c8cbb43ece/f9f49a13-8ace-4b6f-817d-d737acfb9f67/DJI_0199%2B%281%29.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-13-3",
+            "kind": "image",
+            "assetId": "https://19january2021snapshot.epa.gov/sites/static/files/styles/large/public/2019-10/image-4.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://19january2021snapshot.epa.gov/sites/static/files/styles/large/public/2019-10/image-4.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-13-1",
+            "label": "背景 · 钢铁棕地",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-case-13-2",
+            "label": "方法 · 适应性再利用",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2017,
+        "boardX": 1324,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 13
+      },
+      {
+        "id": "case-14",
+        "createdAt": 1794574676228,
+        "coords": {
+          "lat": 47.206,
+          "lng": -1.566
+        },
+        "emoji": "💧",
+        "text": "# 南特创意岛｜Île de Nantes\n\n*南特，法国 · 2000s–至今（分期）*\n\n## 项目定位\n\n造船遗产再用 × 创意生产与共创试验\n\n## 项目\n\n卢瓦尔河中的旧造船岛由衰退船厂转向创意、数字、艺术和公共文化生产；保留船坞、吊机和厂房，而非把工业记忆清空后重建。\n\n## 背景\n\n1987 年船厂关闭后，3.3 平方公里岛屿留下大片棕地，也留下工人记忆、经济身份与城市中心断裂的问题。\n\n## 行动\n\n公共开发机构 SAMOA 以公共利益条件控制土地；Ilotopia 用改装巴士等移动工作坊，在永久改造前让居民共同试验公共空间。\n\n## 设计\n\n把旧船厂坡道、厂房、机械遗存和河岸空间转化为可生产、展演、学习与休憩的连续场所；“机器岛”等文化原型先激活场地，再导入长期功能。\n\n## 产业\n\n关闭的造船产业转为创意、数字、艺术教育和小型生产网络；旧厂房保留为可负担的创意工作空间，而非一次性文化地标。\n\n## 成果与数据\n\n- **3.3 km²** — [原造船岛更新范围（330 公顷换算）](https://www.oecd.org/en/publications/local-identity-pride-and-branding-in-place-transformation_9ccee12a-en/full-report/using-a-place-narrative-for-broadly-shared-transformative-change_85d04308.html)\n- **180 家** — [旧厂房承载的创意工作空间企业](https://www.oecd.org/en/publications/local-identity-pride-and-branding-in-place-transformation_9ccee12a-en/full-report/using-a-place-narrative-for-broadly-shared-transformative-change_85d04308.html)\n- **15,000 m²** — [Alstom 厂房再利用的工业空间](https://metropole.nantes.fr/ma-ville-ma-metropole/les-grands-projets/anciennes-halles-alstom-nouvelle-place-forte-du-numerique-et-de-la-creation)\n\n## 图片来源\n\n- [图片 1](https://www.iledenantes.com/operations/cales-et-cite-des-chantiers/)；署名：Île de Nantes\n- [Cales et Cité des Chantiers](https://www.iledenantes.com/operations/cales-et-cite-des-chantiers/)；署名：Île de Nantes\n- [Parc des Chantiers](https://www.iledenantes.com/operations/parc-des-chantiers/)；署名：Île de Nantes\n\n## 参考来源\n\n- [OECD：南特工业遗产再生](https://www.oecd.org/en/publications/local-identity-pride-and-branding-in-place-transformation_9ccee12a-en/full-report/using-a-place-narrative-for-broadly-shared-transformative-change_85d04308.html)\n- [南特都会区：Alstom 厂房与创意产业](https://metropole.nantes.fr/ma-ville-ma-metropole/les-grands-projets/anciennes-halles-alstom-nouvelle-place-forte-du-numerique-et-de-la-creation)\n- [Île de Nantes：船坞与工坊再用](https://www.iledenantes.com/operations/cales-et-cite-des-chantiers/)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers-3-1.jpg",
+          "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers.jpg",
+          "https://www.iledenantes.com/wp-content/uploads/2019/02/parc-des-chantiers-7.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers-3-1.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers-3-1.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.iledenantes.com/wp-content/uploads/2019/02/parc-des-chantiers-7.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.iledenantes.com/wp-content/uploads/2019/02/parc-des-chantiers-7.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-14-1",
+            "kind": "image",
+            "assetId": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers-3-1.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers-3-1.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-14-2",
+            "kind": "image",
+            "assetId": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.iledenantes.com/wp-content/uploads/2019/01/Cales-cit%C3%A9-des-chantiers.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-14-3",
+            "kind": "image",
+            "assetId": "https://www.iledenantes.com/wp-content/uploads/2019/02/parc-des-chantiers-7.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.iledenantes.com/wp-content/uploads/2019/02/parc-des-chantiers-7.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-14-1",
+            "label": "背景 · 造船业转型",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-case-14-2",
+            "label": "方法 · 创意生产网络",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2000,
+        "boardX": 100,
+        "boardY": 406,
+        "variant": "standard",
+        "layerStackOrder": 12
+      },
+      {
+        "id": "case-15",
+        "createdAt": 1794574676229,
+        "coords": {
+          "lat": 43.644,
+          "lng": -79.351
+        },
+        "emoji": "💧",
+        "text": "# 多伦多港区／Don 河口自然化\n\n*多伦多，加拿大 · 2017–至今（分期实施）*\n\n## 项目定位\n\n河口自然化 × 创意生产区与原住民协商\n\n## 项目\n\n在前工业填海区重新引导 Don 河入安大略湖，以河谷、湿地和公园处理洪水；同时保留生产性城市功能，导入影视、数字媒体与创意产业。\n\n## 背景\n\n原有湿地被填筑为港口和工业地，Don 河口被硬质渠道化；极端降雨会威胁周边社区和港区。\n\n## 行动\n\n规划持续纳入原住民和公众参与；河流命名、公共空间及邻里分期方案均经过协商，产业地块的城市设计导则也设置公开参与环节。\n\n## 设计\n\n不是把防洪工程藏在地下，而是将新河道、湿地、生境、桥梁与可步行公共空间一起设计；产业区以水边步道和更开放的街区接入河口。\n\n## 产业\n\n港口与仓储用地在保留生产性城市功能的同时，拟导入影视、数字媒体和创意生产；部分就业和空间指标仍属分期规划。\n\n## 成果与数据\n\n- **1,000+ m** — [自然化新河道](https://www.waterfrontoronto.ca/our-projects/don-mouth-naturalization-and-port-lands-flood-protection)\n- **25 ha** — [可开放绿地；含河谷与公园](https://www.waterfrontoronto.ca/our-projects/don-mouth-naturalization-and-port-lands-flood-protection)\n- **33 ha** — [创意生产区规划工业用地](https://www.toronto.ca/city-government/planning-development/planning-studies-initiatives/port-lands/)\n\n## 图片来源\n\n- [图片 1](https://www.waterfrontoronto.ca/our-projects/don-mouth-naturalization-and-port-lands-flood-protection)；署名：Waterfront Toronto / WSP\n\n## 参考来源\n\n- [Waterfront Toronto：Don 河口自然化](https://www.waterfrontoronto.ca/our-projects/don-mouth-naturalization-and-port-lands-flood-protection)\n- [多伦多市：Port Lands 与创意生产区](https://www.toronto.ca/city-government/planning-development/planning-studies-initiatives/port-lands/)\n- [多伦多港区洪水防护更新报告](https://www.toronto.ca/legdocs/mmis/2023/ex/bgrd/backgroundfile-236007.pdf)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://www.wsp.com/-/media/project/canada/image/img-portlands.jpg?h=628&hash=FE2CDAC1866BF428E427E772B2E851F3&iar=0&w=1200"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://www.wsp.com/-/media/project/canada/image/img-portlands.jpg?h=628&hash=FE2CDAC1866BF428E427E772B2E851F3&iar=0&w=1200",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.wsp.com/-/media/project/canada/image/img-portlands.jpg?h=628&hash=FE2CDAC1866BF428E427E772B2E851F3&iar=0&w=1200",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-15-1",
+            "kind": "image",
+            "assetId": "https://www.wsp.com/-/media/project/canada/image/img-portlands.jpg?h=628&hash=FE2CDAC1866BF428E427E772B2E851F3&iar=0&w=1200",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.wsp.com/-/media/project/canada/image/img-portlands.jpg?h=628&hash=FE2CDAC1866BF428E427E772B2E851F3&iar=0&w=1200",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-15-1",
+            "label": "主体 · 原住民协商",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-15-2",
+            "label": "方法 · 河口自然化",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2017,
+        "boardX": 406,
+        "boardY": 406,
+        "variant": "standard",
+        "layerStackOrder": 11
+      },
+      {
+        "id": "case-16",
+        "createdAt": 1794574676230,
+        "coords": {
+          "lat": 53.535,
+          "lng": 10.016
+        },
+        "emoji": "💧",
+        "text": "# Grasbrook 易北河港区转型\n\n*汉堡，德国 · 2019–2039（规划建设）*\n\n## 项目定位\n\n港区循环开发 × 竞争式公众参与\n\n## 项目\n\n易北河原港区拟建为以材料循环、雨水调蓄和滨水绿地为基础的新城区；它是公众在竞争阶段进入大型港区转型设计的一项前瞻性案例。\n\n## 背景\n\n港口及堆场占据双水岸，土地利用效率低，也面对洪水、热岛和与周边社区脱节的问题。\n\n## 行动\n\n竞赛前后通过 4 场主题工作坊、线上参与和外展问卷征集建议，约 2,500 位市民参与；后续工作坊继续讨论公园、居住工作和到达方式。\n\n## 设计\n\n以高位防洪地形、雨水蓄存、绿色屋顶立面、材料循环和两座跨易北河连接组织新片区；当前数据均为目标或规划，尚非生态成效。\n\n## 产业\n\n传统港区转向低碳混合就业区，材料循环和气候适应被写入开发条件；16,000 个岗位为规划目标，不能作为已实现成果。\n\n## 成果与数据\n\n- **2,500 人** — [竞争阶段提交建议的市民数](https://www.grasbrook.de/en/informationen/public-participation/)\n- **16,000 个** — [规划就业岗位；非已实现成果](https://www.hamburg.de/politik-und-verwaltung/bezirke/mitte/themen/umwelt-natur-klimaschutz/klima/projekte/grasbrook-265748)\n- **4.5 km²** — [规划开发范围](https://www.hamburg.de/politik-und-verwaltung/bezirke/mitte/themen/umwelt-natur-klimaschutz/klima/projekte/grasbrook-265748)\n\n## 图片来源\n\n- [图片 1](https://www.hamburg.de/politik-und-verwaltung/bezirke/mitte/themen/umwelt-natur-klimaschutz/klima/projekte/grasbrook-265748)；署名：Hamburg / Grasbrook\n\n## 参考来源\n\n- [Grasbrook：公众参与记录](https://www.grasbrook.de/en/informationen/public-participation/)\n- [汉堡市：气候适应与循环措施](https://www.hamburg.de/politik-und-verwaltung/bezirke/mitte/themen/umwelt-natur-klimaschutz/klima/projekte/grasbrook-265748)\n- [Grasbrook：项目概览](https://www.grasbrook.de/en/)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://www.hamburg.de/resource/image/265744/landscape_ratio16x9/1280/720/567cc0bb6fa16d8692d086d8d880f62e/7786833FC5B20DA4523AB7E98D96F1D4/grasbrook-2.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://www.hamburg.de/resource/image/265744/landscape_ratio16x9/1280/720/567cc0bb6fa16d8692d086d8d880f62e/7786833FC5B20DA4523AB7E98D96F1D4/grasbrook-2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.hamburg.de/resource/image/265744/landscape_ratio16x9/1280/720/567cc0bb6fa16d8692d086d8d880f62e/7786833FC5B20DA4523AB7E98D96F1D4/grasbrook-2.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-16-1",
+            "kind": "image",
+            "assetId": "https://www.hamburg.de/resource/image/265744/landscape_ratio16x9/1280/720/567cc0bb6fa16d8692d086d8d880f62e/7786833FC5B20DA4523AB7E98D96F1D4/grasbrook-2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.hamburg.de/resource/image/265744/landscape_ratio16x9/1280/720/567cc0bb6fa16d8692d086d8d880f62e/7786833FC5B20DA4523AB7E98D96F1D4/grasbrook-2.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-16-1",
+            "label": "主体 · 竞争式参与",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-16-2",
+            "label": "背景 · 港区气候转型",
+            "color": "#F59E0B"
+          }
+        ],
+        "startYear": 2019,
+        "endYear": 2039,
+        "boardX": 712,
+        "boardY": 406,
+        "variant": "standard",
+        "layerStackOrder": 10
+      },
+      {
+        "id": "case-17",
+        "createdAt": 1794574676231,
+        "coords": {
+          "lat": 41.91,
+          "lng": -87.653
+        },
+        "emoji": "💧",
+        "text": "# Wild Mile 浮动生态公园\n\n*芝加哥，美国 · 2016–至今（分期）*\n\n## 项目定位\n\n非营利组织 × 浮动湿地与公民科学\n\n## 项目\n\nUrban Rivers 与设计团队、学校、居民和市政府把曾服务钢铁、木材和工厂的运河段改造为浮动湿地、步道、课堂和生态监测场。\n\n## 背景\n\n芝加哥河北支运河长期以混凝土、护岸和工业设施为主，污染与硬质边界削弱生境，也使居民难以接近水面。\n\n## 行动\n\n社区会议共同塑造框架；River Rangers 志愿者参与物种监测和维护，学校与社区活动把生态修复转成持续学习与公民科学。\n\n## 设计\n\n模块化浮岛使硬质运河获得随水位变化的浅水过渡带；步道、皮划艇点和课堂嵌入湿地，不把生态修复与日常使用分开。\n\n## 成果与数据\n\n- **0.069 km²** — [浮动生态公园总规划面积（17 英亩换算）](https://www.som.com/projects/wild-mile/)\n- **10,000+ 株** — [本土植物；70+ 种湿地植物](https://www.tclf.org/wild-mile)\n- **213 m** — [已开放浮动步道（700 英尺换算）](https://www.tclf.org/wild-mile)\n\n## 图片来源\n\n- [图片 1](https://urbanrivers.org/)；署名：Urban Rivers\n\n## 参考来源\n\n- [SOM：Wild Mile 社区共创与设计](https://www.som.com/projects/wild-mile/)\n- [Wild Mile：社区框架与历史](https://wildmile.org/history)\n- [ASLA：植物与浮动生境数据](https://www.asla.org/getcontentasset/b2c58e51-7ecf-46cb-bc96-2de4c6dc7bbe/547f34a1-c94b-4748-b717-f9bca7683a68/plan_members.pdf?language=en-US)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://images.squarespace-cdn.com/content/v1/5b6e06b23917ee7c84914291/a7bc0534-6702-4c02-96f7-f797453902a4/Screen%2BShot%2B2024-06-12%2Bat%2B4.18.04%2BPM.png"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/5b6e06b23917ee7c84914291/a7bc0534-6702-4c02-96f7-f797453902a4/Screen%2BShot%2B2024-06-12%2Bat%2B4.18.04%2BPM.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/5b6e06b23917ee7c84914291/a7bc0534-6702-4c02-96f7-f797453902a4/Screen%2BShot%2B2024-06-12%2Bat%2B4.18.04%2BPM.png",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-17-1",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/5b6e06b23917ee7c84914291/a7bc0534-6702-4c02-96f7-f797453902a4/Screen%2BShot%2B2024-06-12%2Bat%2B4.18.04%2BPM.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/5b6e06b23917ee7c84914291/a7bc0534-6702-4c02-96f7-f797453902a4/Screen%2BShot%2B2024-06-12%2Bat%2B4.18.04%2BPM.png",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-17-1",
+            "label": "主体 · 非营利组织",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-17-2",
+            "label": "方法 · 公民科学",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2016,
+        "boardX": 1018,
+        "boardY": 406,
+        "variant": "standard",
+        "layerStackOrder": 9
+      },
+      {
+        "id": "case-20",
+        "createdAt": 1794574676232,
+        "coords": {
+          "lat": 37.512,
+          "lng": 126.995
+        },
+        "emoji": "💧",
+        "text": "# 汉江文艺复兴 1.0｜Hangang Renaissance\n\n*首尔，韩国 · 2007–2011（主要项目）*\n\n## 项目定位\n\n综合河流计划 × 生态、文旅与水上休闲\n\n## 项目\n\n首尔以 33 个项目重新组织汉江两岸：修复生态与历史文化资源，改善步行可达性，并通过主题公园、文化地标、水上活动和旅游服务激活河岸。\n\n## 背景\n\n快速工业化和早期河流开发优先服务防洪、道路与硬质岸线，汉江与城市日常生活、文化活动和生态系统的联系被削弱。\n\n## 行动\n\n这是首尔市统筹的河流综合计划，覆盖公园、交通、文化与水上利用；其实施将河岸公共空间、文旅服务与活动运营纳入同一框架。\n\n## 设计\n\n以“生态修复、可达性、文化基础设施、景观和水面活动”五个领域组织项目；步行连接、主题公园、桥梁改造、地标建筑与水上休闲共同形成连续的河流公共界面。\n\n## 产业\n\n从以防洪和交通为主的河流管理，转向生态、文化旅游、水上休闲和公共空间的复合供给；项目组合中的文旅与服务业价值较明显，但未找到可归因的统一产业产出数据。\n\n## 成果与数据\n\n- **21.8 km** — [2007–2011 年自然型护岸修复长度](https://www.seoul.go.kr/news/news_report.do?nttNo=455743)\n- **1608→2062 种** — [2007→2022 年汉江生物种数；后续监测](https://www.seoul.go.kr/news/news_report.do?nttNo=455743)\n- **85 万→206 万株** — [2005→2011 年汉江公园树木数量](https://english.seoul.go.kr/mayor-oh-se-hons-great-hangang-project-aims-to-protect-the-ecosystem-by-planting-3x-more-trees/)\n\n## 图片来源\n\n- [图片 1](https://english.seoul.go.kr/sebitseom-island/)；署名：首尔市\n- [汉江文艺复兴建设的首尔三岛公共水岸](https://english.seoul.go.kr/sebitseom-island/)；署名：首尔市\n- [首尔三岛夜景与文化活动空间](https://english.seoul.go.kr/sebitseom-island/)；署名：首尔市\n\n## 参考来源\n\n- [首尔市：汉江文艺复兴项目史](https://hangang.seoul.go.kr/www/contents/968.do?mid=937)\n- [首尔市：33 个项目与 5 个领域](https://english.seoul.go.kr/comprehensive-planning-of-the-great-hangang-project-to-promote-the-citys-charms-and-competitiveness/)\n- [汉江文艺复兴 2.0 资料（项目沿革）](https://english.seoul.go.kr/wp-content/uploads/2023/8th-local/Great_HangangHangang_Renaissance2.pdf)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-1.jpg",
+          "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-2.jpg",
+          "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-3.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-1.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-1.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-2.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-3.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-3.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-20-1",
+            "kind": "image",
+            "assetId": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-1.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-1.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-20-2",
+            "kind": "image",
+            "assetId": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-2.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-2.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-20-3",
+            "kind": "image",
+            "assetId": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-3.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://english.seoul.go.kr/wp-content/uploads/2021/10/sebitseom-3.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-20-1",
+            "label": "主体 · 市政综合计划",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-20-2",
+            "label": "方法 · 生态 × 文旅 × 水上活动",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2007,
+        "endYear": 2011,
+        "boardX": 1324,
+        "boardY": 406,
+        "variant": "standard",
+        "layerStackOrder": 8
+      },
+      {
+        "id": "case-21",
+        "createdAt": 1794574676233,
+        "coords": {
+          "lat": 53.542,
+          "lng": 9.996
+        },
+        "emoji": "💧",
+        "text": "# 汉堡港城｜HafenCity\n\n*汉堡，德国 · 2000–至今*\n\n## 项目定位\n\n旧港区转型 × 就业、文化与防洪城市\n\n## 项目\n\n汉堡将易北河畔的旧港口和仓储用地转为混合城区，以住宅、办公、教育、文化、零售和滨水公共空间替代单一港口功能。\n\n## 背景\n\n港区功能外移后，大量内港码头、仓储和岸线与市中心隔绝；潮汐洪水风险也限制了直接临水的开发与公共使用。\n\n## 行动\n\n市政府与 HafenCity Hamburg GmbH 通过总体规划、地块竞赛和公共空间标准组织分期开发；文化、教育、就业与社区设施被作为长期城区功能配置。\n\n## 设计\n\n保留港池、码头墙和工业遗产线索，用抬升的建筑基座与可淹没步道适应潮汐；以底层公共业态和连续滨水步行系统把工作、居住、文化和休闲并置。\n\n## 产业\n\n旧港口功能被住房、办公、教育、文化、零售和旅游等复合业态取代；就业和公共服务与防洪基础设施被同步配置，避免将港区更新简化为单一地产开发。\n\n## 成果与数据\n\n- **€10 bn** — [私人投资；项目资料](https://www.hafencity.com/en/overview/facts-figures)\n- **15,000 个** — [已形成岗位；项目资料](https://www.hafencity.com/en/overview/facts-figures)\n- **1,800 m²** — [太阳能热利用面积，满足西部片区约 40% 热水需求](https://www.hafencity.com/en/urban-development/sustainability)\n\n## 图片来源\n\n- [图片 1](https://archiscapes.wordpress.com/2015/04/18/waterfronts-urban-renovation/aerial-photograph-of-the-hafencity-hamburg-2009/)；署名：ARCHISCAPES\n- [HafenCity 易北河港区更新](https://archiscapes.wordpress.com/2015/04/18/waterfronts-urban-renovation/aerial-photograph-of-the-hafencity-hamburg-2010/)；署名：ARCHISCAPES\n- [保留港口构件的临水公共界面](https://thecityateyelevel.com/stories/creating-livability/)；署名：Tanja Nagelsmeier / The City at Eye Level\n\n## 参考来源\n\n- [汉堡市：158 ha 旧港区更新](https://www.hamburg.com/publicservice/info/111034014/)\n- [HafenCity：面积、住房与就业数据](https://www.hafencity.com/en/overview)\n- [HafenCity：旧港区转型项目资料](https://www.hafencity.com/_Resources/Persistent/8/0/a/0/80a0ecdbad49d117d2191cc0b5a91a7db6c26270/HafenCityProjekte_March_2017_english.pdf)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2009.jpg?w=840",
+          "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2010.jpg?w=840",
+          "https://thecityateyelevel.com/app/uploads/2018/05/p214c-83_DSC8029_HQ-HafenCity-Hamburg-Germany-Tanja-Nagelsmeier-1200x680.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2009.jpg?w=840",
+            "source": {
+              "kind": "remote",
+              "url": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2009.jpg?w=840",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2010.jpg?w=840",
+            "source": {
+              "kind": "remote",
+              "url": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2010.jpg?w=840",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://thecityateyelevel.com/app/uploads/2018/05/p214c-83_DSC8029_HQ-HafenCity-Hamburg-Germany-Tanja-Nagelsmeier-1200x680.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://thecityateyelevel.com/app/uploads/2018/05/p214c-83_DSC8029_HQ-HafenCity-Hamburg-Germany-Tanja-Nagelsmeier-1200x680.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-21-1",
+            "kind": "image",
+            "assetId": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2009.jpg?w=840",
+            "source": {
+              "kind": "remote",
+              "url": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2009.jpg?w=840",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-21-2",
+            "kind": "image",
+            "assetId": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2010.jpg?w=840",
+            "source": {
+              "kind": "remote",
+              "url": "https://archiscapes.wordpress.com/wp-content/uploads/2015/03/aerial-photograph-of-the-hafencity-hamburg-2010.jpg?w=840",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-21-3",
+            "kind": "image",
+            "assetId": "https://thecityateyelevel.com/app/uploads/2018/05/p214c-83_DSC8029_HQ-HafenCity-Hamburg-Germany-Tanja-Nagelsmeier-1200x680.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://thecityateyelevel.com/app/uploads/2018/05/p214c-83_DSC8029_HQ-HafenCity-Hamburg-Germany-Tanja-Nagelsmeier-1200x680.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-21-1",
+            "label": "主体 · 港区开发公司",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-21-2",
+            "label": "方法 · 防洪型混合开发",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2000,
+        "boardX": 100,
+        "boardY": 712,
+        "variant": "standard",
+        "layerStackOrder": 7
+      },
+      {
+        "id": "case-22",
+        "createdAt": 1794574676234,
+        "coords": {
+          "lat": 45.735,
+          "lng": 4.818
+        },
+        "emoji": "💧",
+        "text": "# 里昂汇流区｜Lyon Confluence\n\n*里昂，法国 · 2003–至今*\n\n## 项目定位\n\n旧工业港区转型 × 社会生态创新街区\n\n## 项目\n\n罗讷河与索恩河交汇处的旧市场、港口、仓储和工业用地被重组为住房、办公、文化、商业、公共空间与低碳基础设施并置的河流街区。\n\n## 背景\n\n市场、铁路和工业港口长期把半岛南端与两条河流隔离，遗留棕地、热岛和可达性问题。\n\n## 行动\n\n里昂都会区、里昂市与 SPL Lyon Confluence 分期推进，并设置信息与协商场所；第二阶段强调可负担住房、不同规模企业和社会经济主体的进入。\n\n## 设计\n\n索恩河岸先形成公园、航运广场和再利用的码头建筑；罗讷河岸以绿化、慢行和高环境性能建筑重新接近水面，旧批发市场转为复合服务和就业空间。\n\n## 产业\n\n旧工业港区和批发市场转为多类型企业、办公、商业、文化和社会住房空间；通过不同租金产品与影响力经济用地，为新旧业态提供进入路径。\n\n## 成果与数据\n\n- **70,000 m²** — [新增办公空间；2032 年目标](https://www.grandlyon.com/mes-services-au-quotidien/sinformer-sur-les-projets-urbains-dans-la-metropole/lyon-confluence)\n- **9,000 m²** — [新增商业与服务底层空间；2032 年目标](https://www.grandlyon.com/mes-services-au-quotidien/sinformer-sur-les-projets-urbains-dans-la-metropole/lyon-confluence)\n- **23.5 m²/人** — [远期人均绿地；项目目标](https://www.grandlyon.com/mes-services-au-quotidien/sinformer-sur-les-projets-urbains-dans-la-metropole/lyon-confluence)\n\n## 图片来源\n\n- [图片 1](https://www.grandlyon.com/mes-services-au-quotidien/sinformer-sur-les-projets-urbains-dans-la-metropole/lyon-confluence)；署名：Métropole de Lyon\n- [Confluence 公共空间](https://www.grandlyon.com/mes-services-au-quotidien/sinformer-sur-les-projets-urbains-dans-la-metropole/lyon-confluence)；署名：Métropole de Lyon / Jacques Léone\n- [旧工业场地上的公共活动空间](https://www.grandlyon.com/mes-services-au-quotidien/sinformer-sur-les-projets-urbains-dans-la-metropole/lyon-confluence)；署名：Métropole de Lyon / Anaïs Mercey\n\n## 参考来源\n\n- [里昂都会区：Confluence 综合更新](https://www.grandlyon.com/mes-services-au-quotidien/sinformer-sur-les-projets-urbains-dans-la-metropole/lyon-confluence)\n- [里昂市：旧批发市场转型与混合功能](https://www.lyon.fr/actions-et-projets/les-projets-urbains/la-confluence)\n- [市民参与平台：第二阶段协商](https://oye.participer.lyon.fr/processes/zacconfluence2)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://www.grandlyon.com/fileadmin/_processed_/e/a/csm_confluence_projeturbain1200_9b8a9bf69e.webp",
+          "https://www.grandlyon.com/fileadmin/_processed_/2/d/csm_confluence_esplanade-fmitterrand_jleone_1000_8b387346de.webp",
+          "https://www.grandlyon.com/fileadmin/_processed_/0/5/csm_caterpilou_confluence1200_48bdf97204.webp"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://www.grandlyon.com/fileadmin/_processed_/e/a/csm_confluence_projeturbain1200_9b8a9bf69e.webp",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.grandlyon.com/fileadmin/_processed_/e/a/csm_confluence_projeturbain1200_9b8a9bf69e.webp",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.grandlyon.com/fileadmin/_processed_/2/d/csm_confluence_esplanade-fmitterrand_jleone_1000_8b387346de.webp",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.grandlyon.com/fileadmin/_processed_/2/d/csm_confluence_esplanade-fmitterrand_jleone_1000_8b387346de.webp",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.grandlyon.com/fileadmin/_processed_/0/5/csm_caterpilou_confluence1200_48bdf97204.webp",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.grandlyon.com/fileadmin/_processed_/0/5/csm_caterpilou_confluence1200_48bdf97204.webp",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-22-1",
+            "kind": "image",
+            "assetId": "https://www.grandlyon.com/fileadmin/_processed_/e/a/csm_confluence_projeturbain1200_9b8a9bf69e.webp",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.grandlyon.com/fileadmin/_processed_/e/a/csm_confluence_projeturbain1200_9b8a9bf69e.webp",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-22-2",
+            "kind": "image",
+            "assetId": "https://www.grandlyon.com/fileadmin/_processed_/2/d/csm_confluence_esplanade-fmitterrand_jleone_1000_8b387346de.webp",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.grandlyon.com/fileadmin/_processed_/2/d/csm_confluence_esplanade-fmitterrand_jleone_1000_8b387346de.webp",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-22-3",
+            "kind": "image",
+            "assetId": "https://www.grandlyon.com/fileadmin/_processed_/0/5/csm_caterpilou_confluence1200_48bdf97204.webp",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.grandlyon.com/fileadmin/_processed_/0/5/csm_caterpilou_confluence1200_48bdf97204.webp",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-22-1",
+            "label": "主体 · 公私协作开发",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-22-2",
+            "label": "方法 · 旧港区混合更新",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2003,
+        "boardX": 406,
+        "boardY": 712,
+        "variant": "standard",
+        "layerStackOrder": 6
+      },
+      {
+        "id": "case-4",
+        "createdAt": 1794574676235,
+        "coords": {
+          "lat": 34.065,
+          "lng": 134.55
+        },
+        "emoji": "💧",
+        "text": "# 新町川河岸催化更新｜Shinmachi River\n\n*德岛，日本 · 1980s–至今（分阶段）*\n\n## 项目定位\n\n河岸公园 + 事件网络 × 公私协作治理\n\n## 项目\n\n新町川把水质改善、河岸公园、社区行动团体和沿河建筑设计串为连续更新，而非单一景观工程。\n\n## 背景\n\n河运、商业与蓝染文化关联深厚的水系，经历水质、河岸环境与中心城区活力下降。\n\n## 行动\n\n居民团体、活动运营者与政府在游船、节庆、临时使用和公共空间维护中形成持续协作。\n\n## 设计\n\n研究明确将河岸公园、滨水建筑与活动看作“城市催化剂”：用低门槛空间和事件累积使用者、带动地方商业与公共治理。\n\n## 图片来源\n\n- [图片 1](https://note.com/yoruyoru_2424/n/n24c89912c85f)；署名：よーるんっ！？\n- [Shinmachi river mizugiwa02n3200.jpg](https://commons.wikimedia.org/wiki/File:Shinmachi_river_mizugiwa02n3200.jpg)；署名：Wikimedia Commons\n- [新町川水際公園](https://4travel.jp/travelogue/11643914)；署名：4travel\n\n## 参考来源\n\n- [同行评审研究（2009）](https://www.jstage.jst.go.jp/article/jila/72/5/72_5_701/_article/-char/en) — Study on Improvement of Shinmachi Riverside Park and its Influence to Surrounding Environment\n- [Urban Catalyst 研究（2014）](https://www.acsa-arch.org/proceedings/International%20Proceedings/ACSA.Intl.2014/ACSA.Intl.2014.28.pdf?v=2) — Urban Catalyst: Regeneration",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://assets.st-note.com/img/1709959919066-0yNRZawsDq.jpg?fit=bounds&height=2000&quality=85&width=2000",
+          "https://upload.wikimedia.org/wikipedia/commons/c/cd/Shinmachi_river_mizugiwa02n3200.jpg",
+          "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/71/40/09/650x_71400975.jpg?updated_at=1636764782"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://assets.st-note.com/img/1709959919066-0yNRZawsDq.jpg?fit=bounds&height=2000&quality=85&width=2000",
+            "source": {
+              "kind": "remote",
+              "url": "https://assets.st-note.com/img/1709959919066-0yNRZawsDq.jpg?fit=bounds&height=2000&quality=85&width=2000",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Shinmachi_river_mizugiwa02n3200.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Shinmachi_river_mizugiwa02n3200.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/71/40/09/650x_71400975.jpg?updated_at=1636764782",
+            "source": {
+              "kind": "remote",
+              "url": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/71/40/09/650x_71400975.jpg?updated_at=1636764782",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-4-1",
+            "kind": "image",
+            "assetId": "https://assets.st-note.com/img/1709959919066-0yNRZawsDq.jpg?fit=bounds&height=2000&quality=85&width=2000",
+            "source": {
+              "kind": "remote",
+              "url": "https://assets.st-note.com/img/1709959919066-0yNRZawsDq.jpg?fit=bounds&height=2000&quality=85&width=2000",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-4-2",
+            "kind": "image",
+            "assetId": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Shinmachi_river_mizugiwa02n3200.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Shinmachi_river_mizugiwa02n3200.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-4-3",
+            "kind": "image",
+            "assetId": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/71/40/09/650x_71400975.jpg?updated_at=1636764782",
+            "source": {
+              "kind": "remote",
+              "url": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/71/40/09/650x_71400975.jpg?updated_at=1636764782",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-4-1",
+            "label": "方法 · 事件运营",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-case-4-2",
+            "label": "主体 · 公私协作",
+            "color": "#3B82F6"
+          }
+        ],
+        "startYear": 1980,
+        "boardX": 712,
+        "boardY": 712,
+        "variant": "standard",
+        "layerStackOrder": 5
+      },
+      {
+        "id": "case-7",
+        "createdAt": 1794574676236,
+        "coords": {
+          "lat": 52.517,
+          "lng": 13.401
+        },
+        "emoji": "💧",
+        "text": "# Flussbad Berlin 河泳计划\n\n*柏林，德国 · 2012–推进中*\n\n## 项目定位\n\n非营利倡议 × 水质修复与直接亲水\n\n## 项目\n\n非营利协会倡议把市中心闲置的施普雷运河转为非商业的公共休憩与河泳空间，提出水质改善、岸阶和生态过滤的组合。\n\n## 背景\n\n博物馆岛附近运河是历史中心的闲置水面，长期不可直接使用；水质与可达性是核心约束。\n\n## 行动\n\n自下而上的协会建立公众倡议，后获柏林政府资金和规划支持，形成“民间提出—公共部门评估推进”的协作路径。\n\n## 设计\n\n方案把水处理基础设施与公共空间合并：生态过滤并非幕后工程，而是让清洁水、河岸可达和非商业游憩互相支撑的空间系统。\n\n## 成果与数据\n\n- **4,500 m³** — [设计中的暴雨污水调蓄容量](https://www.flussbad-berlin.de/fluss-bad-projekt/faq)\n- **0.5 m³/s** — [设计过滤流量；属方案参数](https://www.flussbad-berlin.de/fluss-bad-projekt/faq)\n\n## 图片来源\n\n- [图片 1](https://futurearchitectureplatform.org/projects/ebfd3e98-e463-41fb-b08e-5a035ed91ee1/)；署名：Flussbad Berlin / Future Architecture\n- [2. Flussbad-Pokal am 03.07.2016](https://www.berlin.de/sen/stadtentwicklung/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/flussbad-berlin/)；署名：Berlin Senate / Espen Eichhöfer / OSTKREUZ\n- [Im historischen Finowkahn “Hans-Wilhelm” wird ein schwimmender Testfilter eingebaut](https://www.berlin.de/sen/stadtentwicklung/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/flussbad-berlin/)；署名：Berlin Senate / Axel Schmidt\n\n## 参考来源\n\n- [项目方说明](https://www.flussbad.berlin/en/fluss-bad-projekt)\n- [柏林市项目页](https://www.berlin.de/sen/stadtentwicklung/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/flussbad-berlin/)\n- [水质/过滤 FAQ](https://www.flussbad-berlin.de/fluss-bad-projekt/faq)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://futurearchitectureplatform.org/media/applications/2018/12/13/Perspektive_Flussbad_Lustgarten.jpg",
+          "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/02_pokal_espeneichhoefer-ostkreuz.jpg",
+          "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/03_finowkahn_axelschmidt.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://futurearchitectureplatform.org/media/applications/2018/12/13/Perspektive_Flussbad_Lustgarten.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://futurearchitectureplatform.org/media/applications/2018/12/13/Perspektive_Flussbad_Lustgarten.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/02_pokal_espeneichhoefer-ostkreuz.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/02_pokal_espeneichhoefer-ostkreuz.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/03_finowkahn_axelschmidt.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/03_finowkahn_axelschmidt.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-7-1",
+            "kind": "image",
+            "assetId": "https://futurearchitectureplatform.org/media/applications/2018/12/13/Perspektive_Flussbad_Lustgarten.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://futurearchitectureplatform.org/media/applications/2018/12/13/Perspektive_Flussbad_Lustgarten.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-7-2",
+            "kind": "image",
+            "assetId": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/02_pokal_espeneichhoefer-ostkreuz.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/02_pokal_espeneichhoefer-ostkreuz.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-7-3",
+            "kind": "image",
+            "assetId": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/03_finowkahn_axelschmidt.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.berlin.de/sen/stadtentwicklung/_assets/quartiersentwicklung/programme/nationale-projekte-des-staedtebaus/03_finowkahn_axelschmidt.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-7-1",
+            "label": "主体 · 非营利组织",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-7-2",
+            "label": "方法 · 生态过滤",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2012,
+        "boardX": 1018,
+        "boardY": 712,
+        "variant": "standard",
+        "layerStackOrder": 4
+      },
+      {
+        "id": "case-5",
+        "createdAt": 1794574676237,
+        "coords": {
+          "lat": 52.51,
+          "lng": 13.427
+        },
+        "emoji": "💧",
+        "text": "# Holzmarkt 25 城市村落\n\n*柏林，德国 · 2013–至今*\n\n## 项目定位\n\n合作社土地机制 × 施普雷河岸文化生产\n\n## 项目\n\n由 Bar25 等临时文化使用者发展而来的合作社街区，在施普雷河岸保留公共可达性，并以文化、手作、小企业与公共空间的混合用途替代单一地产开发。\n\n## 背景\n\n原木材港、后工业闲置地和俱乐部文化空间，在 Mediaspree 地产导向规划下遭遇被置换风险。\n\n## 行动\n\n合作社、长期租赁/信托式融资与自主管理，使文化生产者能以组织形式取得较长期的使用与经营权；同时须面对商业化张力。\n\n## 设计\n\n战略性城市设计的重点是“制度化临时性”：小尺度、可变的空间和公共河岸被嵌入合作社治理与经济模型，创造文化产业与公共性的新组合。\n\n## 产业\n\n合作社把后工业河岸转为文化、手作、小企业与公共空间的混合经营；其产业转型偏向文化与服务业，生态效益主要来自低强度再利用而非系统修复。\n\n## 图片来源\n\n- [图片 1](https://www.studio25.berlin/holzmarkt25)；署名：STUDIO25\n- [图片 2](https://www.studio25.berlin/holzmarkt25)；署名：STUDIO25\n\n## 参考来源\n\n- [共生产城市空间研究](https://rius.ac/index.php/rius/article/view/102) — Towards the co-production of urban space for increased inclusiveness\n- [同行评审的批判性后续研究（2026）](https://www.tandfonline.com/doi/full/10.1080/17549175.2026.2636763) — Towards an infrastructure of plurality: (re)existence strategies in Berlin’s Spreeraum Ost, 1990–2020\n- [项目方历史与治理说明](https://www.holzmarkt.com/ueber-den-holzmarkt)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/1740049580590-Q2N7SWG2CAO7L8L6XF5O/170815_Holzmarkt_0013_klein.jpg",
+          "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/3859deb2-39de-456a-a5a2-7c2653337128/220726_Holzmarkt_NEU_0239.JPG?format=2500w"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/1740049580590-Q2N7SWG2CAO7L8L6XF5O/170815_Holzmarkt_0013_klein.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/1740049580590-Q2N7SWG2CAO7L8L6XF5O/170815_Holzmarkt_0013_klein.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/3859deb2-39de-456a-a5a2-7c2653337128/220726_Holzmarkt_NEU_0239.JPG?format=2500w",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/3859deb2-39de-456a-a5a2-7c2653337128/220726_Holzmarkt_NEU_0239.JPG?format=2500w",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-5-1",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/1740049580590-Q2N7SWG2CAO7L8L6XF5O/170815_Holzmarkt_0013_klein.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/1740049580590-Q2N7SWG2CAO7L8L6XF5O/170815_Holzmarkt_0013_klein.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-5-2",
+            "kind": "image",
+            "assetId": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/3859deb2-39de-456a-a5a2-7c2653337128/220726_Holzmarkt_NEU_0239.JPG?format=2500w",
+            "source": {
+              "kind": "remote",
+              "url": "https://images.squarespace-cdn.com/content/v1/636a421184b3be5d765b9e92/3859deb2-39de-456a-a5a2-7c2653337128/220726_Holzmarkt_NEU_0239.JPG?format=2500w",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-5-1",
+            "label": "主体 · 合作社",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-5-2",
+            "label": "方法 · 使用权治理",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2013,
+        "boardX": 1324,
+        "boardY": 712,
+        "variant": "standard",
+        "layerStackOrder": 2
+      },
+      {
+        "id": "case-3",
+        "createdAt": 1794574676238,
+        "coords": {
+          "lat": 13.744,
+          "lng": 100.446
+        },
+        "emoji": "💧",
+        "text": "# 邦銮运河参与式营造｜Khlong Bang Luang\n\n*曼谷，泰国 · 2014–2016（行动规划）*\n\n## 项目定位\n\n小尺度共创 × 运河社区身份\n\n## 项目\n\n在快速城市化和旅游化压力下，大学与老运河社区通过行动规划、社区地图、导览册、摄影和档案制作，重建社区认同。\n\n## 背景\n\n历史运河住区面对快速城市化及旅游目的地化，“社区感”被削弱。\n\n## 行动\n\n居民、学生、教师和地方伙伴共同制作文化档案与活动；小型家具和行动项目用于触发互动与社区赋权。\n\n## 设计\n\n“参与式设计”不是只征求意见：地图、导览、影像、档案与微型设施都是协商工具，把地方记忆转化为可运营的文化资源，同时保留社区对叙事的控制。\n\n## 图片来源\n\n- [图片 1](https://4travel.jp/travelogue/11124336)；署名：4travel\n- [图片 2](https://www.timeout.com/bangkok/things-to-do/pedal-a-free-water-bike-through-bang-luang-canal-past-snack-boats-and-banyan-shade)；署名：Time Out Bangkok\n\n## 参考来源\n\n- [同行评审论文（2018）](https://so04.tci-thaijo.org/index.php/NAJUA-Arch/article/view/95443) — Participatory Place-Making through Action Planning in Klong Bangluang Community, Thailand",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/43/49/26/650x_43492626.jpg?updated_at=1464327582",
+          "https://media.timeout.com/images/106401628/image.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/43/49/26/650x_43492626.jpg?updated_at=1464327582",
+            "source": {
+              "kind": "remote",
+              "url": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/43/49/26/650x_43492626.jpg?updated_at=1464327582",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://media.timeout.com/images/106401628/image.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://media.timeout.com/images/106401628/image.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-3-1",
+            "kind": "image",
+            "assetId": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/43/49/26/650x_43492626.jpg?updated_at=1464327582",
+            "source": {
+              "kind": "remote",
+              "url": "https://cdn.4travel.jp/img/thumbnails/imk/travelogue_pict/43/49/26/650x_43492626.jpg?updated_at=1464327582",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-3-2",
+            "kind": "image",
+            "assetId": "https://media.timeout.com/images/106401628/image.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://media.timeout.com/images/106401628/image.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-3-1",
+            "label": "方法 · 参与式营造",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-case-3-2",
+            "label": "背景 · 旅游化压力",
+            "color": "#F59E0B"
+          }
+        ],
+        "startYear": 2014,
+        "endYear": 2016,
+        "boardX": 100,
+        "boardY": 1018,
+        "variant": "standard",
+        "layerStackOrder": 1
+      },
+      {
+        "id": "case-8",
+        "createdAt": 1794574676239,
+        "coords": {
+          "lat": 39.47,
+          "lng": -0.37
+        },
+        "emoji": "💧",
+        "text": "# 图里亚河床花园｜Jardín del Turia\n\n*瓦伦西亚，西班牙 · 1970s 倡议；1987–至今*\n\n## 项目定位\n\n市民运动 × 旧河床绿色文化基础设施\n\n## 项目\n\n1957 年洪灾后河流改道，旧河床原拟建快速路；市民以“河床是我们的，要绿色”的运动推动其转为贯穿城市的长线公园。\n\n## 背景\n\n洪灾与改道使城市失去原有河流空间，旧河床又面临被高速路占用；历史桥梁与城市记忆的连续性岌岌可危。\n\n## 行动\n\n超过 60 个协会参与动员；民主化后由公共部门实施，形成典型的“市民诉求—公共工程”转译。\n\n## 设计\n\n线性公园将防洪遗产、历史桥梁、运动、文化与日常交往连接；设计的价值不只绿化，而是把被基础设施化的河床重塑为跨阶层共享的公共骨架。\n\n## 成果与数据\n\n- **1.2 km²** — [旧河床形成的城市绿地](https://www.llibreverdvalencia.com/Llibre_Verd_Valencia.pdf)\n- **70 种** — [花园记录鸟类](https://www.llibreverdvalencia.com/Llibre_Verd_Valencia.pdf)\n\n## 图片来源\n\n- [图片 1](https://www.20minutos.es/noticia/5309385/0/un-paseo-por-cauce-turia-antes-que-se-convirtiera-un-gran-jardin/)；署名：20minutos\n- [图片 2](https://www.students.rent/route-through-the-turia-river-and-the-city-of-arts-and-sciences.html)；署名：Students.rent\n\n## 参考来源\n\n- [学术研究：邻里动员与记忆](https://revistes.ub.edu/index.php/b3w/article/view/30803) — 图里亚河床花园：社会运动与城市记忆\n- [瓦伦西亚文化部门历史说明](https://cultural.valencia.es/es/conoce-el-jardin-del-turia/)\n- [城市旅游局概览](https://www.turismovalencia.com/en/culture-in-valencia/the-turia-garden)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://imagenes.20minutos.es/files/image_640_auto/uploads/imagenes/2024/05/24/valencia-panoramica.jpeg",
+          "https://www.students.rent/gallery/50/thumb/157661078213.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://imagenes.20minutos.es/files/image_640_auto/uploads/imagenes/2024/05/24/valencia-panoramica.jpeg",
+            "source": {
+              "kind": "remote",
+              "url": "https://imagenes.20minutos.es/files/image_640_auto/uploads/imagenes/2024/05/24/valencia-panoramica.jpeg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.students.rent/gallery/50/thumb/157661078213.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.students.rent/gallery/50/thumb/157661078213.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-8-1",
+            "kind": "image",
+            "assetId": "https://imagenes.20minutos.es/files/image_640_auto/uploads/imagenes/2024/05/24/valencia-panoramica.jpeg",
+            "source": {
+              "kind": "remote",
+              "url": "https://imagenes.20minutos.es/files/image_640_auto/uploads/imagenes/2024/05/24/valencia-panoramica.jpeg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-8-2",
+            "kind": "image",
+            "assetId": "https://www.students.rent/gallery/50/thumb/157661078213.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.students.rent/gallery/50/thumb/157661078213.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-8-1",
+            "label": "主体 · 市民运动",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-8-2",
+            "label": "背景 · 旧河床高速路",
+            "color": "#F59E0B"
+          }
+        ],
+        "startYear": 1970,
+        "endYear": 1987,
+        "boardX": 406,
+        "boardY": 1018,
+        "variant": "standard",
+        "layerStackOrder": 0
+      },
+      {
+        "id": "case-10",
+        "createdAt": 1794574676240,
+        "coords": {
+          "lat": -33.436,
+          "lng": -70.65
+        },
+        "emoji": "💧",
+        "text": "# Mapocho Pedaleable\n\n*圣地亚哥，智利 · 2013–2016（主要激活期）*\n\n## 项目定位\n\n自组织临时开放 × 河床公共性\n\n## 项目\n\n公民组织通过阶段性开放闲置的 Mapocho 河床，组织骑行与文化活动，并将活动扩展为可行性研究和更广泛的公共河岸倡议。\n\n## 背景\n\n历史上被污染、渠化且与市民隔离的 Mapocho 河，河床基础设施大部分时间不可进入。\n\n## 行动\n\nPedaleable 以竞赛资金完成可行性和技术研究，继而形成 “Yo Vivo Mapocho” 等反复发生的市民激活；研究将其视为自组织实践与国家制度互动的案例。\n\n## 设计\n\n设计的作用首先是原型与时间表，而非一次性建成：以低成本、临时的开放测试河床如何成为骑行、文化与包容性公共空间，进而制造长期河岸改善的公众证据。\n\n## 图片来源\n\n- [图片 1](https://www.univision.com/noticias/citylab-transporte/en-este-rio-que-los-santiaguinos-despreciaban-pronto-existira-una-de-las-mejores-ciclovias-de-america-latina)；署名：Corporación Pedaleable / Univision\n- [图片 2](https://www.emol.com/noticias/Nacional/2018/05/11/905867/Un-pedazo-de-cemento-asi-califico-la-Intendenta-Metropolitana-al-proyecto-del-Mapocho-Pedaleable.html)；署名：Emol\n\n## 参考来源\n\n- [组织方项目史](https://www.pedaleable.org/2022/09/12/mapocho-pedaleable/)\n- [学术研究：自组织与公共目的](https://rosa.uniroma1.it/rosa03/tracce_urbane/article/view/14391) — Mapocho：自组织与公共目的\n- [Santiago 政府：Mapocho 河岸设计项目](https://www.gobiernosantiago.cl/2020/03/10/paseo-urbano-fluvial-mapocho-recuperando-el-lecho-del-rio-para-la-comunidad/)",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://st1.uvnimg.com/85/f8/2f6b40de47539915a070f1692303/img-mapocho-18-corporacion-pedaleable.jpg",
+          "https://static.emol.cl/emol50/Fotos/2018/05/11/file_20180511170812.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://st1.uvnimg.com/85/f8/2f6b40de47539915a070f1692303/img-mapocho-18-corporacion-pedaleable.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://st1.uvnimg.com/85/f8/2f6b40de47539915a070f1692303/img-mapocho-18-corporacion-pedaleable.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://static.emol.cl/emol50/Fotos/2018/05/11/file_20180511170812.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://static.emol.cl/emol50/Fotos/2018/05/11/file_20180511170812.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-case-10-1",
+            "kind": "image",
+            "assetId": "https://st1.uvnimg.com/85/f8/2f6b40de47539915a070f1692303/img-mapocho-18-corporacion-pedaleable.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://st1.uvnimg.com/85/f8/2f6b40de47539915a070f1692303/img-mapocho-18-corporacion-pedaleable.jpg",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-case-10-2",
+            "kind": "image",
+            "assetId": "https://static.emol.cl/emol50/Fotos/2018/05/11/file_20180511170812.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://static.emol.cl/emol50/Fotos/2018/05/11/file_20180511170812.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-case-10-1",
+            "label": "主体 · 草根组织",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-case-10-2",
+            "label": "方法 · 临时原型",
+            "color": "#10B981"
+          }
+        ],
+        "startYear": 2013,
+        "endYear": 2016,
+        "boardX": 712,
+        "boardY": 1018,
+        "variant": "standard",
+        "layerStackOrder": -1
+      }
+    ],
+    "frames": [],
+    "connections": [],
+    "themeColor": "#67D6F3",
+    "backgroundOpacity": 1,
+    "standardSizeScale": 0.85
+  }
+}

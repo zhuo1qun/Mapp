@@ -25,6 +25,11 @@ export type NominatimResult = {
   geojson?: GeoJSON.Geometry;
 };
 
+export type NominatimReverseResult = NominatimResult & {
+  name?: string;
+  category?: string;
+};
+
 export interface OverpassElement {
   type: OsmType;
   id: number;
@@ -146,6 +151,64 @@ export async function searchNominatim(options: SearchNominatimOptions): Promise<
   if (!response.ok) throw new Error('Nominatim search failed');
   const data = (await response.json()) as NominatimResult[];
   return options.mode === 'region' ? sortRegionResults(data) : data;
+}
+
+const reverseGeocodeCache = new Map<string, Promise<string | null>>();
+
+function readableReverseLabel(result: NominatimReverseResult): string | null {
+  const address = result.address ?? {};
+  const country = address.country;
+  const locality =
+    address.city ??
+    address.town ??
+    address.village ??
+    address.municipality ??
+    address.county ??
+    address.state_district ??
+    address.state ??
+    address.province ??
+    address.region;
+  const directName = result.name?.trim() || result.display_name?.split(',')[0]?.trim();
+
+  // 陆地地点固定使用“国家, 城市/地区”两级结构。城市国家保留重复值，
+  // 例如“新加坡, 新加坡”，避免同一列一会儿单级、一会儿双级。
+  if (country) return `${country}, ${locality || (directName !== country ? directName : '') || '未标明地区'}`;
+  if (locality) return locality;
+
+  // 海洋、海湾等结果通常没有行政地址，名称本身就是最合适的地点说明。
+  return directName || null;
+}
+
+/** 坐标转为适合位置预览的简短地点名；同一近似坐标在会话内只请求一次。 */
+export function reverseGeocodeLabel(lat: number, lon: number): Promise<string | null> {
+  const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+  const cached = reverseGeocodeCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = (async () => {
+    const params = new URLSearchParams({ lat: String(lat), lon: String(lon) });
+    const fromEdge = await fetchEdgeJson<NominatimReverseResult>(`geocode?${params.toString()}`);
+    if (fromEdge?.display_name) return readableReverseLabel(fromEdge);
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&addressdetails=1&zoom=14`,
+      {
+        headers: {
+          Accept: 'application/json',
+          'Accept-Language': ACCEPT_LANGUAGE()
+        }
+      }
+    );
+    if (!response.ok) throw new Error('Nominatim reverse geocoding failed');
+    return readableReverseLabel((await response.json()) as NominatimReverseResult);
+  })().catch((error) => {
+    reverseGeocodeCache.delete(cacheKey);
+    console.warn('Reverse geocoding failed:', error);
+    return null;
+  });
+
+  reverseGeocodeCache.set(cacheKey, request);
+  return request;
 }
 
 /** @deprecated 使用 searchNominatim */

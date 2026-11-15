@@ -24,8 +24,15 @@ function Control({ active = false, label, onClick, children }: ControlProps) {
       className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
         active ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
       }`}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onClick}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
     >
       {children}
     </button>
@@ -37,7 +44,10 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
   // BubbleMenu 实际定位的是它创建并挂到 body 的外层节点；z-index 必须落在
   // 该节点上，写在 React 内容节点上仍会被 NoteEditor 的 stacking context 压住。
   const setMenuLayerRef = useCallback((element: HTMLDivElement | null) => {
-    element?.classList.add('note-editor-transient-root');
+    if (!element) return;
+    element.classList.add('note-editor-transient-root');
+    // BubbleMenu portal 到 body，必须显式加入 ChromeWindow 的嵌套交互白名单。
+    element.setAttribute('data-workspace-link-keep', '');
   }, []);
 
   const setLink = useCallback(() => {
@@ -65,6 +75,9 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
       options={{ strategy: 'fixed', placement: 'top', offset: 8 }}
       shouldShow={({ state, from, to }) => state.selection.empty === false && from !== to}
       className="note-editor-transient-layer flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
+      data-workspace-link-keep=""
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
     >
       <Control
         label="加粗"

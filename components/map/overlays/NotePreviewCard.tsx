@@ -183,7 +183,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
           <div className="flex min-h-8 min-w-0 flex-1 flex-col justify-center">
             {previewTitle ? (
               <h3
-                className="truncate whitespace-nowrap text-sm font-medium text-gray-400"
+    className="truncate whitespace-nowrap text-sm font-medium text-gray-800"
                 title={previewTitle}
               >
                 {previewTitle}
@@ -260,41 +260,6 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
       </div>
 
       <div className={`flex-1 overflow-y-auto custom-scrollbar ${hasPreviewBody ? '' : 'min-h-3'}`}>
-        {hasDetail ? (
-            <div className="px-4 py-3 text-gray-800 text-sm leading-snug break-words border-b border-gray-50 mapping-preview-markdown">
-              <ReactMarkdown
-                components={{
-                  a: ({ href, children, ...props }) => (
-                    <a
-                      {...props}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {children}
-                    </a>
-                  )
-                }}
-              >
-                {parsedContent.detail}
-              </ReactMarkdown>
-              <style>{`
-                .mapping-preview-markdown p { margin-bottom: 0.6rem; line-height: 1.4; }
-                .mapping-preview-markdown p:last-child { margin-bottom: 0; }
-                .mapping-preview-markdown h1 { font-size: 1.25rem; font-weight: 800; margin: 0.8rem 0 0.4rem; }
-                .mapping-preview-markdown h2 { font-size: 1.1rem; font-weight: 700; margin: 0.7rem 0 0.3rem; }
-                .mapping-preview-markdown h3 { font-size: 1rem; font-weight: 600; margin: 0.6rem 0 0.2rem; }
-                .mapping-preview-markdown ul, .mapping-preview-markdown ol { margin-bottom: 0.5rem; padding-left: 1.2rem; }
-                .mapping-preview-markdown li { margin-bottom: 0.2rem; }
-                .mapping-preview-markdown blockquote { border-left: 3px solid #e5e7eb; padding-left: 0.8rem; color: #6b7280; font-style: italic; margin: 0.5rem 0; }
-                .mapping-preview-markdown code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; font-family: monospace; }
-                .mapping-preview-markdown pre { background: #f9fafb; padding: 0.5rem; border-radius: 6px; overflow-x: auto; margin: 0.5rem 0; border: 1px solid #f3f4f6; }
-                .mapping-preview-markdown a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
-                .mapping-preview-markdown a:hover { color: #1d4ed8; }
-              `}</style>
-            </div>
-        ) : null}
-
         {(hasMediaSlots || allImages.length > 0) && (
           <div className="relative group flex items-center justify-center shrink-0 px-4 py-3 bg-transparent">
             {currentOk ? (
@@ -343,6 +308,41 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
             )}
           </div>
         )}
+
+        {hasDetail ? (
+            <div className="px-4 py-3 text-gray-800 text-sm leading-snug break-words border-t border-gray-50 mapping-preview-markdown">
+              <ReactMarkdown
+                components={{
+                  a: ({ href, children, ...props }) => (
+                    <a
+                      {...props}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {children}
+                    </a>
+                  )
+                }}
+              >
+                {parsedContent.detail}
+              </ReactMarkdown>
+              <style>{`
+                .mapping-preview-markdown p { margin-bottom: 0.6rem; line-height: 1.4; }
+                .mapping-preview-markdown p:last-child { margin-bottom: 0; }
+                .mapping-preview-markdown h1 { font-size: 1.25rem; font-weight: 800; margin: 0.8rem 0 0.4rem; }
+                .mapping-preview-markdown h2 { font-size: 1.1rem; font-weight: 700; margin: 0.7rem 0 0.3rem; }
+                .mapping-preview-markdown h3 { font-size: 1rem; font-weight: 600; margin: 0.6rem 0 0.2rem; }
+                .mapping-preview-markdown ul, .mapping-preview-markdown ol { margin-bottom: 0.5rem; padding-left: 1.2rem; }
+                .mapping-preview-markdown li { margin-bottom: 0.2rem; }
+                .mapping-preview-markdown blockquote { border-left: 3px solid #e5e7eb; padding-left: 0.8rem; color: #6b7280; font-style: italic; margin: 0.5rem 0; }
+                .mapping-preview-markdown code { background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; font-family: monospace; }
+                .mapping-preview-markdown pre { background: #f9fafb; padding: 0.5rem; border-radius: 6px; overflow-x: auto; margin: 0.5rem 0; border: 1px solid #f3f4f6; }
+                .mapping-preview-markdown a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+                .mapping-preview-markdown a:hover { color: #1d4ed8; }
+              `}</style>
+            </div>
+        ) : null}
       </div>
 
       <style>{`

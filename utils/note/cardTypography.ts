@@ -5,6 +5,8 @@ type NoteCardTypographyOptions = {
   contentWidth: number;
   /** 待定位箱等较小卡片使用更克制的字级。 */
   compact?: boolean;
+  expanded?: boolean;
+  detailLineCountOverride?: number;
 };
 
 export type NoteCardTypography = {
@@ -30,25 +32,31 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 /**
  * Board 和待定位箱共享的便签字级规则。
  *
- * 标题优先尝试在两行内完整呈现：文字越长，字号会逐步回退；达到可读性下限后，
- * 再交由两行省略处理。这样不会因为单个超长标题挤掉正文与标签。
+ * 常规便签不显示正文与标签，标题优先尝试在五行内完整呈现；展开便签的
+ * 标题自然换行且不按长度缩小。常规标题达到可读性下限后再省略。
  */
 export function getNoteCardTypography({
   fontSize,
   title,
   contentWidth,
-  compact = false
+  compact = false,
+  expanded = false,
+  detailLineCountOverride
 }: NoteCardTypographyOptions): NoteCardTypography {
   const baseTitleSize = baseTitleSizes[fontSize ?? 3] ?? baseTitleSizes[3];
   const normalizedTitle = title.replace(/\s+/g, ' ').trim();
   const titleLength = Array.from(normalizedTitle).length;
   const usableWidth = Math.max(72, contentWidth);
-  // 汉字与常规拉丁字混排的平均字宽约为字号的 0.64；预留两行空间。
-  const twoLineCapacity = Math.max(8, Math.floor((usableWidth / (baseTitleSize * 0.64)) * 2));
+  // 汉字与常规拉丁字混排的平均字宽约为字号的 0.64。
+  const titleLineLimit = 5;
+  const titleCapacity = Math.max(
+    titleLineLimit * 4,
+    Math.floor((usableWidth / (baseTitleSize * 0.64)) * titleLineLimit)
+  );
   const minScale = compact ? 0.6 : 0.64;
   const scale =
-    titleLength > twoLineCapacity
-      ? clamp(twoLineCapacity / titleLength, minScale, 1)
+    !expanded && titleLength > titleCapacity
+      ? clamp(titleCapacity / titleLength, minScale, 1)
       : 1;
   const titleFontSize = Math.round(baseTitleSize * scale * 10) / 10;
   const detailFontSize = Math.round(
@@ -59,6 +67,6 @@ export function getNoteCardTypography({
     titleFontSize,
     titleLineHeight: titleFontSize >= 30 ? 1.04 : 1.12,
     detailFontSize,
-    detailLineCount: titleFontSize >= 30 ? 2 : titleFontSize >= 22 ? 3 : 4
+    detailLineCount: detailLineCountOverride ?? (expanded ? 14 : titleFontSize >= 30 ? 2 : titleFontSize >= 22 ? 3 : 4)
   };
 }

@@ -162,12 +162,16 @@
 
 .workspace-canvas--dots.workspace-canvas--dark,
 .table-node-canvas.workspace-canvas--dark {
-  background-color: rgb(39 39 42);
+  background-color: rgb(243 244 246);
   background-image: radial-gradient(
     circle,
     color-mix(in srgb, var(--theme-color) 42%, transparent) 1px,
     transparent 1.25px
   );
+}
+
+.workspace-canvas--table.workspace-canvas--dark {
+  background-color: rgb(243 244 246);
 }
 
 /* 拖入文件时的全局提示层。它不接管指针事件，底层工作区仍可持续接收 dragover/drop。 */
@@ -614,13 +618,13 @@ body {
   border-color: var(--chrome-border) !important;
 }
 
-/* 淡轮廓与面板材质分开绘制：渐变止于描边内侧，不再叠到半透明外圈下面。
- * 内缘的亮白 / 暗黑来自面板自身，不另加上下高光；保留原有投影与焦点 ring。 */
+/* 所有玻璃面板与视图切换页签共用同一种边缘：材质渐变延伸至描边下方，
+ * 让低对比轮廓仍带有完整的玻璃层次，而不是出现一圈独立的暗边。 */
 .chrome-glass-edge,
 .map-chrome-content-light.border,
 .map-chrome-content-dark.border {
   border-color: var(--chrome-border, rgb(255 255 255 / 0.08));
-  background-clip: padding-box;
+  background-clip: border-box;
 }
 
 /* 主题色页面上的卡片与按钮只使用这一套交互状态：
@@ -668,7 +672,7 @@ body {
   border: 1px solid var(--theme-chrome-interactive-border);
   pointer-events: none;
   background-image: var(--theme-chrome-interactive-surface);
-  background-clip: padding-box;
+  background-clip: border-box;
   box-shadow: 0 8px 20px -14px rgb(0 0 0 / 0.45);
   opacity: 0;
   transform: scale(1);
@@ -768,6 +772,17 @@ body {
 .project-list-row.theme-chrome-interactive:hover::before,
 .project-list-row.theme-chrome-interactive:focus-visible::before,
 .project-list-row.theme-chrome-interactive[data-chrome-selected='true']::before {
+  opacity: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 项目列表与首页左上角按钮都由一张共享 Window 承担 hover/选中材质。 */
+.shared-window-hover-item.theme-chrome-interactive::before,
+.shared-window-hover-item.theme-chrome-interactive:hover::before,
+.shared-window-hover-item.theme-chrome-interactive:focus-visible::before,
+.shared-window-hover-item.theme-chrome-interactive[aria-pressed='true']::before,
+.shared-window-hover-item.theme-chrome-interactive[aria-expanded='true']::before {
   opacity: 0;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -952,6 +967,11 @@ body {
 }
 .note-editor-aux-panel.chrome-dialog-exiting {
   animation-duration: 280ms;
+}
+.note-editor-canvas-window--exiting.chrome-dialog-exiting {
+  animation-duration: 280ms;
+  transform-origin: center;
+  will-change: transform, opacity;
 }
 .note-editor-panel--anchored {
   will-change: transform, opacity;
@@ -1253,6 +1273,13 @@ body {
 
 .workspace-window-link-path {
   filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.18));
+}
+
+/* 画布拖拽由父级 transform 直接带动内容；暂停标签等局部的 transform 过渡，
+ * 避免端口/标签像在拖拽后才追上画布。 */
+.table-node-canvas--dragging .transition-transform,
+.table-node-canvas--dragging .transition-\[opacity\,transform\] {
+  transition-duration: 0ms !important;
 }
 
 .map-layer-note-row--drop-target {
@@ -1571,6 +1598,11 @@ body {
   will-change: transform;
 }
 
+/* Basemap changes retain the outgoing tiles until the incoming viewport is mostly ready. */
+.leaflet-tile-pane > .leaflet-layer {
+  transition: opacity 280ms ease-out;
+}
+
 /* 导出快照：冻结瓦片淡入，避免截到半透明加载态 */
 .leaflet-container.mapp-snapshot-exporting .leaflet-tile,
 .leaflet-container.mapp-snapshot-exporting .leaflet-tile-loaded {
@@ -1768,6 +1800,38 @@ body {
   --workspace-object-sticker-shadow: var(--workspace-object-sticker-shadow-lifted);
 }
 
+/* Board 浏览态与编辑态共用同一个拿起反馈：hover 放大；选中在保持放大的同时
+ * 由 workspace-object-elevation--active 叠加扩散投影。使用独立 scale 属性，
+ * 与对象自身的 transform（尺寸倍率、旋转、拖拽位移）可组合而不互相覆盖。 */
+.board-note-interaction {
+  scale: 1;
+  rotate: 0deg;
+  transition:
+    scale 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    rotate 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: scale, rotate, left, top, width, height;
+}
+
+.board-note-interaction:hover,
+.board-note-interaction[data-board-selected='true'] {
+  scale: 1.05;
+}
+
+.board-note-interaction[data-board-selected='true'] {
+  rotate: 6deg;
+}
+
+.board-note-interaction--static {
+  /* 拖拽/缩放时位置与尺寸必须立即跟手，但仍保留选中放大和旋转的进入反馈。 */
+  transition:
+    scale 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    rotate 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .workspace-transient-elevation {
   filter: drop-shadow(0 8px 14px rgb(15 23 42 / 0.12));
   animation: workspace-transient-elevation-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1795,19 +1859,32 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .board-note-elevation,
   .board-sticker-elevation,
+  .board-note-interaction,
   .workspace-transient-elevation {
     transition: none;
     animation: none;
   }
 }
 
-/* 标题只在已按长度回退字号后仍放不下时省略；正文让出空间给标题与标签。 */
+/* 常规便签仅显示标题，最多五行；展开便签标题自然换行并补充正文与标签。 */
 .note-card-title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 5;
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+.note-card-title--expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.note-card-title-emoji {
+  margin-right: 0.28em;
+  font-size: 1.05em;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgb(15 23 42 / 0.12));
 }
 
 .note-card-content {
@@ -1944,6 +2021,12 @@ body {
   animation: board-note-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* 暂存框落位后对象会立即成为选中态；直接收束到最终的放大与 6° 旋转，
+ * 避免普通入场结束后再跳一次选中姿态。 */
+.board-note-motion--enter[data-board-selected='true'] {
+  animation-name: board-note-enter-selected;
+}
+
 .board-note-motion--exit {
   pointer-events: none;
   animation: board-note-exit 220ms cubic-bezier(0.4, 0, 1, 1) both;
@@ -1959,6 +2042,21 @@ body {
   to {
     opacity: 1;
     scale: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes board-note-enter-selected {
+  from {
+    opacity: 0;
+    scale: 0.9;
+    rotate: 0deg;
+    translate: 0 10px;
+  }
+  to {
+    opacity: 1;
+    scale: 1.05;
+    rotate: 6deg;
     translate: 0 0;
   }
 }

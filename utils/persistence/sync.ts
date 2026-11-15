@@ -1,22 +1,22 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Project } from '../../types';
-
-// Supabase configuration
-// These values need to be obtained from Supabase project settings
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+import {
+  getSupabasePublishableKey,
+  getSupabaseUrl,
+  hasSupabaseClientConfig
+} from '../supabaseEnv';
 
 // 创建 Supabase 客户端
 let supabase: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.warn('Supabase configuration not set, cloud sync unavailable');
+  if (!hasSupabaseClientConfig()) {
+    console.info('Supabase is paused or not configured; cloud sync is unavailable');
     return null;
   }
   
   if (!supabase) {
-    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabase = createClient(getSupabaseUrl(), getSupabasePublishableKey());
   }
   
   return supabase;
@@ -61,7 +61,7 @@ function saveLastSyncedVersions(projects: Project[]): void {
 export async function syncProjectsToCloud(projects: Project[]): Promise<{ success: boolean; error?: string }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { success: false, error: 'Supabase 未配置' };
+    return { success: false, error: '云端同步已暂停或尚未配置' };
   }
 
   const deviceId = getDeviceId();
@@ -119,7 +119,7 @@ export async function loadProjectsFromCloud(): Promise<{
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { success: false, error: 'Supabase 未配置' };
+    return { success: false, error: '云端同步已暂停或尚未配置' };
   }
 
   const deviceId = getDeviceId();
@@ -231,4 +231,3 @@ export function getLastSyncTime(): number | null {
   const lastSyncTime = localStorage.getItem('mapp-last-sync-time');
   return lastSyncTime ? parseInt(lastSyncTime, 10) : null;
 }
-

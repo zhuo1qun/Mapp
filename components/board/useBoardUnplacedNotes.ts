@@ -19,12 +19,14 @@ interface Props {
   setSelectedNoteIds: Dispatch<SetStateAction<Set<string>>>;
   setMultiBatchPanel: Dispatch<SetStateAction<'none' | 'tag' | 'time'>>;
   deleteNotesWithExit: (noteIds: string[]) => void;
+  markBoardNotesEntering: (noteIds: string[]) => void;
 }
 
 /** Board-side pending tray transfer state. Map has its own placement axis. */
 export function useBoardUnplacedNotes({
   notes, displayNotes, project, onUpdateProject, onUpdateNote, containerRef, transform,
-  enabled, selectedNoteIds, setSelectedNoteId, setSelectedNoteIds, setMultiBatchPanel, deleteNotesWithExit
+  enabled, selectedNoteIds, setSelectedNoteId, setSelectedNoteIds, setMultiBatchPanel, deleteNotesWithExit,
+  markBoardNotesEntering
 }: Props) {
   const panelRef = useRef<HTMLElement | null>(null);
   const [isDropTarget, setIsDropTarget] = useState(false);
@@ -42,6 +44,8 @@ export function useBoardUnplacedNotes({
     const ids = new Set(noteIds);
     const targets = notes.filter((note) => ids.has(note.id));
     if (!targets.length) return;
+    // 数据从待定箱切回 Board 前先挂进入状态；目标节点首次渲染即从拖拽预览平滑接管。
+    markBoardNotesEntering(targets.map((note) => note.id));
     const nextNotes = notes.map((note) => {
       const index = targets.findIndex((target) => target.id === note.id);
       if (index === -1) return note;
@@ -53,7 +57,7 @@ export function useBoardUnplacedNotes({
     else nextNotes.filter((note) => ids.has(note.id)).forEach(onUpdateNote);
     setSelectedNoteId(targets[0].id);
     setSelectedNoteIds(new Set(targets.map((note) => note.id)));
-  }, [notes, onUpdateNote, onUpdateProject, project, setSelectedNoteId, setSelectedNoteIds]);
+  }, [markBoardNotesEntering, notes, onUpdateNote, onUpdateProject, project, setSelectedNoteId, setSelectedNoteIds]);
 
   const onDropNotes = useCallback((noteIds: string[], pointer: { clientX: number; clientY: number }) => {
     const rect = containerRef.current?.getBoundingClientRect();

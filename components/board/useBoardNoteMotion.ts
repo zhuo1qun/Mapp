@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { Note } from '../../types';
+import { loadNoteImages } from '../../utils/persistence/storage';
 
 const BOARD_NOTE_INTRO_MS = 280;
 const BOARD_NOTE_EXIT_MS = 220;
+const BOARD_NOTE_INTRO_DISMISS_DELAY_MS = 560;
 
 interface UseBoardNoteMotionProps {
   notes: Note[];
@@ -11,7 +13,7 @@ interface UseBoardNoteMotionProps {
   onDeleteNote?: (noteId: string) => void;
   onDeleteNotesBatch?: (noteIds: string[]) => void;
   onToggleEditor: (isOpen: boolean) => void;
-  onBeginIntro?: () => void;
+  onBeforeEditorOpen?: () => void;
   setSelectedNoteId: Dispatch<SetStateAction<string | null>>;
   setSelectedNoteIds: Dispatch<SetStateAction<Set<string>>>;
 }
@@ -28,7 +30,7 @@ export function useBoardNoteMotion({
   onDeleteNote,
   onDeleteNotesBatch,
   onToggleEditor,
-  onBeginIntro,
+  onBeforeEditorOpen,
   setSelectedNoteId,
   setSelectedNoteIds
 }: UseBoardNoteMotionProps) {
@@ -39,6 +41,8 @@ export function useBoardNoteMotion({
   const [enteringNoteIds, setEnteringNoteIds] = useState<Set<string>>(() => new Set());
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const introTimerRef = useRef<number | null>(null);
+  const introDismissTimerRef = useRef<number | null>(null);
+  const introExitTimerRef = useRef<number | null>(null);
   const introStartedAtRef = useRef(0);
   const noteMotionTimersRef = useRef<Set<number>>(new Set());
   const deletingNoteIdsRef = useRef<Set<string>>(new Set());
@@ -62,6 +66,24 @@ export function useBoardNoteMotion({
     noteMotionTimersRef.current.add(timer);
   }, []);
 
+  const markBoardNotesEntering = useCallback((noteIds: string[]) => {
+    const ids = [...new Set(noteIds)].filter(Boolean);
+    if (!ids.length) return;
+    setEnteringNoteIds((current) => new Set([...current, ...ids]));
+    ids.forEach((noteId) => {
+      const timer = window.setTimeout(() => {
+        noteMotionTimersRef.current.delete(timer);
+        setEnteringNoteIds((current) => {
+          if (!current.has(noteId)) return current;
+          const next = new Set(current);
+          next.delete(noteId);
+          return next;
+        });
+      }, BOARD_NOTE_INTRO_MS);
+      noteMotionTimersRef.current.add(timer);
+    });
+  }, []);
+
   const addBoardNoteWithEnter = useCallback((note: Note) => {
     markBoardNoteEntering(note.id);
     onAddNote?.(note);
@@ -69,14 +91,15 @@ export function useBoardNoteMotion({
 
   const beginNewBoardNoteIntro = useCallback((note: Note) => {
     if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
-    onBeginIntro?.();
+    if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
+    if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
     setIntroNote(note);
     setIsIntroPending(true);
     setIntroNoteMotion('enter');
     markBoardNoteEntering(note.id);
     setEditingNote(note);
     introStartedAtRef.current = Date.now();
-  }, [markBoardNoteEntering, onBeginIntro]);
+  }, [markBoardNoteEntering]);
 
   const openNewBoardNoteEditorAfterIntro = useCallback((elapsedMs = 0) => {
     if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
@@ -87,6 +110,65 @@ export function useBoardNoteMotion({
       onToggleEditor(true);
     }, remainingIntroMs);
   }, [onToggleEditor]);
+
+  const openBoardNoteEditor = useCallback(
+    (note: Note) => {
+      void (async () => {
+        onBeforeEditorOpen?.();
+        let loaded = note;
+        const hasLoadedImages = !!note.images?.length && note.images.some((image) => image.startsWith('data:'));
+        if (!hasLoadedImages) {
+          try {
+            loaded = await loadNoteImages(note);
+          } catch (error) {
+            console.error('Failed to load note images:', error);
+          }
+        }
+        setEditingNote(loaded);
+        onToggleEditor(true);
+      })();
+    },
+    [onBeforeEditorOpen, onToggleEditor]
+  );
+
+  const closeEditor = useCallback((reason: 'saved' | 'discarded' = 'discarded') => {
+    if (introTimerRef.current !== null) {
+      window.clearTimeout(introTimerRef.current);
+      introTimerRef.current = null;
+    }
+    setIsIntroPending(false);
+    if (introNote) {
+      if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
+      if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
+      if (reason === 'saved') {
+        setIntroNote(null);
+      } else {
+        const introNoteId = introNote.id;
+        introDismissTimerRef.current = window.setTimeout(() => {
+          introDismissTimerRef.current = null;
+          setIntroNoteMotion('exit');
+          introExitTimerRef.current = window.setTimeout(() => {
+            introExitTimerRef.current = null;
+            setIntroNote((current) => (current?.id === introNoteId ? null : current));
+          }, BOARD_NOTE_EXIT_MS);
+        }, BOARD_NOTE_INTRO_DISMISS_DELAY_MS);
+      }
+    }
+    setEditingNote(null);
+    onToggleEditor(false);
+  }, [introNote, onToggleEditor]);
+
+  const cancelPendingNoteIntro = useCallback(() => {
+    if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
+    if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
+    if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
+    introTimerRef.current = null;
+    introDismissTimerRef.current = null;
+    introExitTimerRef.current = null;
+    setIsIntroPending(false);
+    setIntroNote(null);
+    setEditingNote(null);
+  }, []);
 
   const deleteBoardNotesWithExit = useCallback((noteIds: string[]) => {
     const ids = [...new Set(noteIds)].filter((id) => !deletingNoteIdsRef.current.has(id));
@@ -125,6 +207,8 @@ export function useBoardNoteMotion({
 
   useEffect(() => () => {
     if (introTimerRef.current !== null) window.clearTimeout(introTimerRef.current);
+    if (introDismissTimerRef.current !== null) window.clearTimeout(introDismissTimerRef.current);
+    if (introExitTimerRef.current !== null) window.clearTimeout(introExitTimerRef.current);
     noteMotionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
   }, []);
 
@@ -138,6 +222,7 @@ export function useBoardNoteMotion({
     introNoteMotion,
     setIntroNoteMotion,
     enteringNoteIds,
+    markBoardNotesEntering,
     deletingNoteIds,
     introTimerRef,
     introStartedAtRef,
@@ -145,6 +230,9 @@ export function useBoardNoteMotion({
     addBoardNoteWithEnter,
     beginNewBoardNoteIntro,
     openNewBoardNoteEditorAfterIntro,
+    openBoardNoteEditor,
+    closeEditor,
+    cancelPendingNoteIntro,
     deleteBoardNotesWithExit
   };
 }

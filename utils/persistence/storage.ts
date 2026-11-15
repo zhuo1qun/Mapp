@@ -11,12 +11,14 @@ import {
   generateMediaId,
   hashMediaPayload,
   isMediaRefId,
+  isRemoteImageUrl,
   loadMediaDataUrl,
   mediaRecordExists,
   syncNoteImageRefs,
   writeMediaRecordFromDataUrl
 } from './imageAssetStore';
 import { ensureNoteMediaSynced } from './noteMediaSync';
+import { noteNeedsMediaResolve } from './mediaDisplay';
 import { enqueueLocalChanges } from './localChangeQueue';
 
 // Storage keys
@@ -1292,6 +1294,10 @@ async function migrateNoteImages(note: Note): Promise<Note> {
             if (prev?.variantEnabled !== undefined) item.variantEnabled = prev.variantEnabled;
             nextRefs.push(item);
           }
+        } else if (isRemoteImageUrl(imageData)) {
+          nextRefs.push(prev?.source?.kind === 'remote'
+            ? prev
+            : { assetId: imageData, source: { kind: 'remote', url: imageData, cacheStatus: 'none' } });
         }
       } catch (error) {
         console.error(`Failed to migrate image for note ${note.id}:`, error);
@@ -1303,8 +1309,10 @@ async function migrateNoteImages(note: Note): Promise<Note> {
     migratedNote.images = nextRefs.map((r) => r.assetId);
     migratedNote.imageRefs = nextRefs;
   } else if (prevRefs.length > 0) {
-    migratedNote.images = prevRefs.map((r) => r.assetId).filter(isMediaRefId);
-    migratedNote.imageRefs = prevRefs.filter((r) => isMediaRefId(r.assetId));
+    migratedNote.images = prevRefs
+      .filter((r) => isMediaRefId(r.assetId) || r.source?.kind === 'remote')
+      .map((r) => r.source?.kind === 'remote' ? r.source.url : r.assetId);
+    migratedNote.imageRefs = prevRefs.filter((r) => isMediaRefId(r.assetId) || r.source?.kind === 'remote');
   }
 
   // 迁移 sketch
@@ -1331,7 +1339,6 @@ async function migrateNoteImages(note: Note): Promise<Note> {
  * 若有 media[]，按 media 顺序解析到 images（仅 image 项）与 sketch（sketch 项展示 URL 写入 sketch，variant 时为裁切图）。
  */
 export async function loadNoteImages(note: Note): Promise<Note> {
-  const { noteNeedsMediaResolve } = await import('./mediaDisplay');
   let synced = ensureNoteMediaSynced({ ...note });
   if (!noteNeedsMediaResolve(synced)) {
     return synced;
@@ -1346,7 +1353,7 @@ export async function loadNoteImages(note: Note): Promise<Note> {
     let firstSketch: string | undefined;
     for (const item of media) {
       try {
-        const url = await resolveNoteImageRefUrl({
+        const url = item.source?.kind === 'remote' ? item.source.url : await resolveNoteImageRefUrl({
           assetId: item.assetId,
           variantId: item.variantId,
           variantEnabled: item.variantEnabled
@@ -1388,7 +1395,11 @@ export async function loadNoteImages(note: Note): Promise<Note> {
     const loadedImages: string[] = [];
     for (const ref of refs) {
       try {
-        if (ref.variantId || isMediaRefId(ref.assetId)) {
+        if (ref.source?.kind === 'remote') {
+          loadedImages.push(ref.source.cachedAssetId
+            ? (await resolveNoteImageRefUrl({ assetId: ref.source.cachedAssetId })) || ref.source.url
+            : ref.source.url);
+        } else if (ref.variantId || isMediaRefId(ref.assetId)) {
           const url = await resolveNoteImageRefUrl(ref);
           loadedImages.push(url || '');
           if (!url) console.warn(`Failed to resolve image ref for note ${note.id}`, ref);

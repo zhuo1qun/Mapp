@@ -6,7 +6,8 @@ import { lngWrapOffsetsForBounds } from '../../utils/map/lngWorldWrap';
 import {
   DEFAULT_MAP_UI_CHROME_BLUR_PX,
   DEFAULT_MAP_UI_CHROME_OPACITY,
-  mapChromeTextLabelInlineCss
+  mapChromeTextLabelInlineCss,
+  type MapChromeAppearance
 } from '../../utils/map/mapChromeStyle';
 
 interface TextLabelsLayerProps {
@@ -34,6 +35,7 @@ interface TextLabelsLayerProps {
   /** 与全局 UI chrome 一致的玻璃面（透明度 / 模糊） */
   mapUiChromeOpacity?: number;
   mapUiChromeBlurPx?: number;
+  chromeAppearance?: MapChromeAppearance;
 }
 
 function getLabelText(rawText: string): string {
@@ -118,13 +120,14 @@ function labelInnerHtml(
   timeText: string,
   timeFontSize: number,
   isFavorite: boolean,
-  themeColor: string
+  themeColor: string,
+  mutedTextColor: string
 ): string {
   return `<div style="display:flex;flex-direction:column;gap:2px;">
     <span style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${text}</span>
     ${
       timeText
-        ? `<span style="font-size:${timeFontSize}px;font-weight:500;color:${isFavorite ? themeColor : '#6b7280'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${timeText}</span>`
+        ? `<span style="font-size:${timeFontSize}px;font-weight:500;color:${isFavorite ? themeColor : mutedTextColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${timeText}</span>`
         : ''
     }
   </div>`;
@@ -148,16 +151,19 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
   noteCoordOverrides = {},
   onLabelDoubleClickEdit,
   mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
-  mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX
+  mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
+  chromeAppearance = 'light'
 }) => {
   const map = useMap();
   const [, bump] = useState(0);
   const rafRef = useRef<number | null>(null);
   const isGestureZoomingRef = useRef(false);
   const chromeCss = useMemo(
-    () => mapChromeTextLabelInlineCss(mapUiChromeOpacity, mapUiChromeBlurPx, themeColor),
-    [mapUiChromeOpacity, mapUiChromeBlurPx, themeColor]
+    () => mapChromeTextLabelInlineCss(mapUiChromeOpacity, mapUiChromeBlurPx, themeColor, chromeAppearance),
+    [mapUiChromeOpacity, mapUiChromeBlurPx, themeColor, chromeAppearance]
   );
+  const labelColor = chromeAppearance === 'dark' ? 'rgba(255,255,255,0.92)' : '#000000';
+  const mutedLabelColor = chromeAppearance === 'dark' ? 'rgba(255,255,255,0.58)' : '#6b7280';
 
   useMapEvents({
     zoomstart: () => {
@@ -298,13 +304,13 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
               const icon = new DivIcon({
                 html: `<div style="${chromeLabelShellStyle({
                   chromeCss,
-                  color: isFavorite ? themeColor : '#000000',
+                  color: isFavorite ? themeColor : labelColor,
                   paddingY,
                   paddingX,
                   fontSize,
                   fontWeight: isFavorite ? 'bold' : 500,
                   pointerEvents: allowLabelPointer ? 'auto' : 'none'
-                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor)}</div>`,
+                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor, mutedLabelColor)}</div>`,
                 className: 'custom-text-label',
                 iconSize: [0, labelHeight],
                 iconAnchor: [0, labelHeight + (isFavorite ? 10 : 5)]
@@ -377,7 +383,7 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
                         class="pre-selected-label-item"
                         style="${chromeLabelShellStyle({
                           chromeCss,
-                          color: isFav ? themeColor : '#000000',
+                          color: isFav ? themeColor : labelColor,
                           paddingY: 4,
                           paddingX: 4,
                           fontSize,
@@ -387,7 +393,7 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
                           extra: `position:relative;z-index:${rowZ};cursor:pointer;margin-bottom:4px;gap:6px;justify-content:flex-start`
                         })}"
                       >
-                        ${labelInnerHtml(text, timeText, timeFontSize, isFav, themeColor)}
+                        ${labelInnerHtml(text, timeText, timeFontSize, isFav, themeColor, mutedLabelColor)}
                       </div>
                     `;
                     })
@@ -503,14 +509,14 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
               const icon = new DivIcon({
                 html: `<div style="${chromeLabelShellStyle({
                   chromeCss,
-                  color: isFavorite ? themeColor : '#000000',
+                  color: isFavorite ? themeColor : labelColor,
                   paddingY,
                   paddingX,
                   fontSize,
                   fontWeight: isFavorite ? 'bold' : 500,
                   pointerEvents: labelPointerInteractive ? 'auto' : 'none',
                   display: 'flex'
-                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor)}</div>`,
+                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor, mutedLabelColor)}</div>`,
                 className: 'custom-text-label',
                 iconSize: [0, labelHeight],
                 iconAnchor: [0, labelHeight + (isFavorite ? 10 : 5)]
@@ -572,7 +578,7 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
               const icon = new DivIcon({
                 html: `<div style="${chromeLabelShellStyle({
                   chromeCss,
-                  color: isFavorite ? themeColor : '#000000',
+                  color: isFavorite ? themeColor : labelColor,
                   paddingY,
                   paddingX,
                   fontSize,
@@ -583,7 +589,7 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
                     <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${text}</div>
                     ${
                       timeText
-                        ? `<div style="font-size:${timeFontSize}px;font-weight:500;color:${isFavorite ? themeColor : '#6b7280'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${timeText}</div>`
+                        ? `<div style="font-size:${timeFontSize}px;font-weight:500;color:${isFavorite ? themeColor : mutedLabelColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${timeText}</div>`
                         : ''
                     }
                   </div></div>`,

@@ -15,29 +15,33 @@ export function useTiptapEditor({ noteId, content, onMarkdownChange, onImagePast
   const onImagePasteRef = useRef(onImagePaste);
   onImagePasteRef.current = onImagePaste;
 
-  const editor = useEditor({
-    extensions: EDITOR_EXTENSIONS,
-    content,
-    onUpdate: ({ editor }) => {
-      // @ts-ignore - tiptap-markdown storage typing
-      const markdown = editor.storage.markdown.getMarkdown();
-      onMarkdownChange(markdown);
-    },
-    editorProps: {
-      handlePaste: (_view, event) => {
-        const hasImage = Array.from(event.clipboardData?.items || []).some((item) =>
-          item.type.startsWith('image/')
-        );
-        if (!hasImage) return false;
-        onImagePasteRef.current?.(event);
-        return true;
+  const editor = useEditor(
+    {
+      extensions: EDITOR_EXTENSIONS,
+      content,
+      onUpdate: ({ editor }) => {
+        // @ts-ignore - tiptap-markdown storage typing
+        const markdown = editor.storage.markdown.getMarkdown();
+        onMarkdownChange(markdown);
       },
-      attributes: {
-        class:
-          'prose cursor-text focus:outline-none min-h-[300px] p-0 text-[1.05rem] text-gray-800 leading-relaxed max-w-none tiptap-editor'
+      editorProps: {
+        handlePaste: (_view, event) => {
+          const hasImage = Array.from(event.clipboardData?.items || []).some((item) =>
+            item.type.startsWith('image/')
+          );
+          if (!hasImage) return false;
+          onImagePasteRef.current?.(event);
+          return true;
+        },
+        attributes: {
+          class:
+            'prose cursor-text focus:outline-none min-h-[300px] p-0 text-[1.05rem] text-gray-800 leading-relaxed max-w-none tiptap-editor'
+        }
       }
-    }
-  });
+    },
+    // A note switch must not reuse the Editor whose React view is being detached.
+    [noteId]
+  );
 
   // Sync external text changes to editor.
   // This is important because `EditorArea` uses a textarea in "source mode";
@@ -45,10 +49,13 @@ export function useTiptapEditor({ noteId, content, onMarkdownChange, onImagePast
   // keep up so that switching to "preview mode" shows the latest text.
   useEffect(() => {
     if (!editor) return;
-    const currentMarkdown = (editor.storage as { markdown?: { getMarkdown: () => string } }).markdown?.getMarkdown() ?? '';
-    if (content !== currentMarkdown) {
-      editor.commands.setContent(content || '');
-    }
+    const frame = requestAnimationFrame(() => {
+      if (editor.isDestroyed) return;
+      const currentMarkdown =
+        (editor.storage as { markdown?: { getMarkdown: () => string } }).markdown?.getMarkdown() ?? '';
+      if (content !== currentMarkdown) editor.commands.setContent(content || '');
+    });
+    return () => cancelAnimationFrame(frame);
   }, [noteId, editor, content]);
 
   return { editor: editor as Editor | null };

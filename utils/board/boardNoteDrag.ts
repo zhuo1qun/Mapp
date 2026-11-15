@@ -1,24 +1,5 @@
 import type { Frame, Note } from '../../types';
-import { boardNoteDimensions } from './boardPlacement';
-
-/** 便签中心落在哪个 Frame 内（重叠取第一个） */
-export function findFrameContainingNoteCenter(
-  note: Pick<Note, 'boardX' | 'boardY' | 'imageWidth' | 'imageHeight' | 'variant' | 'media' | 'imageRefs'>,
-  boardX: number,
-  boardY: number,
-  frames: Frame[]
-): Frame | undefined {
-  const { width, height } = boardNoteDimensions(note as Note);
-  const centerX = boardX + width / 2;
-  const centerY = boardY + height / 2;
-  return frames.find(
-    (frame) =>
-      centerX >= frame.x &&
-      centerX <= frame.x + frame.width &&
-      centerY >= frame.y &&
-      centerY <= frame.y + frame.height
-  );
-}
+import { findFrameContainingNoteCenter } from '../frame/boardFrameMembership';
 
 /** 写入 board 位置，并按中心点同步单簇 Frame 归属 */
 export function noteWithBoardDragCommit(

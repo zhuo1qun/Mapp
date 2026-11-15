@@ -1,23 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Note, Tag } from '../types';
 import { THEME_COLOR } from '../constants';
 import { generateId, parseNoteContent } from '../utils';
 import { buildEditorModel, fromEditorModel } from '../utils/note/editorModel';
 import { isNoteContentEmpty, submitNoteDraft, type NoteDraftOutcome } from '../utils/note/draftLifecycle';
-import { DrawingCanvas } from './DrawingCanvas';
-import { CameraCaptureDialog } from './map/overlays/CameraCaptureDialog';
 import { useTiptapEditor } from './hooks/useTiptapEditor';
 import { useNoteState } from './hooks/useNoteState';
 import { useMediaHandler } from './hooks/useMediaHandler';
 import { NoteHeader } from './note-editor/NoteHeader';
-import { MediaDetailWindow } from './note-editor/MediaDetailWindow';
 import { ContentSection } from './note-editor/ContentSection';
 import { PropertySection } from './note-editor/PropertySection';
 import { MediaSection } from './note-editor/MediaSection';
 import { MetadataSection } from './note-editor/MetadataSection';
+import { NOTE_LOCATION_NAVIGATION_ZOOM, NoteLocationPreview } from './note-editor/NoteLocationPreview';
 import { Camera, Image as ImageIcon, PenTool, Minus, Smile } from 'lucide-react';
 import { blobToDataUrl } from '../utils/persistence/imageAssetStore';
-import { EmojiPicker } from './note-editor/EmojiPicker';
 import {
   NOTE_EDITOR_ADD_PILL_ACTIVE,
   NOTE_EDITOR_ADD_PILL_CLASS,
@@ -40,7 +37,24 @@ import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from './ui/ChromeDialogSurface';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { fitBoardMediaDimensions } from '../utils/board/boardPlacement';
 
-interface NoteEditorProps {
+const LazyDrawingCanvas = lazy(async () => {
+  const module = await import('./DrawingCanvas');
+  return { default: module.DrawingCanvas };
+});
+const LazyCameraCaptureDialog = lazy(async () => {
+  const module = await import('./map/overlays/CameraCaptureDialog');
+  return { default: module.CameraCaptureDialog };
+});
+const LazyMediaDetailWindow = lazy(async () => {
+  const module = await import('./note-editor/MediaDetailWindow');
+  return { default: module.MediaDetailWindow };
+});
+const LazyEmojiPicker = lazy(async () => {
+  const module = await import('./note-editor/EmojiPicker');
+  return { default: module.EmojiPicker };
+});
+
+export interface NoteEditorProps {
   initialNote?: Partial<Note>;
   isOpen: boolean;
   onClose: () => void;
@@ -52,7 +66,7 @@ interface NoteEditorProps {
   /** 调用方尚未把这条便签写入项目数据。 */
   isNewNote?: boolean;
   onDelete?: (noteId: string) => void | Promise<void>;
-  onSwitchToMapView?: (coords?: { lat: number; lng: number }) => void;
+  onSwitchToMapView?: (coords?: { lat: number; lng: number; zoom?: number }) => void;
   onSwitchToBoardView?: (coords?: { x: number; y: number }, mapInstance?: any) => void;
   themeColor?: string;
   /** 编辑器自行使用这组全局「界面外观」参数生成表面，不依赖调用方传入样式对象。 */
@@ -64,8 +78,10 @@ interface NoteEditorProps {
   animationAnchor?: { x: number; y: number };
   /** 宽屏 Table 可把编辑器作为画布节点并列摆放，而不是覆盖整个工作区。 */
   presentation?: 'modal' | 'canvas-window';
+  /** Table 中的位置预览与 Mapping 采用相同的底图类型。 */
+  mapStyleId?: string;
   /** 宽屏 Table 用它同步媒体详情窗口与横向导航的位置。 */
-  onCanvasMediaDetailOpenChange?: (open: boolean) => void;
+  onCanvasMediaDetailOpenChange?: (open: boolean, shouldFocus?: boolean) => void;
   /** 为 false 时只渲染内容，由地图便签槽提供 ChromeWindow。 */
   shell?: boolean;
   /**
@@ -92,6 +108,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   chromeAppearance: chromeAppearanceProp,
   animationAnchor,
   presentation = 'modal',
+  mapStyleId = 'carto-light-nolabels',
   onCanvasMediaDetailOpenChange,
   shell = true,
   autoOpenCamera = false
@@ -223,6 +240,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     setLassoStickerEnabled,
     loadOriginalImageSrc,
     persistMediaForSave,
+    materializeRemoteAt,
     isCropActiveAt,
     previewImage,
     setPreviewImage,
@@ -262,14 +280,26 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const [lassoSourceSrc, setLassoSourceSrc] = useState<string | null>(null);
   const [cropBusy, setCropBusy] = useState(false);
   const [stickerSize, setStickerSize] = useState<{ width: number; height: number } | null>(null);
+  const [canvasMediaDetailDismissed, setCanvasMediaDetailDismissed] = useState(false);
+  const hasExplicitMediaPreview = !!previewImage && displaySrcs.length > 0;
+  // Table 首张媒体随记录出现，但只有用户点缩略图时才移动画布到详情窗。
+  const showInitialCanvasMediaDetail =
+    isCanvasWindow && !canvasMediaDetailDismissed && displaySrcs.length > 0;
   const mediaDetailOpen =
     isOpen &&
-    ((!!previewImage && displaySrcs.length > 0) || (lassoIndex != null && !!lassoSourceSrc));
+    (hasExplicitMediaPreview || showInitialCanvasMediaDetail || (lassoIndex != null && !!lassoSourceSrc));
   const canvasMediaDetailOpen = isCanvasWindow && mediaDetailOpen;
 
   useEffect(() => {
-    onCanvasMediaDetailOpenChange?.(canvasMediaDetailOpen);
-  }, [canvasMediaDetailOpen, onCanvasMediaDetailOpenChange]);
+    setCanvasMediaDetailDismissed(false);
+  }, [initialNote?.id, isOpen]);
+
+  useEffect(() => {
+    onCanvasMediaDetailOpenChange?.(
+      canvasMediaDetailOpen,
+      canvasMediaDetailOpen && hasExplicitMediaPreview
+    );
+  }, [canvasMediaDetailOpen, hasExplicitMediaPreview, onCanvasMediaDetailOpenChange]);
 
   useEffect(
     () => () => onCanvasMediaDetailOpenChange?.(false),
@@ -573,14 +603,18 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           <Minus size={11} strokeWidth={2.5} />
         </button>
       ) : null}
-      <EmojiPicker
-        isOpen={showEmojiPicker}
-        anchorRef={emojiAnchorRef}
-        onClose={() => setShowEmojiPicker(false)}
-        onSelectEmoji={(e) => setEmoji(e)}
-        panelChromeStyle={editorChromeStyle}
-        chromeAppearance={chromeAppearance}
-      />
+      {showEmojiPicker ? (
+        <Suspense fallback={null}>
+          <LazyEmojiPicker
+            isOpen
+            anchorRef={emojiAnchorRef}
+            onClose={() => setShowEmojiPicker(false)}
+            onSelectEmoji={(e) => setEmoji(e)}
+            panelChromeStyle={editorChromeStyle}
+            chromeAppearance={chromeAppearance}
+          />
+        </Suspense>
+      ) : null}
     </div>
   ) : null;
 
@@ -681,6 +715,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       onReorder={reorderMedia}
       onPreview={(index) => {
         dismissOverlays();
+        setCanvasMediaDetailDismissed(false);
         setPreviewImageIndex(index);
         setPreviewImage(displaySrcs[index] || null);
       }}
@@ -688,16 +723,77 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         dismissOverlays();
         removeMediaAt(index);
       }}
+      onSaveRemoteCopy={materializeRemoteAt}
       onDismissOverlays={dismissOverlays}
       moreActionsSlot={mediaActionsSlot}
     />
   ) : null;
 
+  const inlineLocationPreview = !isCanvasWindow && onSwitchToMapView ? (
+    <NoteLocationPreview
+      className="!h-full !w-full !aspect-auto"
+      coords={initialNote?.coords}
+      themeColor={themeColor}
+      mapStyleId={mapStyleId}
+      onOpenMap={
+        hasNavigableGpsCoords(initialNote?.coords)
+          ? () => {
+              dismissOverlays();
+              onSwitchToMapView({
+                ...initialNote!.coords,
+                zoom: NOTE_LOCATION_NAVIGATION_ZOOM
+              });
+            }
+          : undefined
+      }
+    />
+  ) : null;
+
+  const renderLocationPreview = (phase: string, animateIndependently = true) => {
+    if (!isCanvasWindow || isCompactMode) return null;
+
+    return (
+      <div
+        data-table-canvas-window="editor-location"
+        className={`note-editor-aux-panel ${animateIndependently ? `chrome-dialog-${phase}` : ''} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} flex aspect-square flex-col overflow-hidden`}
+        style={editorChromeStyle}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-2 pb-1">
+          <span
+            className="text-[11px] font-medium uppercase tracking-wide text-gray-400"
+          >
+            位置
+          </span>
+        </div>
+        <div className="min-h-0 flex-1 px-3 pb-3">
+          <NoteLocationPreview
+            className="h-full !aspect-auto"
+            coords={initialNote?.coords}
+            themeColor={themeColor}
+            mapStyleId={mapStyleId}
+            onOpenMap={
+              hasNavigableGpsCoords(initialNote?.coords)
+                ? () => {
+                    dismissOverlays();
+                    onSwitchToMapView?.({
+                      ...initialNote!.coords,
+                      zoom: NOTE_LOCATION_NAVIGATION_ZOOM
+                    });
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </div>
+    );
+  };
+
   const editorMain = (
     <>
       {isSketching ? (
         <div className="absolute inset-0 z-50" onPointerDown={(e) => e.stopPropagation()}>
-          <DrawingCanvas
+          <Suspense fallback={null}>
+          <LazyDrawingCanvas
             backgroundColor={color}
             themeColor={themeColor}
             chromeAppearance={chromeAppearance}
@@ -708,11 +804,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             }}
             onCancel={() => setIsSketching(false)}
           />
+          </Suspense>
         </div>
       ) : null}
 
       {isCapturingPhoto ? (
-        <CameraCaptureDialog
+        <Suspense fallback={null}>
+        <LazyCameraCaptureDialog
           open
           variant="overlay"
           themeColor={themeColor}
@@ -725,6 +823,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             setIsCapturingPhoto(false);
           }}
         />
+        </Suspense>
       ) : null}
 
       <div
@@ -755,13 +854,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             const centerX = initialNote!.boardX! + noteWidth / 2;
             const centerY = initialNote!.boardY! + noteHeight / 2;
             onSwitchToBoardView?.({ x: centerX, y: centerY });
-          }}
-          showLocateMap={
-            !!(initialNote?.coords && initialNote.coords.lat !== 0 && initialNote.coords.lng !== 0 && onSwitchToMapView)
-          }
-          onLocateMap={() => {
-            dismissOverlays();
-            onSwitchToMapView?.(initialNote!.coords);
           }}
           showNavigateGo={hasNavigableGpsCoords(initialNote?.coords)}
           onNavigateGo={() => {
@@ -797,6 +889,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           updateCursorPosition={updateCursorPosition}
           editor={editor}
           themeColor={themeColor}
+          cornerOverlay={inlineLocationPreview}
         />
 
         {!isCanvasWindow ? propertySection : null}
@@ -825,11 +918,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
   const editorOverlays = (
     <>
-      <MediaDetailWindow
+      {mediaDetailOpen ? (
+      <Suspense fallback={null}>
+      <LazyMediaDetailWindow
         images={displaySrcs}
-        previewIndex={previewImageIndex}
+        previewIndex={hasExplicitMediaPreview ? previewImageIndex : 0}
         open={mediaDetailOpen}
         onClose={() => {
+          if (isCanvasWindow) setCanvasMediaDetailDismissed(true);
           setPreviewImage(null);
           setLassoIndex(null);
           setLassoSourceSrc(null);
@@ -865,6 +961,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         panelChromeStyle={editorChromeStyle}
         chromeAppearance={chromeAppearance}
       />
+      </Suspense>
+      ) : null}
 
       <DeleteConfirmDialog
         open={deleteConfirmOpen}
@@ -902,11 +1000,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
   return (
     <ChromePresence open={isOpen} kind="dialog" exitDurationMs={280}>
-      {(phase) => (
+      {(phase) => {
+        const groupOwnsExitMotion = isCanvasWindow && phase === 'exiting';
+        const panelPhaseClass = groupOwnsExitMotion ? '' : `chrome-dialog-${phase}`;
+        return (
     <div
       data-workspace-modal
       className={isCanvasWindow
-        ? `note-editor-canvas-window relative z-10 flex w-max shrink-0 items-start gap-3 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`
+        ? `note-editor-canvas-window relative z-10 flex w-max shrink-0 items-start gap-3 touch-none cursor-auto ${groupOwnsExitMotion ? 'note-editor-canvas-window--exiting chrome-dialog-exiting pointer-events-none' : ''}`
         : `note-editor-overlay fixed top-0 ui-workspace-overlay h-[100dvh] max-h-dvh z-[1000] flex items-center justify-center p-4 touch-none cursor-auto ${phase === 'exiting' ? 'pointer-events-none' : ''}`}
       // Table 宽屏将这里当作一组并列画布窗口：只有实际面板拦截拖拽，
       // 列间和面板外的留白应继续落到画布，不能形成不可拖动的死区。
@@ -933,8 +1034,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         <div
           data-table-canvas-window={isCanvasWindow ? 'editor' : undefined}
           data-workspace-link-target={isCanvasWindow ? 'note-editor' : undefined}
-          className={`note-editor-panel chrome-dialog-${phase} ${
-            motionAnchor ? `note-editor-panel--anchored note-editor-panel--anchored-${phase}` : ''
+          className={`note-editor-panel ${panelPhaseClass} ${
+            motionAnchor ? `note-editor-panel--anchored ${groupOwnsExitMotion ? '' : `note-editor-panel--anchored-${phase}`}` : ''
           } map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} ${
             isCanvasWindow
               ? 'w-full max-w-full max-h-[calc(100dvh-8rem)]'
@@ -964,16 +1065,16 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         <div className="note-editor-canvas-side flex w-80 shrink-0 flex-col gap-3">
           <div
             data-table-canvas-window="editor-properties"
-            data-workspace-link-target="editor-properties"
-            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
+            className={`note-editor-aux-panel ${panelPhaseClass} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
             style={editorChromeStyle}
           >
             {propertySection}
           </div>
+          {renderLocationPreview(phase, !groupOwnsExitMotion)}
           <div
             data-table-canvas-window="editor-media"
             data-workspace-link-target="editor-media"
-            className={`note-editor-aux-panel chrome-dialog-${phase} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
+            className={`note-editor-aux-panel ${panelPhaseClass} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} overflow-hidden`}
             style={editorChromeStyle}
           >
             {mediaSection}
@@ -983,7 +1084,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
       {editorOverlays}
     </div>
-      )}
+        );
+      }}
     </ChromePresence>
   );
 };

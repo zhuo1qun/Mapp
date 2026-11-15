@@ -93,7 +93,7 @@
 
 ### 3.2 常用可选
 
-`color`, `isFavorite`, `isBold`, `startYear`, `endYear`, `sketch`, `imageWidth`, `imageHeight`, `layoutScale`, `groupId` / `groupIds`（Frame id）, `groupName` / `groupNames`, `noteGroupId`, `layerItemHidden`, `layerStackOrder`
+`color`, `isFavorite`, `isBold`, `startYear`, `endYear`, `sketch`, `imageWidth`, `imageHeight`, `layoutScale`, `boardSize`（`'standard'` / `'expanded'`，缺省为标准 256×256；展开宽 384，高度按内容在 288–512 间增长）, `groupId` / `groupIds`（Frame id）, `groupName` / `groupNames`, `noteGroupId`, `layerItemHidden`, `layerStackOrder`
 
 ### 3.3 文本约定（给 AI 改内容）
 

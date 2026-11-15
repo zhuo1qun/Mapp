@@ -12,6 +12,8 @@ import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 
 interface TagPropertyEditorProps {
+  /** Table 画布窗口关闭 layout projection，避免标签与父窗口的缩放位移分离。 */
+  reorderable?: boolean;
   tags: Tag[];
   editingTagId: string | null;
   isAddingTag: boolean;
@@ -37,6 +39,7 @@ const TAG_PANEL_EST_H = 220;
 
 /** tags Property 的编辑 UI（Registry component: TagEditor） */
 export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
+  reorderable = true,
   tags,
   editingTagId,
   isAddingTag,
@@ -136,7 +139,8 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
       ) : (
         <div
           ref={tagsRowRef}
-          className="flex min-w-0 gap-2 overflow-x-auto scrollbar-hide items-center touch-pan-x"
+          className="flex min-w-0 max-w-full gap-2 overflow-hidden items-center"
+          onPointerDown={(event) => event.stopPropagation()}
         >
           {editingTagId ? (
             tags
@@ -146,18 +150,25 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
                   {renderTagChip(tag)}
                 </div>
               ))
-          ) : tags.length > 1 ? (
+          ) : reorderable && tags.length > 1 ? (
             <Reorder.Group
               axis="x"
               values={tags}
               onReorder={onReorderTags}
               as="div"
+              layoutScroll
               style={{
                 display: 'flex',
-                flexDirection: 'row',
+                minWidth: 0,
+                maxWidth: '100%',
+                flex: '1 1 0%',
                 flexWrap: 'nowrap',
                 alignItems: 'center',
-                gap: '0.5rem'
+                gap: '0.5rem',
+                overflowX: 'auto',
+                paddingBlock: '0.25rem',
+                touchAction: 'pan-x',
+                scrollbarWidth: 'none'
               }}
             >
               {tags.map((tag) => (
@@ -166,11 +177,14 @@ export const TagPropertyEditor: React.FC<TagPropertyEditorProps> = ({
                   value={tag}
                   className="flex-shrink-0 list-none"
                   layout="position"
+                  dragConstraints={tagsRowRef}
+                  dragElastic={0}
+                  dragMomentum={false}
                   transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                   whileDrag={{
-                    scale: 1.04,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                    zIndex: 20,
+                    scale: 1.02,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.14)',
+                    zIndex: 2,
                     cursor: 'grabbing'
                   }}
                   style={{ cursor: 'grab' }}
