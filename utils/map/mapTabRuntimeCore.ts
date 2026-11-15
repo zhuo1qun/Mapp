@@ -135,12 +135,14 @@ function pinIconHtml(
   note: MapTabExportNote,
   themeColor: string,
   clusterCount: number | undefined,
-  pinSize: number
+  pinSize: number,
+  imageSize: number
 ): { html: string; size: [number, number]; anchor: [number, number] } {
   const model = buildMapNoteIconModel(note, {
     themeColor,
     clusterCount,
-    pinSize
+    pinSize,
+    imageSize
   });
   return {
     html: model.html,
@@ -326,7 +328,13 @@ export function runMapTabStandalone(L: any, marked: MarkedLike, payload: MapTabE
     lastClusters.forEach((cl) => {
       if (cl.notes.length === 1) {
         const note = cl.notes[0];
-        const { html, size, anchor } = pinIconHtml(note, payload.themeColor, undefined, payload.pinSize);
+        const { html, size, anchor } = pinIconHtml(
+          note,
+          payload.themeColor,
+          undefined,
+          payload.pinSize,
+          payload.imageSize ?? 1
+        );
         const m = L.marker(cl.position, {
           icon: L.divIcon({ className: 'custom-icon', html, iconSize: size, iconAnchor: anchor })
         });
@@ -354,7 +362,13 @@ export function runMapTabStandalone(L: any, marked: MarkedLike, payload: MapTabE
         m.addTo(markerLayer);
       } else {
         const note = cl.notes[0];
-        const { html, size, anchor } = pinIconHtml(note, payload.themeColor, cl.notes.length, payload.pinSize);
+        const { html, size, anchor } = pinIconHtml(
+          note,
+          payload.themeColor,
+          cl.notes.length,
+          payload.pinSize,
+          payload.imageSize ?? 1
+        );
         const m = L.marker(cl.position, {
           icon: L.divIcon({ className: 'custom-icon', html, iconSize: size, iconAnchor: anchor })
         });

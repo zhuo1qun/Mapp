@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Navigation, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Navigation, Pencil, Search, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Note } from '../../../types';
 import { parseNoteContent } from '../../../utils';
 import { noteHasRenderableMapPosition } from '../../../utils/layer/unifiedNoteLayer';
 import { hasNavigableGpsCoords } from '../../../utils/map/openExternalNavigation';
-import { isDisplayableImageSrc, noteNeedsMediaResolve } from '../../../utils/persistence/mediaDisplay';
+import { isDisplayableImageSrc, noteNeedsMediaResolve, noteOrderedDisplayMediaSources } from '../../../utils/persistence/mediaDisplay';
 import { loadNoteImages } from '../../../utils/persistence/storage';
 import { TagChip } from '../../ui/TagChip';
 import { NoteIconButton } from '../../note-editor/NoteIconButton';
@@ -28,12 +28,12 @@ interface NotePreviewCardProps {
    * 图谱详情 + 高亮筛选上下排列时使用。
    */
   embedded?: boolean;
-  /** 保留以兼容调用方；详情卡右上角编辑为无框 icon，不再使用主题色底 */
-  themeColor?: string;
   /** 传入时显示右上角铅笔，打开全文编辑器 */
   onOpenEditor?: (noteId: string) => void;
   /** 编辑模式下传入，显示与其它便签操作一致的删除入口。 */
   onDelete?: (noteId: string) => void;
+  /** 在当前地图内平滑回到本点的合适视野。 */
+  onFocusMap?: (note: Note) => void;
   /** 由便签槽提供外壳时只渲染内容。 */
   hosted?: boolean;
 }
@@ -47,9 +47,9 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   passThrough = false,
   offsetTopPx,
   embedded = false,
-  themeColor,
   onOpenEditor,
   onDelete,
+  onFocusMap,
   hosted = false
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
@@ -126,10 +126,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   };
 
   const timeRangeText = formatYearRange();
-  const allImages = [...(displayNote.images || [])].filter(isDisplayableImageSrc);
-  if (displayNote.sketch && isDisplayableImageSrc(displayNote.sketch)) {
-    allImages.push(displayNote.sketch);
-  }
+  const allImages = noteOrderedDisplayMediaSources(displayNote);
   const hasMediaSlots =
     (note.images && note.images.length > 0) ||
     !!(note.sketch && note.sketch !== '') ||
@@ -141,6 +138,11 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   const topPx = offsetTopPx ?? 16;
   const showEdit = Boolean(onOpenEditor) && !passThrough;
   const showDelete = Boolean(onDelete) && !passThrough;
+  const showMapFocus =
+    Boolean(onFocusMap) &&
+    noteHasRenderableMapPosition(note) &&
+    hasNavigableGpsCoords(note.coords) &&
+    !passThrough;
   const showGo =
     noteHasRenderableMapPosition(note) &&
     hasNavigableGpsCoords(note.coords) &&
@@ -208,21 +210,36 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
             ) : null}
           </div>
         </div>
-        {showGo || showEdit || showDelete ? (
+        {showMapFocus || showGo || showEdit || showDelete ? (
           <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+            {showMapFocus ? (
+              <NoteIconButton
+                label="定位"
+                title="定位到点位"
+                aria-label="定位到点位"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFocusMap?.(note);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="h-9 min-h-9 min-w-9 p-2 text-gray-500 hover:text-gray-700"
+              >
+                <Search size={14} strokeWidth={2} aria-hidden />
+              </NoteIconButton>
+            ) : null}
             {showGo ? (
               <NoteIconButton
-                label="导航"
-                title="Go · 外部导航"
-                aria-label="Go 外部导航"
+                label="地图"
+                title="在地图中打开"
+                aria-label="在地图中打开"
                 onClick={(e) => {
                   e.stopPropagation();
                   setNavSheetOpen(true);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="min-h-8 min-w-8 p-1.5 text-gray-500 hover:text-gray-700"
+                className="h-9 min-h-9 min-w-9 p-2 text-gray-500 hover:text-gray-700"
               >
-                <Navigation size={18} strokeWidth={2} aria-hidden />
+                <Navigation size={14} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
             {showEdit ? (
@@ -235,9 +252,9 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                   onOpenEditor?.(note.id);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="min-h-8 min-w-8 p-1.5 text-gray-500 hover:text-gray-700"
+                className="h-9 min-h-9 min-w-9 p-2 text-gray-500 hover:text-gray-700"
               >
-                <Pencil size={18} strokeWidth={2} aria-hidden />
+                <Pencil size={14} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
             {showDelete ? (
@@ -250,9 +267,9 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                   onDelete?.(note.id);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="min-h-8 min-w-8 p-1.5 text-red-500 hover:text-red-600"
+                className="h-9 min-h-9 min-w-9 p-2 text-red-500 hover:text-red-600"
               >
-                <Trash2 size={18} strokeWidth={2} aria-hidden />
+                <Trash2 size={14} strokeWidth={2} aria-hidden />
               </NoteIconButton>
             ) : null}
           </div>
@@ -358,7 +375,6 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
         lng={note.coords.lng}
         label={previewTitle}
         onClose={() => setNavSheetOpen(false)}
-        themeColor={themeColor}
         panelChromeStyle={chromeSurfaceStyle}
         chromeAppearance={chromeAppearance}
       />

@@ -1944,7 +1944,7 @@ export default function App() {
                 setIsEditorOpen(false);
               }
             }}
-            isUIVisible={isUIVisible}
+            isUIVisible={isUIVisible && !isSidebarOpen}
             isRouteMode={isRouteMode}
             setIsRouteMode={setIsRouteMode}
             waypoints={waypoints}
@@ -2035,6 +2035,7 @@ export default function App() {
             }
             themeColor={themeColor}
             panelChromeStyle={panelChromeStyle}
+            isUIVisible={isUIVisible && !isSidebarOpen}
             chromeHoverBackground={mapChromeHoverBg}
             onThemeColorChange={handleThemeColorChange}
             uiDarkMode={uiDarkMode}
@@ -2087,7 +2088,7 @@ export default function App() {
             }
             themeColor={themeColor}
             panelChromeStyle={panelChromeStyle}
-            isUIVisible={isUIVisible}
+            isUIVisible={isUIVisible && !isSidebarOpen}
             chromeHoverBackground={mapChromeHoverBg}
             onThemeColorChange={handleThemeColorChange}
             uiDarkMode={uiDarkMode}
@@ -2116,7 +2117,7 @@ export default function App() {
       </div>
 
       <WorkspaceChromePresence
-        visible={!isEditorOpen && !!activeProject && !mappingWorkspaceEditMode && isUIVisible}
+        visible={!isEditorOpen && !!activeProject && !mappingWorkspaceEditMode && isUIVisible && !isSidebarOpen}
         motion="slide-up"
         className="ui-workspace-view-switcher fixed bottom-4 ui-workspace-center-x -translate-x-1/2 z-[var(--z-workspace-tabs)]"
       >

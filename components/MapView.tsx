@@ -82,6 +82,8 @@ import { buildMapTabExportPayload } from '../utils/map/mapTabExportPayload';
 import { buildStandaloneMapTabHtml } from '../utils/map/mapTabExportHtml';
 import { downloadTextFile } from '../utils/builtinExamples/projectFromExport';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
+
+const UNPLACED_DROP_EDGE_TOLERANCE_PX = 20;
 import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { useStickyValue } from '../utils/ui/useStickyValue';
@@ -97,6 +99,7 @@ import {
 } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { MapNoteSlot } from './map/overlays/MapNoteSlot';
+import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -257,6 +260,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const deletingNoteIdsRef = useRef(new Set<string>());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(() => new Set());
+  const [pendingKeyboardDeleteIds, setPendingKeyboardDeleteIds] = useState<string[] | null>(null);
   const [preSelectedNotes, setPreSelectedNotes] = useState<Note[] | null>(null);
   const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState(0);
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -437,10 +441,10 @@ export const MapView: React.FC<MapViewProps> = ({
       typeof x === 'number' &&
       typeof y === 'number' &&
       !!rect &&
-      x >= rect.left &&
-      x <= rect.right &&
-      y >= rect.top &&
-      y <= rect.bottom
+      x >= rect.left - UNPLACED_DROP_EDGE_TOLERANCE_PX &&
+      x <= rect.right + UNPLACED_DROP_EDGE_TOLERANCE_PX &&
+      y >= rect.top - UNPLACED_DROP_EDGE_TOLERANCE_PX &&
+      y <= rect.bottom + UNPLACED_DROP_EDGE_TOLERANCE_PX
     );
   }, []);
 
@@ -597,6 +601,8 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Pin size control
   const [pinSize, setPinSize] = useState(1.0); // Scale factor for pin size
+  // 媒体型点位独立于普通泪滴图钉，默认以更易辨识的 96px 缩略图呈现。
+  const [imageSize, setImageSize] = useState(1.0);
   // Label size control (independent)
   const [labelSize, setLabelSize] = useState(1.0);
 
@@ -1393,6 +1399,35 @@ export const MapView: React.FC<MapViewProps> = ({
     [canModifyNote, denyEdit, exitMapNote, notes, onDeleteNote, onToggleEditor]
   );
 
+  useEffect(() => {
+    const handleSelectedNoteDeleteKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (!isUIVisible || isEditorOpen || pendingKeyboardDeleteIds?.length) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"]')))
+      ) return;
+
+      const ids = [...selectedNoteIds].filter((id) => {
+        const note = notes.find((item) => item.id === id);
+        return !!note && canModifyNote(note);
+      });
+      if (!ids.length && selectedNoteId) {
+        const note = notes.find((item) => item.id === selectedNoteId);
+        if (note && canModifyNote(note)) ids.push(note.id);
+      }
+      if (!ids.length) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingKeyboardDeleteIds(ids);
+    };
+    window.addEventListener('keydown', handleSelectedNoteDeleteKey);
+    return () => window.removeEventListener('keydown', handleSelectedNoteDeleteKey);
+  }, [canModifyNote, isEditorOpen, isUIVisible, notes, pendingKeyboardDeleteIds, selectedNoteId, selectedNoteIds]);
+
   // 侧栏「编辑」按钮或地图 label 双击：打开完整便签编辑器
   const handleEditNoteFromLabel = useCallback((noteId: string) => {
     if (!isUIVisible) return;
@@ -1535,6 +1570,7 @@ export const MapView: React.FC<MapViewProps> = ({
     try {
       const payload = await buildMapTabExportPayload(project, themeColor, mapStyleId, mapInstance, {
         pinSize,
+        imageSize,
         labelSize,
         clusterThreshold,
         showTextLabels,
@@ -1553,6 +1589,7 @@ export const MapView: React.FC<MapViewProps> = ({
     themeColor,
     mapStyleId,
     pinSize,
+    imageSize,
     labelSize,
     clusterThreshold,
     showTextLabels,
@@ -1740,6 +1777,9 @@ export const MapView: React.FC<MapViewProps> = ({
           onLabelDoubleClickEdit={
             isUIVisible && isMapToolbarEditMode ? handleEditNoteFromLabel : undefined
           }
+          onSelectedLabelClick={
+            isUIVisible && !isMapToolbarEditMode ? handleEditNoteFromLabel : undefined
+          }
           onSelectNote={(noteId) => {
             if (
               !isMapToolbarEditMode &&
@@ -1859,6 +1899,7 @@ export const MapView: React.FC<MapViewProps> = ({
           noteStackRank={mapNoteStackRank}
           showTextLabels={showTextLabels}
           pinSize={pinSize}
+          imageSize={imageSize}
           themeColor={themeColor}
           mapInstance={mapInstance}
           onMarkerClick={handleMapMarkerClick}
@@ -1920,6 +1961,7 @@ export const MapView: React.FC<MapViewProps> = ({
                     hostedWindow
                     compactViewport={compactViewport}
                     compactUnplacedTrayOpen={isMapToolbarEditMode || isDragging}
+                    hideCompactCreate={isMapToolbarEditMode}
                     allowPhotoImport={allowPhotoImport}
                   />
                   {showLayerControl ? <MapLayerControl
@@ -1968,9 +2010,7 @@ export const MapView: React.FC<MapViewProps> = ({
                     chromeSurfaceStyle={mapChromeControlSurface}
                     chromeHoverBackground={mapChromeHoverBg}
                     onEnterEdit={() => onWorkspaceEditModeChange(true)}
-                    onExitEdit={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
+                    onExitEdit={() => {
                       onWorkspaceEditModeChange(false);
                     }}
                   />
@@ -2017,6 +2057,8 @@ export const MapView: React.FC<MapViewProps> = ({
                           onMapStyleChange={handleMapStyleChange}
                           pinSize={pinSize}
                           onPinSizeChange={setPinSize}
+                          imageSize={imageSize}
+                          onImageSizeChange={setImageSize}
                           clusterThreshold={clusterThreshold}
                           onClusterThresholdChange={setClusterThreshold}
                           labelSize={labelSize}
@@ -2242,6 +2284,25 @@ export const MapView: React.FC<MapViewProps> = ({
         />
       ) : null}
 
+      <DeleteConfirmDialog
+        open={!!pendingKeyboardDeleteIds?.length}
+        variant={(pendingKeyboardDeleteIds?.length ?? 0) > 1 ? 'notes-batch' : 'note'}
+        titleHint={
+          pendingKeyboardDeleteIds?.length === 1
+            ? parseNoteContent(notes.find((note) => note.id === pendingKeyboardDeleteIds[0])?.text || '').title || '无标题'
+            : undefined
+        }
+        batchCount={pendingKeyboardDeleteIds?.length}
+        themeColor={themeColor}
+        panelChromeStyle={mapChromeContentSurface}
+        onCancel={() => setPendingKeyboardDeleteIds(null)}
+        onConfirm={() => {
+          const ids = pendingKeyboardDeleteIds ?? [];
+          setPendingKeyboardDeleteIds(null);
+          void Promise.all(ids.map((id) => handleDeleteNoteWithExit(id)));
+        }}
+      />
+
       {/* Tab 预览没有左上按钮组，继续使用独立 fixed 详情卡。 */}
       {!isUIVisible && (hoveredNote ?? selectedNote) && (
         <NotePreviewCard
@@ -2250,7 +2311,6 @@ export const MapView: React.FC<MapViewProps> = ({
           onImageIndexChange={setCurrentPreviewImageIndex}
           chromeSurfaceStyle={mapChromeContentSurface}
           chromeAppearance={mapChromeTone}
-          themeColor={themeColor}
         />
       )}
 

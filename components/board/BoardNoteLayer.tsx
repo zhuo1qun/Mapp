@@ -31,6 +31,11 @@ interface BoardNoteLayerProps {
   introNoteMotion: 'enter' | 'exit';
   enteringNoteIds: Set<string>;
   deletingNoteIds: Set<string>;
+  inlineEditingNoteId?: string | null;
+  inlineTitleDraft?: string;
+  onInlineTitleChange?: (value: string) => void;
+  onInlineTitleCommit?: () => void;
+  onInlineTitleCancel?: () => void;
   onPointerDown: (event: ReactPointerEvent<HTMLDivElement>, id: string, note: Note) => void;
   onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerUp: (event: ReactPointerEvent<HTMLDivElement>, note: Note) => void;
@@ -61,6 +66,11 @@ export function BoardNoteLayer({
   introNoteMotion,
   enteringNoteIds,
   deletingNoteIds,
+  inlineEditingNoteId,
+  inlineTitleDraft = '',
+  onInlineTitleChange,
+  onInlineTitleCommit,
+  onInlineTitleCancel,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -100,7 +110,8 @@ export function BoardNoteLayer({
             multiSelectDragOffset
           });
           const isInFrame = Boolean(findFrameContainingNoteCenter(note, note.boardX, note.boardY, frames));
-          const selected = selectedNoteId === note.id || isInMultiSelect;
+          const isInlineTitleEditing = inlineEditingNoteId === note.id;
+          const selected = selectedNoteId === note.id || isInMultiSelect || isInlineTitleEditing;
           // 临时浮到最高层只由“已选中”决定；单纯 pressdown / dragging 不再改层级。
           const zIndex = selected ? 1000 : 50;
           const commonProps = {
@@ -115,6 +126,11 @@ export function BoardNoteLayer({
             },
             onPointerCancel,
             onClick: (event: ReactMouseEvent) => {
+              if (inlineEditingNoteId === note.id) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
               if (consumeSuppressedClick(note.id)) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -141,6 +157,32 @@ export function BoardNoteLayer({
                 transform: `scale(${standardSizeScale})`, transformOrigin: 'center'
               }}
               rootProps={commonProps}
+              overlay={isInlineTitleEditing ? (
+                <textarea
+                  autoFocus
+                  value={inlineTitleDraft}
+                  onChange={(event) => onInlineTitleChange?.(event.target.value.replace(/[\r\n]+/g, ' '))}
+                  onBlur={() => onInlineTitleCommit?.()}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                      event.preventDefault();
+                      onInlineTitleCommit?.();
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault();
+                      onInlineTitleCancel?.();
+                    }
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerMove={(event) => event.stopPropagation()}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                  placeholder="输入"
+                  aria-label="便签标题"
+                  className="absolute inset-0 z-30 h-full w-full resize-none overflow-hidden border-0 bg-transparent p-6 text-[35.2px] font-medium leading-[1.04] text-gray-800 outline-none placeholder:text-gray-400/70 focus:ring-0"
+                  style={{ caretColor: 'currentColor' }}
+                />
+              ) : null}
             />
           );
         })}

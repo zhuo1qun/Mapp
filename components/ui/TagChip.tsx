@@ -17,8 +17,8 @@ export const TagChip: React.FC<TagChipProps> = ({
   className = '',
 }) => {
   const classes = [
-    'flex-shrink-0 h-6 px-2.5 rounded-full text-xs font-bold text-white shadow-sm',
-    'flex items-center gap-1 select-none',
+    'flex-shrink-0 min-w-0 h-6 px-2.5 rounded-full text-xs font-bold text-white shadow-sm',
+    'flex items-center gap-1 whitespace-nowrap select-none',
     onClick || onRemove ? 'cursor-pointer hover:opacity-80 transition-opacity' : '',
     className,
   ]
@@ -48,11 +48,11 @@ export const TagChip: React.FC<TagChipProps> = ({
           : undefined
       }
     >
-      {label}
+      <span className="min-w-0 truncate">{label}</span>
       {onRemove && (
         <button
           type="button"
-          className="border-0 bg-transparent p-0 text-[inherit] leading-none cursor-pointer"
+          className="shrink-0 border-0 bg-transparent p-0 text-[inherit] leading-none cursor-pointer"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();

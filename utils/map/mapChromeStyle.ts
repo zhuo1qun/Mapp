@@ -1,5 +1,4 @@
 import type { CSSProperties } from 'react';
-import { parseHexToRgb } from '../theme/themeChrome';
 
 /** 项目菜单等轻覆盖：模糊强度与 map UI chrome 一致，避免平整灰色遮罩 */
 export function mapChromeMenuBackdropStyle(blurPx: number): CSSProperties {
@@ -226,13 +225,19 @@ export function mapChromeSurfaceStyle(
  * Leaflet DivIcon 等内联 HTML 用：与 `mapChromeSurfaceStyle` + `MAP_CHROME_SURFACE_SHELL_CLASS` 等价
  *（圆角 / 阴影 / 细描边 / 半透明白底 / backdrop）。
  */
-export function mapChromeSurfaceInlineCss(opacity: number, blurPx: number): string {
+export function mapChromeSurfaceInlineCss(
+  opacity: number,
+  blurPx: number,
+  appearance: MapChromeAppearance = 'light'
+): string {
   const o = Math.min(1, Math.max(0, opacity));
   const b = Math.min(48, Math.max(0, blurPx));
+  const dark = chromeIsDark(appearance);
   const parts = [
     'background-color:transparent',
-    `background-image:${chromeGradientBackground(false, o)}`,
-    'border:1px solid rgba(243,244,246,0.8)',
+    `background-image:${chromeGradientBackground(dark, o)}`,
+    // 与 ChromeWindow/NoteEditor 相同：描边仅作为材质边缘，不单独染主题色。
+    `border:1px solid ${dark ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)'}`,
     'border-radius:0.5rem',
     'box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1)'
   ];
@@ -244,42 +249,17 @@ export function mapChromeSurfaceInlineCss(opacity: number, blurPx: number): stri
 
 /**
  * 地图点位文字标签的玻璃面：在保留全局透明度与模糊设置的同时，
- * 以主题色轻微染色背景，并使用同色系描边。
- *
- * 不用 CSS `color-mix()`，使 Leaflet DivIcon 的内联样式在较旧 WebView 中也能稳定工作。
+ * 直接复用 ChromeWindow/NoteEditor 的玻璃材质；标签只改变文字颜色，
+ * 不再叠一层主题色描边，避免地图上出现比窗口更突兀的轮廓。
  */
 export function mapChromeTextLabelInlineCss(
   opacity: number,
   blurPx: number,
-  themeColor: string,
+  _themeColor: string,
   appearance: MapChromeAppearance = 'light'
 ): string {
-  const themeRgb = parseHexToRgb(themeColor);
-  if (!themeRgb) return mapChromeSurfaceInlineCss(opacity, blurPx);
-
   const o = Math.min(1, Math.max(0, opacity));
-  if (appearance === 'dark') {
-    return [
-      mapChromeSurfaceInlineCss(o, blurPx),
-      'background-color:transparent',
-      `background-image:linear-gradient(180deg,rgba(15,23,42,var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(15,23,42,var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
-      `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${Math.min(0.58, o * 0.65)})`
-    ].join(';');
-  }
-
-  // 使用白色与主题色的预混色，避免纯主题色半透明叠在深色底图上后显脏或降低可读性。
-  const tint = 0.13;
-  const background = [themeRgb.r, themeRgb.g, themeRgb.b]
-    .map((channel) => Math.round(255 + (channel - 255) * tint))
-    .join(',');
-  const borderOpacity = Math.min(0.72, o * 0.75);
-
-  return [
-    mapChromeSurfaceInlineCss(o, blurPx),
-    'background-color:transparent',
-    `background-image:linear-gradient(180deg,rgba(${background},var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(${background},var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
-    `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${borderOpacity})`
-  ].join(';');
+  return mapChromeSurfaceInlineCss(o, blurPx, appearance);
 }
 
 /** 图谱圆形底衬：填充与 mapChromeSurfaceStyle 一致，描边随不透明度略提亮 */

@@ -51,6 +51,8 @@ export type ChromeWindowProps = {
   motionAnchor?: { x: number; y: number } | null;
   /** 外点关闭时是否截断事件（编辑器需挡住地图点选）。 */
   dismissStopEvent?: boolean;
+  /** 嵌套在 NoteEditor / 详情槽位内的二级窗口，必须浮在其壳之上。 */
+  elevation?: 'default' | 'above-note-slot';
 } & Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'style' | 'className'>;
 
 const NESTED_IGNORE_SELECTOR = [
@@ -104,6 +106,7 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
   motion = 'chrome',
   motionAnchor = null,
   dismissStopEvent = false,
+  elevation = 'default',
   ...rootProps
 }) => {
   const appearance = useChromeAppearance(appearanceProp);
@@ -193,6 +196,7 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
         : 'ui-compact-bottom-sheet fixed z-[var(--z-map-anchored-panel)]';
   const morphCls = centered && !noteMotion ? '' : 'chrome-window-morph';
   const noteMotionCls = noteMotion ? 'chrome-note-slot' : '';
+  const elevationCls = elevation === 'above-note-slot' ? 'chrome-window-above-note-slot' : '';
   const surfaceCls =
     surface === 'layer'
       ? 'map-layer-chrome-panel flex gap-2 items-start pointer-events-none'
@@ -219,7 +223,7 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
               panelRef={surfaceRef}
               data-chrome-window-surface=""
               data-map-layer-chrome-panel={surface === 'layer' ? '' : undefined}
-              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${phaseCls} workspace-transient-elevation ${className}`.trim()}
+              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${elevationCls} ${phaseCls} workspace-transient-elevation ${className}`.trim()}
               style={positionedStyle}
             >
               {/*

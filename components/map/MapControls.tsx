@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import { Note } from '../../types';
 import { THEME_COLOR } from '../../constants';
-import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon, Camera } from 'lucide-react';
+import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon, Camera, Maximize2 } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { ChromeMenuItem } from '../ui/ChromeMenuItem';
 import { ChromeWindow } from '../ui/ChromeWindow';
@@ -40,6 +40,8 @@ interface MapControlsProps {
   compactViewport?: boolean;
   /** 窄屏待定位箱可见时，把新建按钮上移到箱体上方，避免两个底部操作区重叠。 */
   compactUnplacedTrayOpen?: boolean;
+  /** 编辑态隐藏窄屏的新建入口，避免与编辑工具竞争底部空间。 */
+  hideCompactCreate?: boolean;
   /** Playground 不支持把一批本地照片直接写进项目，保留取景器新建。 */
   allowPhotoImport?: boolean;
 }
@@ -68,7 +70,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
   onCloseMenus,
   hostedWindow = false,
   compactViewport = false,
-  compactUnplacedTrayOpen = false
+  compactUnplacedTrayOpen = false,
+  hideCompactCreate = false
 }) => {
   const neutralStyle = chromeSurfaceStyle;
   const neutralHover = chromeHoverBackground;
@@ -172,7 +175,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
         </ChromeIconButton>
       </div>
 
-      <div
+      {!hideCompactCreate ? <div
         className={`ui-map-compact-create-control fixed ui-workspace-left z-10 h-14 w-14 sm:hidden ${
           compactUnplacedTrayOpen ? 'ui-map-compact-create-control--tray-open' : ''
         }`}
@@ -277,7 +280,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
             </ChromeIconButton>
           </div>
         </div>
-      </div>
+      </div> : null}
 
       <ChromeIconButton
         className="group"
@@ -354,6 +357,22 @@ export function MapLocateCreateMenu({
       const latestNote = mapNotes[mapNotes.length - 1];
       map.flyTo([latestNote.coords.lat, latestNote.coords.lng], 16);
     }
+  };
+
+  const fitAllPins = () => {
+    const positions = mapNotes
+      .map((note) => note.coords)
+      .filter((coords) => Number.isFinite(coords?.lat) && Number.isFinite(coords?.lng));
+    if (positions.length === 0) return;
+    if (positions.length === 1) {
+      map.flyTo([positions[0].lat, positions[0].lng], 15, { duration: 0.9 });
+      return;
+    }
+    // 显式用 flyToBounds，而不是瞬时 fitBounds：与“当前位置 / 最新点位”保持同一种镜头转场。
+    map.flyToBounds(
+      positions.map((coords) => [coords.lat, coords.lng] as [number, number]),
+      { padding: [56, 56], maxZoom: 15, animate: true, duration: 0.9 }
+    );
   };
 
   return (
@@ -435,6 +454,21 @@ export function MapLocateCreateMenu({
             onPointerMove={(e) => e.stopPropagation()}
           >
             Latest Note
+          </ChromeMenuItem>
+          <ChromeMenuItem
+            className="group"
+            hoverBackground={chromeHoverBackground}
+            icon={<Maximize2 size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />}
+            onClick={(e) => {
+              e.stopPropagation();
+              fitAllPins();
+              onCloseMenus();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerMove={(e) => e.stopPropagation()}
+            disabled={mapNotes.length === 0}
+          >
+            查看全部点位
           </ChromeMenuItem>
         </>
       )}

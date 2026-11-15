@@ -3,6 +3,7 @@ import { MapPin } from 'lucide-react';
 import { MAP_STYLE_OPTIONS } from '../../constants';
 import { hasNavigableGpsCoords } from '../../utils/map/openExternalNavigation';
 import { reverseGeocodeLabel } from '../../utils/map/overpass';
+import { buildMapNoteIconModel } from '../../utils/map/createMapNoteIcon';
 
 interface NoteLocationPreviewProps {
   coords?: { lat: number; lng: number };
@@ -17,6 +18,7 @@ const PREVIEW_ZOOM = 14;
 /** 小预览切到完整地图时，用更大的目标视口承接同一片区域，避免落入默认 19 级近景。 */
 export const NOTE_LOCATION_NAVIGATION_ZOOM = 16;
 const TILE_SIZE = 256;
+const LOCATION_LABEL_TIMEOUT_MS = 5000;
 
 const clampLatitude = (latitude: number) => Math.max(-85.05112878, Math.min(85.05112878, latitude));
 
@@ -50,23 +52,44 @@ export const NoteLocationPreview: React.FC<NoteLocationPreviewProps> = ({
   className
 }) => {
   const hasLocation = hasNavigableGpsCoords(coords);
-  const [locationLabel, setLocationLabel] = useState('正在识别位置…');
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
   const mapStyle = MAP_STYLE_OPTIONS.find((style) => style.id === mapStyleId) ?? MAP_STYLE_OPTIONS[2];
+  const markerModel = useMemo(
+    () => buildMapNoteIconModel(
+      {
+        text: '',
+        images: [],
+        imageRefs: [],
+        media: [],
+        emoji: '',
+        isFavorite: false
+      },
+      { themeColor, pinSize: 1 }
+    ),
+    [themeColor]
+  );
 
   useEffect(() => {
     let active = true;
     if (!coords || !hasLocation) {
-      setLocationLabel('位置未知');
+      setLocationLabel(null);
       return () => {
         active = false;
       };
     }
-    setLocationLabel('正在识别位置…');
+    setLocationLabel(null);
+    const timeout = window.setTimeout(() => {
+      active = false;
+      setLocationLabel(null);
+    }, LOCATION_LABEL_TIMEOUT_MS);
     void reverseGeocodeLabel(coords.lat, coords.lng).then((label) => {
-      if (active) setLocationLabel(label || '位置未知');
+      if (!active) return;
+      window.clearTimeout(timeout);
+      setLocationLabel(label?.trim() || null);
     });
     return () => {
       active = false;
+      window.clearTimeout(timeout);
     };
   }, [coords?.lat, coords?.lng, hasLocation]);
   const tiles = useMemo(() => {
@@ -125,15 +148,20 @@ export const NoteLocationPreview: React.FC<NoteLocationPreviewProps> = ({
       ))}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-white/10" aria-hidden />
       <span
-        className="pointer-events-none absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full text-black shadow-[0_3px_10px_rgb(0_0_0_/_0.28)]"
-        style={{ backgroundColor: themeColor }}
+        className="pointer-events-none absolute left-1/2 top-1/2 block"
+        style={{
+          width: markerModel.size[0],
+          height: markerModel.size[1],
+          transform: `translate(-${markerModel.anchor[0]}px, -${markerModel.anchor[1]}px)`
+        }}
         aria-hidden
-      >
-        <MapPin size={19} fill="currentColor" strokeWidth={2.2} />
-      </span>
-      <span className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/50 px-2 py-1 text-[10px] font-medium text-white/90 backdrop-blur-sm">
-        {locationLabel}
-      </span>
+        dangerouslySetInnerHTML={{ __html: markerModel.html }}
+      />
+      {locationLabel ? (
+        <span className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/50 px-2 py-1 text-[10px] font-medium text-white/90 backdrop-blur-sm">
+          {locationLabel}
+        </span>
+      ) : null}
     </>
   );
 

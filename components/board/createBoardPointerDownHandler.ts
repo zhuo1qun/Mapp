@@ -17,6 +17,8 @@ export function createBoardPointerDownHandler(options: {
   setDrawingFrameEnd: Dispatch<SetStateAction<BoardPoint | null>>;
   startBoardLongPress: (event: ReactPointerEvent) => void;
   cancelBrowseLongPress: () => void;
+  /** 画布会阻止默认失焦，因此空白按下时显式结束卡片内联编辑。 */
+  onBlankPointerDown?: () => void;
   /** Persistent tool state (a): toggled only by the toolbar. */
   isBoxSelectToolActive: () => boolean;
   isShiftPressed: boolean;
@@ -50,7 +52,12 @@ export function createBoardPointerDownHandler(options: {
 
     if (options.isDrawingFrame) options.setIsDrawingFrame(false);
 
-    const isNoteClick = (event.target as HTMLElement).closest('[data-is-note]') !== null;
+    const target = event.target as HTMLElement;
+    const isNoteClick = target.closest('[data-is-note]') !== null;
+    const isBlankCanvasPress =
+      !isNoteClick &&
+      !target.closest('button, input, select, textarea, a, .pointer-events-auto');
+    if (isBlankCanvasPress) options.onBlankPointerDown?.();
     // A new box-select gesture (b) begins only on press while its tool is
     // active (a), or while Shift temporarily requests the same gesture.
     const shouldStartBoxSelectGesture =

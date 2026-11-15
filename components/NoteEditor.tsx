@@ -237,11 +237,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     removeImage,
     removeSketch,
     applyLassoSticker,
-    setLassoStickerEnabled,
+    applyAutoBackgroundRemoval,
+    setImageVariantEnabled,
     loadOriginalImageSrc,
     persistMediaForSave,
     materializeRemoteAt,
-    isCropActiveAt,
+    replaceMediaWithLocalBlob,
+    isVariantAppliedAt,
     previewImage,
     setPreviewImage,
     previewImageIndex,
@@ -279,6 +281,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const [lassoIndex, setLassoIndex] = useState<number | null>(null);
   const [lassoSourceSrc, setLassoSourceSrc] = useState<string | null>(null);
   const [cropBusy, setCropBusy] = useState(false);
+  const [autoRemoveStatus, setAutoRemoveStatus] = useState<string | null>(null);
+  const [remoteAccessRequest, setRemoteAccessRequest] = useState<{
+    index: number;
+    url: string;
+    action: 'auto' | 'lasso';
+  } | null>(null);
+  const [remoteAccessBusy, setRemoteAccessBusy] = useState(false);
+  const [remoteAccessError, setRemoteAccessError] = useState<string | null>(null);
   const [stickerSize, setStickerSize] = useState<{ width: number; height: number } | null>(null);
   const [canvasMediaDetailDismissed, setCanvasMediaDetailDismissed] = useState(false);
   const hasExplicitMediaPreview = !!previewImage && displaySrcs.length > 0;
@@ -293,6 +303,10 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   useEffect(() => {
     setCanvasMediaDetailDismissed(false);
   }, [initialNote?.id, isOpen]);
+
+  useEffect(() => {
+    setAutoRemoveStatus(null);
+  }, [initialNote?.id, previewImageIndex]);
 
   useEffect(() => {
     onCanvasMediaDetailOpenChange?.(
@@ -513,15 +527,29 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       setLassoIndex(null);
       setLassoSourceSrc(null);
       setCropBusy(false);
+      setAutoRemoveStatus(null);
       setStickerSize(null);
     }
   }, [isOpen]);
 
   const startLassoForIndex = useCallback(
     async (index: number) => {
+      setAutoRemoveStatus(null);
       setCropBusy(true);
       try {
-        const src = await loadOriginalImageSrc(index);
+        const item = mediaItems[index];
+        let src: string | null;
+        if (item?.source?.kind === 'remote') {
+          const local = await materializeRemoteAt(index);
+          if (!local) {
+            setRemoteAccessError(null);
+            setRemoteAccessRequest({ index, url: item.source.url, action: 'lasso' });
+            return;
+          }
+          src = local.dataUrl;
+        } else {
+          src = await loadOriginalImageSrc(index);
+        }
         if (!src) return;
         setLassoSourceSrc(src);
         setLassoIndex(index);
@@ -529,39 +557,98 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         setCropBusy(false);
       }
     },
-    [loadOriginalImageSrc]
+    [loadOriginalImageSrc, materializeRemoteAt, mediaItems]
   );
 
-  const handleCropEnabledChange = useCallback(
+  const handleMaskEnabledChange = useCallback(
     async (enabled: boolean) => {
       const index = previewImageIndex;
       const item = mediaItems[index];
-      const hasCropData = !!item?.variantId;
+      if (!item?.variantId) return;
 
-      if (enabled) {
-        if (hasCropData) {
-          setCropBusy(true);
-          try {
-            await setLassoStickerEnabled(index, true);
-          } finally {
-            setCropBusy(false);
-          }
-          return;
-        }
-        await startLassoForIndex(index);
-        return;
-      }
-
+      setAutoRemoveStatus(null);
       setCropBusy(true);
       try {
-        await setLassoStickerEnabled(index, false);
-        setStickerSize(null);
+        await setImageVariantEnabled(index, enabled);
+        if (!enabled) setStickerSize(null);
       } finally {
         setCropBusy(false);
       }
     },
-    [previewImageIndex, mediaItems, startLassoForIndex, setLassoStickerEnabled]
+    [previewImageIndex, mediaItems, setImageVariantEnabled]
   );
+
+  const handleAutoRemoveBackground = useCallback(async (
+    index = previewImageIndex,
+    localInput?: { assetId: string; imageSrc: string }
+  ) => {
+    setCropBusy(true);
+    setAutoRemoveStatus('正在检查图片…');
+    try {
+      const dims = await applyAutoBackgroundRemoval(index, ({ status, progress }) => {
+        if (status === 'checking') setAutoRemoveStatus('正在检查透明背景…');
+        else if (status === 'downloading') {
+          const percent = progress == null ? '' : ` ${Math.round(progress * 100)}%`;
+          setAutoRemoveStatus(`首次使用，正在下载抠图模型${percent}`);
+        } else if (status === 'processing') setAutoRemoveStatus('正在本机识别主体…');
+        else setAutoRemoveStatus('正在保存抠图结果…');
+      }, localInput);
+      if (dims) setStickerSize(fitBoardMediaDimensions(dims.width, dims.height));
+      setAutoRemoveStatus('自动蒙版已创建并应用');
+    } catch (error) {
+      console.error('Automatic background removal failed', error);
+      const item = mediaItems[index];
+      if (error instanceof Error && error.message === 'REMOTE_IMAGE_ACCESS_BLOCKED' && item?.source?.kind === 'remote') {
+        setAutoRemoveStatus(null);
+        setRemoteAccessError(null);
+        setRemoteAccessRequest({ index, url: item.source.url, action: 'auto' });
+      } else {
+        setAutoRemoveStatus(error instanceof Error ? `抠图失败：${error.message}` : '抠图失败，请稍后重试');
+      }
+    } finally {
+      setCropBusy(false);
+    }
+  }, [applyAutoBackgroundRemoval, mediaItems, previewImageIndex]);
+
+  const recoverRemoteImage = useCallback(async (blob: Blob) => {
+    const request = remoteAccessRequest;
+    if (!request) return;
+    setRemoteAccessBusy(true);
+    setRemoteAccessError(null);
+    try {
+      const local = await replaceMediaWithLocalBlob(request.index, blob);
+      setRemoteAccessRequest(null);
+      if (request.action === 'lasso') {
+        setLassoSourceSrc(local.dataUrl);
+        setLassoIndex(request.index);
+      } else {
+        await handleAutoRemoveBackground(request.index, {
+          assetId: local.assetId,
+          imageSrc: local.dataUrl
+        });
+      }
+    } catch (error) {
+      setRemoteAccessError(error instanceof Error ? error.message : '无法读取这张图片');
+    } finally {
+      setRemoteAccessBusy(false);
+    }
+  }, [handleAutoRemoveBackground, remoteAccessRequest, replaceMediaWithLocalBlob]);
+
+  const recoverRemoteImageFromClipboard = useCallback(async () => {
+    try {
+      if (!navigator.clipboard?.read) throw new Error('当前浏览器不支持直接读取图片剪贴板，请选择本地图片');
+      const clipboardItems = await navigator.clipboard.read();
+      for (const clipboardItem of clipboardItems) {
+        const imageType = clipboardItem.types.find((type) => type.startsWith('image/'));
+        if (!imageType) continue;
+        await recoverRemoteImage(await clipboardItem.getType(imageType));
+        return;
+      }
+      throw new Error('剪贴板里没有图片；请在原图上选择“复制图片”后重试');
+    } catch (error) {
+      setRemoteAccessError(error instanceof Error ? error.message : '无法读取剪贴板图片');
+    }
+  }, [recoverRemoteImage]);
 
   const emojiTrailingSlot = !isCompactMode ? (
     <div className="relative group">
@@ -929,15 +1016,20 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           setPreviewImage(null);
           setLassoIndex(null);
           setLassoSourceSrc(null);
+          setRemoteAccessRequest(null);
+          setRemoteAccessError(null);
         }}
         onChangeIndex={(idx) => {
+          setRemoteAccessRequest(null);
+          setRemoteAccessError(null);
           setPreviewImageIndex(idx);
           setPreviewImage(displaySrcs[idx] || null);
         }}
         themeColor={themeColor}
-        cropEnabled={isCropActiveAt(previewImageIndex)}
-        onCropEnabledChange={(enabled) => {
-          void handleCropEnabledChange(enabled);
+        hasMask={!!mediaItems[previewImageIndex]?.variantId}
+        maskEnabled={isVariantAppliedAt(previewImageIndex)}
+        onMaskEnabledChange={(enabled) => {
+          void handleMaskEnabledChange(enabled);
         }}
         onStartLasso={() => {
           void startLassoForIndex(previewImageIndex);
@@ -954,8 +1046,22 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           if (dims) {
             setStickerSize(fitBoardMediaDimensions(dims.width, dims.height));
           }
+          setAutoRemoveStatus('套索蒙版已创建并应用');
           setLassoIndex(null);
           setLassoSourceSrc(null);
+        }}
+        onAutoRemoveBackground={handleAutoRemoveBackground}
+        autoRemoveBusy={cropBusy && !!autoRemoveStatus && !autoRemoveStatus.startsWith('抠图完成') && !autoRemoveStatus.startsWith('抠图失败')}
+        autoRemoveStatus={autoRemoveStatus}
+        remoteAccessUrl={remoteAccessRequest?.url}
+        remoteAccessBusy={remoteAccessBusy}
+        remoteAccessError={remoteAccessError}
+        onRecoverRemoteFromClipboard={recoverRemoteImageFromClipboard}
+        onRecoverRemoteFromFile={recoverRemoteImage}
+        onDismissRemoteAccess={() => {
+          if (remoteAccessBusy) return;
+          setRemoteAccessRequest(null);
+          setRemoteAccessError(null);
         }}
         presentation={isCanvasWindow ? 'canvas-window' : 'modal'}
         panelChromeStyle={editorChromeStyle}
@@ -981,7 +1087,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           lng={initialNote.coords.lng}
           label={parseNoteContent(initialNote?.text || '').title || undefined}
           onClose={() => setNavSheetOpen(false)}
-          themeColor={themeColor}
           panelChromeStyle={editorChromeStyle}
           chromeAppearance={chromeAppearance}
         />

@@ -5,6 +5,8 @@ import { clientPoint, clientToBoardPoint } from '../../utils/board/boardCoordina
 import { isNoteBoardPlaced, isNoteBoardUnplaced, moveNoteToBoardUnplaced, placeNoteOnBoard } from '../../utils/note/notePlacement';
 import { useBoardUnplacedNoteDropHandler } from './BoardUnplacedNoteDropHandler';
 
+const UNPLACED_DROP_EDGE_TOLERANCE_PX = 20;
+
 interface Props {
   notes: Note[];
   displayNotes: Note[];
@@ -67,7 +69,11 @@ export function useBoardUnplacedNotes({
 
   const isOverPanel = useCallback((pointer: { clientX: number; clientY: number }) => {
     const rect = panelRef.current?.getBoundingClientRect();
-    return !!rect && pointer.clientX >= rect.left && pointer.clientX <= rect.right && pointer.clientY >= rect.top && pointer.clientY <= rect.bottom;
+    if (!rect) return false;
+    return pointer.clientX >= rect.left - UNPLACED_DROP_EDGE_TOLERANCE_PX &&
+      pointer.clientX <= rect.right + UNPLACED_DROP_EDGE_TOLERANCE_PX &&
+      pointer.clientY >= rect.top - UNPLACED_DROP_EDGE_TOLERANCE_PX &&
+      pointer.clientY <= rect.bottom + UNPLACED_DROP_EDGE_TOLERANCE_PX;
   }, []);
 
   useBoardUnplacedNoteDropHandler({ canvasRef: containerRef, enabled, onDropNotes, isIgnoredDropTarget: isOverPanel });

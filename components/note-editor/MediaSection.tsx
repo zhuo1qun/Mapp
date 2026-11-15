@@ -142,7 +142,7 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
     >
       <div
         data-workspace-link-anchor="editor-media-title"
-        className="px-4 pt-2 pb-1 flex items-center justify-between gap-2"
+        className="px-4 pt-2 pb-0 flex items-center justify-between gap-2"
       >
         <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">媒体</span>
         {moreActionsSlot}
@@ -150,7 +150,7 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
       {hasMedia ? (
         <div
           ref={listRef}
-          className="flex flex-nowrap items-center gap-2 overflow-x-auto px-3 py-4"
+          className="flex flex-nowrap items-center gap-2 overflow-x-auto px-3 pb-4 pt-0"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
         >
           {mediaItems.map((item, index) => {

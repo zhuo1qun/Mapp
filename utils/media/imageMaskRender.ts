@@ -132,6 +132,34 @@ async function applyBitmapMask(
   }
 }
 
+function alphaBounds(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  padding = 2
+): { x: number; y: number; w: number; h: number } {
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (pixels[(y * width + x) * 4 + 3] <= 4) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  if (maxX < minX || maxY < minY) return { x: 0, y: 0, w: 1, h: 1 };
+  const x = Math.max(0, minX - padding);
+  const y = Math.max(0, minY - padding);
+  const x2 = Math.min(width, maxX + padding + 1);
+  const y2 = Math.min(height, maxY + padding + 1);
+  return { x, y, w: Math.max(1, x2 - x), h: Math.max(1, y2 - y) };
+}
+
 function cropCanvasToBounds(
   source: HTMLCanvasElement | OffscreenCanvas,
   bounds: { x: number; y: number; w: number; h: number }
@@ -206,8 +234,10 @@ export async function renderEditToCanvas(
     }
   }
 
+  let hasBitmapMask = false;
   for (const op of edit.operations) {
     if (op.type === 'mask' && (op.mask.type === 'bitmap' || op.mask.type === 'ai')) {
+      hasBitmapMask = true;
       await applyBitmapMask(ctx, op.mask, width, height);
     }
   }
@@ -215,6 +245,10 @@ export async function renderEditToCanvas(
   if (poly) {
     const bounds = pixelBoundsFromNormPoints(poly, width, height, Math.max(2, outlinePad + 1));
     return cropCanvasToBounds(out, bounds);
+  }
+
+  if (hasBitmapMask) {
+    return cropCanvasToBounds(out, alphaBounds(ctx, width, height));
   }
 
   return out;
@@ -265,7 +299,7 @@ export async function resolveVariantDisplayUrl(
       blobKey: key,
       width: 'width' in canvas ? canvas.width : undefined,
       height: 'height' in canvas ? canvas.height : undefined,
-      layout: polygonMaskFromOperations(edit.operations) ? 'tight' : variant.layout
+      layout: edit.operations.some((op) => op.type === 'lasso' || op.type === 'mask') ? 'tight' : variant.layout
     });
   }
 

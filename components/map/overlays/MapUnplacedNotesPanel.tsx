@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Note } from '../../../types';
 import { noteRendersAsBoardSticker } from '../../../utils/persistence/mediaDisplay';
 import { BoardMultiSelectToolbar } from '../../board/BoardMultiSelectToolbar';
@@ -33,6 +34,9 @@ type DepartingCard = {
 };
 
 const UNPLACED_DROP_ACCEPTED_EVENT = 'mapp:unplaced-note-drop-accepted';
+const UNPLACED_POINTER_DROP_EVENT = 'mapp:unplaced-note-pointer-drop';
+
+type PointerCardDrag = { note: Note; noteIds: string[]; pointerId: number; startX: number; startY: number; clientX: number; clientY: number; active: boolean };
 
 function mediaSource(note: Note): string | null {
   const src = boardNoteMediaSource(note);
@@ -94,6 +98,9 @@ export function UnplacedNotesSidebar({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const panelTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [departingCards, setDepartingCards] = useState<DepartingCard[]>([]);
+  const pointerCardDragRef = useRef<PointerCardDrag | null>(null);
+  const [pointerCardDrag, setPointerCardDrag] = useState<PointerCardDrag | null>(null);
+  const suppressCardClickRef = useRef<string | null>(null);
   /** 最新加入的记录始终排在最前；叠起时它也是唯一可直接拖动的对象。 */
   const orderedNotes = useMemo(
     () =>
@@ -486,7 +493,7 @@ export function UnplacedNotesSidebar({
                     mediaSrc={src}
                     expandedContent={false}
                     fallbackMedia={<span className="text-5xl">{note.emoji || '🖼️'}</span>}
-                    className="relative box-border border-[3px] text-left focus-visible:outline-none"
+                    className="relative box-border touch-none border-[3px] text-left focus-visible:outline-none"
                     style={cardStyle}
                     rootProps={{
                       type: 'button',
@@ -513,7 +520,50 @@ export function UnplacedNotesSidebar({
                           dragReleaseTimerRef.current = null;
                         }, 500);
                       },
+                      onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+                        if (!canInteractWithCard || event.pointerType === 'mouse') return;
+                        // 触屏使用即时 pointer 拖动，关闭浏览器需要长按才启动的原生 drag。
+                        event.currentTarget.draggable = false;
+                        const noteIds = selected ? selectedIds : [note.id];
+                        const drag = { note, noteIds, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, clientX: event.clientX, clientY: event.clientY, active: false };
+                        pointerCardDragRef.current = drag;
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      },
+                      onPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => {
+                        const current = pointerCardDragRef.current;
+                        if (!current || current.pointerId !== event.pointerId) return;
+                        const active = current.active || Math.hypot(event.clientX - current.startX, event.clientY - current.startY) >= 6;
+                        const next = { ...current, clientX: event.clientX, clientY: event.clientY, active };
+                        pointerCardDragRef.current = next;
+                        if (active) {
+                          event.preventDefault();
+                          suppressCardClickRef.current = note.id;
+                          setPointerCardDrag(next);
+                          setDraggedNoteIds(new Set(next.noteIds));
+                        }
+                      },
+                      onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => {
+                        const current = pointerCardDragRef.current;
+                        if (!current || current.pointerId !== event.pointerId) return;
+                        if (current.active) {
+                          window.dispatchEvent(new CustomEvent(UNPLACED_POINTER_DROP_EVENT, { detail: { placementDragMime, noteIds: current.noteIds, clientX: event.clientX, clientY: event.clientY } }));
+                        }
+                        pointerCardDragRef.current = null;
+                        setPointerCardDrag(null);
+                        setDraggedNoteIds(new Set());
+                        event.currentTarget.draggable = canInteractWithCard;
+                      },
+                      onPointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => {
+                        pointerCardDragRef.current = null;
+                        setPointerCardDrag(null);
+                        setDraggedNoteIds(new Set());
+                        event.currentTarget.draggable = canInteractWithCard;
+                      },
                       onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+                        if (suppressCardClickRef.current === note.id) {
+                          suppressCardClickRef.current = null;
+                          return;
+                        }
                         if (!isExpanded) {
                           setIsExpanded(true);
                           clearSelection();
@@ -594,6 +644,12 @@ export function UnplacedNotesSidebar({
           })}
         </div>
       </div>
+      {pointerCardDrag?.active && typeof document !== 'undefined' ? createPortal(
+        <div className="pointer-events-none fixed z-[2000] h-36 w-36 -translate-x-1/2 -translate-y-1/2 opacity-90 drop-shadow-2xl" style={{ left: pointerCardDrag.clientX, top: pointerCardDrag.clientY }}>
+          <BoardNoteObject note={pointerCardDrag.note} selected contentWidth={116} rootAs="div" paperBackground="#FFFDF5" mediaSrc={mediaSource(pointerCardDrag.note)} expandedContent={false} className="h-full w-full border-[3px]" style={{ width: 144, height: 144, backgroundColor: '#FFFDF5' }} />
+        </div>,
+        document.body
+      ) : null}
     </aside>
   );
 }

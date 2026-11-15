@@ -13,6 +13,36 @@ export function isDisplayableImageSrc(src: string | null | undefined): boolean {
   );
 }
 
+/**
+ * 按 media[] 的权威拖拽顺序还原当前已解析的展示地址。
+ * legacy images/sketch 只负责承载像素，不再决定照片与涂鸦的先后。
+ */
+export function noteOrderedDisplayMediaSources(
+  note: Pick<Note, 'images' | 'media' | 'sketch'>
+): string[] {
+  if (!note.media?.length) {
+    return [...(note.images || []), note.sketch]
+      .filter((src): src is string => isDisplayableImageSrc(src));
+  }
+
+  const ordered: string[] = [];
+  let imageIndex = 0;
+  let usedLegacySketch = false;
+  for (const item of note.media) {
+    if (item.kind === 'image') {
+      const src = note.images?.[imageIndex++];
+      if (isDisplayableImageSrc(src)) ordered.push(src!);
+      continue;
+    }
+    // legacy.sketch 是解析后的第一张涂鸦；目前持久化结构只为它保留单独像素槽。
+    if (!usedLegacySketch && isDisplayableImageSrc(note.sketch)) {
+      ordered.push(note.sketch!);
+      usedLegacySketch = true;
+    }
+  }
+  return ordered;
+}
+
 /** 媒体引用是否正在使用裁剪/贴纸 Variant 展示 */
 export function isImageRefCropActive(
   ref: Pick<NoteImageRef, 'variantId' | 'variantEnabled'> | null | undefined
@@ -62,6 +92,17 @@ export function noteRendersAsBoardSticker(
   note: Pick<Note, 'text' | 'images' | 'imageRefs' | 'media' | 'sketch'>
 ): boolean {
   return !noteHasBoardTextContent(note) && noteHasBoardMedia(note);
+}
+
+/**
+ * Mapping 的点位图形按媒体优先：只要记录带有媒体，即以缩略图贴纸呈现。
+ * 文本、emoji 和时间仍完整保留在预览卡 / 编辑器中，但不与媒体图钉争夺地图上的主视觉。
+ * 这与 Board 的「文本便签优先」规则有意不同，不能复用 `noteRendersAsBoardSticker`。
+ */
+export function noteRendersAsMapMediaPin(
+  note: Pick<Note, 'images' | 'imageRefs' | 'media' | 'sketch'>
+): boolean {
+  return noteHasBoardMedia(note);
 }
 
 /**

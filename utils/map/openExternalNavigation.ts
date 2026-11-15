@@ -40,9 +40,20 @@ function assignUrl(url: string): void {
   window.location.assign(url);
 }
 
-/** 用户从地图服务列表明确选择后，始终在新窗口打开网页导航。 */
-function openWebNavigation(url: string): void {
+/** 用户从地图服务列表明确选择后，网页端在新窗口打开点位。 */
+function openWebMap(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+/**
+ * 网页无法可靠侦测某个地图 App 是否已安装。移动端先尝试它的 scheme；
+ * 若页面没有离开，再以该服务的网页点位页兜底，且永远不传路线参数。
+ */
+function openNativeMapWithFallback(nativeUrl: string, fallbackUrl: string): void {
+  assignUrl(nativeUrl);
+  window.setTimeout(() => {
+    if (document.visibilityState === 'visible') openWebMap(fallbackUrl);
+  }, 900);
 }
 
 export type ExternalMapAppId = 'system' | 'apple' | 'amap' | 'baidu' | 'google';
@@ -54,20 +65,15 @@ export type ExternalMapAppChoice = {
 };
 
 /**
- * 可选地图应用列表（按平台略有不同）。
- * 「系统地图」走 geo:，Android 上通常会弹出系统应用选择器。
+ * 可选地图应用列表。首项固定为 Apple 地图，所有项只查看点位。
  */
 export function listExternalMapApps(): ExternalMapAppChoice[] {
   const apps: ExternalMapAppChoice[] = [
     {
-      id: 'system',
-      label: '系统地图',
-      hint: isLikelyAndroid() ? '由系统询问用哪个应用打开' : '尝试唤起已安装的地图应用'
+      id: 'apple',
+      label: 'Apple 地图'
     }
   ];
-  if (isLikelyIOS()) {
-    apps.push({ id: 'apple', label: 'Apple 地图' });
-  }
   apps.push(
     { id: 'amap', label: '高德地图' },
     { id: 'baidu', label: '百度地图' },
@@ -84,36 +90,75 @@ function geoUri(lat: number, lng: number, label: string): string {
 
 function appleMapsAppUri(lat: number, lng: number, label: string): string {
   const gcj = wgs84ToGcj02(lat, lng);
-  let url = `maps://?daddr=${gcj.lat},${gcj.lng}&dirflg=d`;
+  let url = `maps://?ll=${gcj.lat},${gcj.lng}`;
+  if (label) url += `&q=${encodeURIComponent(label)}`;
+  return url;
+}
+
+function appleMapsWebUri(lat: number, lng: number, label: string): string {
+  const gcj = wgs84ToGcj02(lat, lng);
+  let url = `https://maps.apple.com/?ll=${gcj.lat},${gcj.lng}`;
   if (label) url += `&q=${encodeURIComponent(label)}`;
   return url;
 }
 
 function googleMapsUri(lat: number, lng: number, label: string, preferApp: boolean): string {
-  const dest = `${lat},${lng}`;
+  const point = `${lat},${lng}`;
   if (preferApp && isLikelyIOS()) {
-    let url = `comgooglemaps://?daddr=${encodeURIComponent(dest)}&directionsmode=driving`;
+    let url = `comgooglemaps://?center=${encodeURIComponent(point)}&zoom=16`;
     if (label) url += `&q=${encodeURIComponent(label)}`;
     return url;
   }
-  if (preferApp && isLikelyAndroid()) {
-    return `google.navigation:q=${encodeURIComponent(dest)}`;
-  }
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(point)}`;
 }
 
 function amapWebUri(lat: number, lng: number, label: string): string {
   const gcj = wgs84ToGcj02(lat, lng);
-  const destination = `${gcj.lng},${gcj.lat},${label || '目的地'}`;
-  return `https://uri.amap.com/navigation?to=${encodeURIComponent(destination)}&mode=car&callnative=0`;
+  const point = `${gcj.lng},${gcj.lat}`;
+  return `https://uri.amap.com/marker?position=${encodeURIComponent(point)}&name=${encodeURIComponent(label || '点位')}&src=Mapp&callnative=0`;
 }
 
 function baiduWebUri(lat: number, lng: number, label: string): string {
-  const destination = `latlng:${lat},${lng}|name:${label || '目的地'}`;
-  return `https://api.map.baidu.com/direction?destination=${encodeURIComponent(destination)}&mode=driving&coord_type=wgs84&output=html&src=Mapp`;
+  return `https://api.map.baidu.com/marker?location=${encodeURIComponent(`${lat},${lng}`)}&title=${encodeURIComponent(label || '点位')}&coord_type=wgs84&output=html&src=Mapp`;
 }
 
-/** 打开指定地图服务的网页导航（新窗口）。 */
+function amapAppUri(lat: number, lng: number, label: string): string {
+  const gcj = wgs84ToGcj02(lat, lng);
+  const scheme = isLikelyIOS() ? 'iosamap' : 'androidamap';
+  return `${scheme}://viewMap?sourceApplication=Mapp&poiname=${encodeURIComponent(label || '点位')}&lat=${gcj.lat}&lon=${gcj.lng}&dev=0`;
+}
+
+function baiduAppUri(lat: number, lng: number, label: string): string {
+  return `baidumap://map/marker?location=${lat},${lng}&title=${encodeURIComponent(label || '点位')}&coord_type=wgs84&src=Mapp`;
+}
+
+/**
+ * 分享给其它应用时只使用 HTTPS 点位链接：自定义 App scheme 仅在当前设备可用，
+ * 不能作为微信等接收方的可靠内容。
+ */
+export function externalMapShareUrl(
+  appId: ExternalMapAppId,
+  lat: number,
+  lng: number,
+  opts?: { label?: string }
+): string | null {
+  if (!hasNavigableGpsCoords({ lat, lng })) return null;
+  const label = (opts?.label || '').trim() || 'mark';
+  switch (appId) {
+    case 'apple':
+      return appleMapsWebUri(lat, lng, label);
+    case 'amap':
+      return amapWebUri(lat, lng, label);
+    case 'baidu':
+      return baiduWebUri(lat, lng, label);
+    case 'google':
+    case 'system':
+    default:
+      return googleMapsUri(lat, lng, label, false);
+  }
+}
+
+/** 打开指定地图服务并标出点位；不发起路线导航。 */
 export function openExternalMapApp(
   appId: ExternalMapAppId,
   lat: number,
@@ -121,35 +166,58 @@ export function openExternalMapApp(
   opts?: { label?: string }
 ): void {
   if (!hasNavigableGpsCoords({ lat, lng })) return;
-  const label = (opts?.label || '').trim();
+  const label = (opts?.label || '').trim() || 'mark';
 
   switch (appId) {
     case 'system':
-      openWebNavigation(googleMapsUri(lat, lng, label, false));
+      if (isLikelyMobile()) {
+        assignUrl(geoUri(lat, lng, label));
+      } else {
+        openWebMap(googleMapsUri(lat, lng, label, false));
+      }
       return;
     case 'apple':
-      openWebNavigation(`https://maps.apple.com/?daddr=${encodeURIComponent(`${lat},${lng}`)}&dirflg=d`);
+      if (isLikelyIOS()) {
+        openNativeMapWithFallback(appleMapsAppUri(lat, lng, label), appleMapsWebUri(lat, lng, label));
+      } else {
+        openWebMap(appleMapsWebUri(lat, lng, label));
+      }
       return;
     case 'amap':
-      openWebNavigation(amapWebUri(lat, lng, label));
+      if (isLikelyMobile()) {
+        openNativeMapWithFallback(amapAppUri(lat, lng, label), amapWebUri(lat, lng, label));
+      } else {
+        openWebMap(amapWebUri(lat, lng, label));
+      }
       return;
     case 'baidu':
-      openWebNavigation(baiduWebUri(lat, lng, label));
+      if (isLikelyMobile()) {
+        openNativeMapWithFallback(baiduAppUri(lat, lng, label), baiduWebUri(lat, lng, label));
+      } else {
+        openWebMap(baiduWebUri(lat, lng, label));
+      }
       return;
     case 'google':
-      openWebNavigation(googleMapsUri(lat, lng, label, false));
+      if (isLikelyIOS()) {
+        openNativeMapWithFallback(googleMapsUri(lat, lng, label, true), googleMapsUri(lat, lng, label, false));
+      } else if (isLikelyAndroid()) {
+        assignUrl(geoUri(lat, lng, label));
+      } else {
+        openWebMap(googleMapsUri(lat, lng, label, false));
+      }
       return;
     default:
-      openWebNavigation(googleMapsUri(lat, lng, label, false));
+      openWebMap(googleMapsUri(lat, lng, label, false));
   }
 }
 
 /**
- * 一键导航：移动端优先 geo:（系统询问用何应用）；
+ * 旧的一键路线导航入口：移动端优先 geo:（系统询问用何应用）；
  * iOS 无多应用选择器时退到 Apple 地图 App（maps://，非网页）；
  * 桌面打开 Google 网页版。
  *
- * 若需要用户自选高德/百度等网页导航，请用 ExternalNavigationSheet + openExternalMapApp。
+ * 新界面中的「在地图中打开」请使用 ExternalNavigationSheet + openExternalMapApp，
+ * 该路径只会标出点位，不会创建路线。
  */
 export function openExternalNavigation(
   lat: number,
@@ -157,7 +225,7 @@ export function openExternalNavigation(
   opts?: { label?: string }
 ): void {
   if (!hasNavigableGpsCoords({ lat, lng })) return;
-  const label = (opts?.label || '').trim();
+  const label = (opts?.label || '').trim() || 'mark';
 
   if (isLikelyAndroid()) {
     // Android：geo: 会弹出系统「用哪个应用打开」

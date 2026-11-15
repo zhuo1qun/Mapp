@@ -8,11 +8,12 @@ import {
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { DeferredNoteEditor } from './note-editor/DeferredNoteEditor';
 import { Check, Minus, Settings } from 'lucide-react';
-import { generateId } from '../utils';
+import { generateId, parseNoteContent } from '../utils';
 import { DEFAULT_THEME_COLOR, TAG_COLORS } from '../constants';
 import { mapChromeContentStyle, mapChromeSurfaceStyle } from '../utils/map/mapChromeStyle';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
+import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
 import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
@@ -234,16 +235,18 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const boardLongPressPreviewNoteRef = useRef<Note | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
+  const [pendingKeyboardDeleteIds, setPendingKeyboardDeleteIds] = useState<string[] | null>(null);
   const {
     editingNote,
     setEditingNote,
     introNote,
+    setIntroNote,
     isIntroPending,
+    setIsIntroPending,
     introNoteMotion,
     enteringNoteIds,
     markBoardNotesEntering,
     deletingNoteIds,
-    introStartedAtRef,
     boardDisplayNotes,
     addBoardNoteWithEnter,
     beginNewBoardNoteIntro,
@@ -267,6 +270,50 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
       setBrowseTimeFilterPanelOpen(false);
     }
   });
+  const [inlineTitleEdit, setInlineTitleEdit] = useState<{ noteId: string; value: string } | null>(null);
+  const inlineTitleEditRef = useRef<{ noteId: string; value: string } | null>(null);
+  const committedInlineIntroIdRef = useRef<string | null>(null);
+
+  const updateInlineTitle = useCallback((value: string) => {
+    const current = inlineTitleEditRef.current;
+    if (!current) return;
+    const next = { ...current, value };
+    inlineTitleEditRef.current = next;
+    setInlineTitleEdit(next);
+  }, []);
+
+  const cancelInlineTitle = useCallback(() => {
+    if (!inlineTitleEditRef.current) return;
+    inlineTitleEditRef.current = null;
+    setInlineTitleEdit(null);
+    cancelPendingNoteIntro();
+  }, [cancelPendingNoteIntro]);
+
+  const commitInlineTitle = useCallback(() => {
+    const current = inlineTitleEditRef.current;
+    if (!current) return;
+    inlineTitleEditRef.current = null;
+    setInlineTitleEdit(null);
+    const title = current.value.trim();
+    if (!title || !introNote || introNote.id !== current.noteId) {
+      cancelPendingNoteIntro();
+      return;
+    }
+    const committed = { ...introNote, text: title };
+    committedInlineIntroIdRef.current = committed.id;
+    setIntroNote(committed);
+    setIsIntroPending(false);
+    setEditingNote(null);
+    onToggleEditor(false);
+    onAddNote?.(committed);
+  }, [cancelPendingNoteIntro, introNote, onAddNote, onToggleEditor, setEditingNote, setIntroNote, setIsIntroPending]);
+
+  useEffect(() => {
+    const committedId = committedInlineIntroIdRef.current;
+    if (!committedId || !notes.some((note) => note.id === committedId)) return;
+    committedInlineIntroIdRef.current = null;
+    setIntroNote((current) => (current?.id === committedId ? null : current));
+  }, [notes, setIntroNote]);
   
   // Calculate initial transform: cache -> fit all objects -> default
   const calculateInitialTransform = useCallback(() => {
@@ -601,6 +648,24 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     window.addEventListener('keydown', handleLayerShortcut);
     return () => window.removeEventListener('keydown', handleLayerShortcut);
   }, [applyBoardLayerOrder, editingNote, selectedNoteIds.size]);
+
+  useEffect(() => {
+    const handleDeleteShortcut = (event: KeyboardEvent) => {
+      if (
+        (event.key !== 'Delete' && event.key !== 'Backspace') ||
+        !selectedNoteIds.size ||
+        editingNote ||
+        inlineTitleEditRef.current
+      ) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], .ProseMirror, [data-chrome-window-nested]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingKeyboardDeleteIds(Array.from(selectedNoteIds));
+    };
+    window.addEventListener('keydown', handleDeleteShortcut);
+    return () => window.removeEventListener('keydown', handleDeleteShortcut);
+  }, [editingNote, selectedNoteIds]);
 
   useEffect(() => {
     if (selectedNoteIds.size <= 1) {
@@ -1242,8 +1307,13 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     const note = boardLongPressPreviewNoteRef.current;
     if (!note) return;
     boardLongPressPreviewNoteRef.current = null;
-    openNewBoardNoteEditorAfterIntro(Date.now() - introStartedAtRef.current);
-  }, [openNewBoardNoteEditorAfterIntro]);
+    const edit = { noteId: note.id, value: '' };
+    inlineTitleEditRef.current = edit;
+    setInlineTitleEdit(edit);
+    setEditingNote(null);
+    setIsIntroPending(false);
+    onToggleEditor(false);
+  }, [onToggleEditor, setEditingNote, setIsIntroPending]);
 
   const cancelBoardLongPressPreview = useCallback(() => {
     boardLongPressPreviewNoteRef.current = null;
@@ -1422,6 +1492,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     setDrawingFrameEnd,
     startBoardLongPress,
     cancelBrowseLongPress,
+    onBlankPointerDown: commitInlineTitle,
     isBoxSelectToolActive: () => boxSelectToolActiveRef.current,
     isShiftPressed,
     draggingNoteId,
@@ -2026,6 +2097,11 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
             introNoteMotion={introNoteMotion}
             enteringNoteIds={enteringNoteIds}
             deletingNoteIds={deletingNoteIds}
+            inlineEditingNoteId={inlineTitleEdit?.noteId}
+            inlineTitleDraft={inlineTitleEdit?.value}
+            onInlineTitleChange={updateInlineTitle}
+            onInlineTitleCommit={commitInlineTitle}
+            onInlineTitleCancel={cancelInlineTitle}
             onPointerDown={handleNotePointerDown}
             onPointerMove={handleNotePointerMove}
             onPointerUp={handleNotePointerUp}
@@ -2607,6 +2683,25 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           }}
         />
       )}
+
+      <DeleteConfirmDialog
+        open={!!pendingKeyboardDeleteIds?.length}
+        variant={(pendingKeyboardDeleteIds?.length ?? 0) > 1 ? 'notes-batch' : 'note'}
+        titleHint={
+          pendingKeyboardDeleteIds?.length === 1
+            ? parseNoteContent(notes.find((note) => note.id === pendingKeyboardDeleteIds[0])?.text || '').title || '无标题'
+            : undefined
+        }
+        batchCount={pendingKeyboardDeleteIds?.length}
+        themeColor={themeColor}
+        panelChromeStyle={panelChromeStyle}
+        onCancel={() => setPendingKeyboardDeleteIds(null)}
+        onConfirm={() => {
+          const ids = pendingKeyboardDeleteIds ?? [];
+          setPendingKeyboardDeleteIds(null);
+          if (ids.length) deleteBoardNotesWithExit(ids);
+        }}
+      />
 
       {/* Settings hosted by ChromeToolbarSlot */}
     </div>

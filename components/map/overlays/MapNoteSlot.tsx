@@ -5,6 +5,7 @@ import type { NoteDraftOutcome } from '../../../utils/note/draftLifecycle';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from '../../ui/ChromeNoteSlot';
 import { DeferredNoteEditor } from '../../note-editor/DeferredNoteEditor';
+import { NOTE_LOCATION_NAVIGATION_ZOOM } from '../../note-editor/NoteLocationPreview';
 import { NotePreviewCard } from './NotePreviewCard';
 
 type MapNoteSlotProps = {
@@ -125,10 +126,18 @@ export function MapNoteSlot({
               note={selectedNote}
               currentImageIndex={currentImageIndex}
               onImageIndexChange={onImageIndexChange}
+              chromeSurfaceStyle={contentSurfaceStyle}
               chromeAppearance={appearance}
-              themeColor={themeColor}
               onOpenEditor={canModifyNote(selectedNote) ? onOpenSelectedNote : undefined}
               onDelete={isEditMode && canModifyNote(selectedNote) ? onDelete : undefined}
+              onFocusMap={(note) => {
+                if (!mapInstance) return;
+                mapInstance.flyTo(
+                  [note.coords.lat, note.coords.lng],
+                  NOTE_LOCATION_NAVIGATION_ZOOM,
+                  { duration: 0.9 }
+                );
+              }}
             />
           ) : null
         };

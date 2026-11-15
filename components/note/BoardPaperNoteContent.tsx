@@ -1,16 +1,17 @@
 import type { Note } from '../../types';
 import { NoteCardTextContent } from './NoteCardTextContent';
 import { ExternalLink } from 'lucide-react';
+import { noteOrderedDisplayMediaSources } from '../../utils/persistence/mediaDisplay';
 
 type Props = { note: Note; contentWidth: number; compact?: boolean; visualScale?: number; expanded?: boolean; detailLineCount?: number };
 
 /** Board 与待定箱共用的纸质便签内容。 */
 export function BoardPaperNoteContent({ note, contentWidth, compact = false, visualScale = 1, expanded = false, detailLineCount }: Props) {
-  const background = note.sketch || note.images?.[0];
+  const background = noteOrderedDisplayMediaSources(note)[0];
   const dense = compact && visualScale < 1;
   return <div className={`relative flex h-full w-full flex-col overflow-hidden text-gray-800 ${dense ? 'gap-1.5 p-3' : 'gap-2 p-6'}`}>
     {background ? <img src={background} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale opacity-35" /> : null}
-    <NoteCardTextContent className={`relative z-10 ${dense ? 'gap-1' : ''}`} text={note.text || ''} emoji={note.emoji} fontSize={note.fontSize} isBold={note.isBold} contentWidth={contentWidth} compact={compact} visualScale={visualScale} expanded={expanded} detailLineCount={detailLineCount} emptyClassName={dense ? 'text-xs' : 'text-base'} />
+    <NoteCardTextContent className={`relative z-10 ${dense ? 'gap-1' : ''}`} text={note.text || ''} emoji={note.emoji} fontSize={note.fontSize} isBold={note.isBold} contentWidth={contentWidth} compact={compact} visualScale={visualScale} expanded={expanded} detailLineCount={detailLineCount} />
     {note.linkPreview ? (
       <a
         href={note.linkPreview.url}

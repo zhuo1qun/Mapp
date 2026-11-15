@@ -55,6 +55,8 @@ export const MAP_STYLE_OPTIONS: MapStyleOption[] = [
     url: MAP_SATELLITE_URL,
     attribution: MAP_SATELLITE_ATTRIBUTION,
     maxNativeZoom: MAP_SATELLITE_MAX_NATIVE_ZOOM,
+    // 上海（31.2304, 121.4737）附近：避免海面瓦片在缩略卡中看起来像纯色。
+    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/10/418/857'
   },
   {
     id: 'carto-light-nolabels',
@@ -64,14 +66,14 @@ export const MAP_STYLE_OPTIONS: MapStyleOption[] = [
     url: MAP_LIGHT_GRAY_URL,
     attribution: MAP_ATTRIBUTION,
     maxNativeZoom: 16,
-    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/10/512/512'
+    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/10/418/857'
   },
   {
     id: 'carto-light',
     name: '地形图（含地名与道路）',
     url: MAP_TOPO_URL,
     attribution: MAP_ATTRIBUTION,
-    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/10/512/512'
+    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/10/418/857'
   },
   {
     id: 'carto-dark',
@@ -80,14 +82,14 @@ export const MAP_STYLE_OPTIONS: MapStyleOption[] = [
     url: MAP_DARK_GRAY_URL,
     attribution: MAP_ATTRIBUTION,
     maxNativeZoom: 16,
-    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/10/512/512'
+    preview: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/10/418/857'
   },
   {
     id: 'osm-standard',
     name: 'OpenStreetMap Standard',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    preview: 'https://tile.openstreetmap.org/10/512/512.png'
+    preview: 'https://tile.openstreetmap.org/10/857/418.png'
   }
 ];
 

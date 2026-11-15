@@ -1,4 +1,111 @@
 (() => {
+  // utils/map/mapChromeStyle.ts
+  var DEFAULT_MAP_UI_CHROME_OPACITY = 0.6;
+  var DEFAULT_MAP_UI_CHROME_BLUR_PX = 4;
+  function chromeGradientBackground(dark, opacity) {
+    const o = Math.min(1, Math.max(0, opacity));
+    const rgb = dark ? "24 24 27" : "255 255 255";
+    const top = `var(--map-ui-chrome-opacity-top, var(--map-ui-chrome-opacity, ${o}))`;
+    const bottom = `var(--map-ui-chrome-opacity-bottom, var(--map-ui-chrome-opacity, ${o}))`;
+    return `linear-gradient(180deg, rgb(${rgb} / ${top}) 0%, rgb(${rgb} / ${bottom}) 100%)`;
+  }
+  function mapChromeModalBackdropStyle(opacity, blurPx) {
+    const o = Math.min(1, Math.max(0, opacity));
+    const b = Math.min(48, Math.max(0, blurPx));
+    const style = {
+      // 透明面板对应更轻的背景压暗；满不透明面板也只到 20%，保持地图/画布仍可辨认。
+      backgroundColor: `rgba(0, 0, 0, ${0.04 + o * 0.16})`
+    };
+    if (b > 0) {
+      const f = `blur(${b}px)`;
+      style.backdropFilter = f;
+      style.WebkitBackdropFilter = f;
+    }
+    return style;
+  }
+  var MODAL_BACKDROP_MASK_STYLE = mapChromeModalBackdropStyle(
+    DEFAULT_MAP_UI_CHROME_OPACITY,
+    DEFAULT_MAP_UI_CHROME_BLUR_PX
+  );
+  function chromeIsDark(appearance) {
+    return appearance === "dark";
+  }
+  var MAP_CHROME_SURFACE_BORDER_CLASS = "chrome-glass-edge border border-gray-100/80";
+  var MAP_CHROME_SURFACE_SHELL_CLASS = `rounded-lg shadow-lg ${MAP_CHROME_SURFACE_BORDER_CLASS}`;
+  function mapChromeSurfaceInlineCss(opacity, blurPx, appearance = "light") {
+    const o = Math.min(1, Math.max(0, opacity));
+    const b = Math.min(48, Math.max(0, blurPx));
+    const dark = chromeIsDark(appearance);
+    const parts = [
+      "background-color:transparent",
+      `background-image:${chromeGradientBackground(dark, o)}`,
+      // 与 ChromeWindow/NoteEditor 相同：描边仅作为材质边缘，不单独染主题色。
+      `border:1px solid ${dark ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"}`,
+      "border-radius:0.5rem",
+      "box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1)"
+    ];
+    if (b > 0) {
+      parts.push(`backdrop-filter:blur(${b}px)`, `-webkit-backdrop-filter:blur(${b}px)`);
+    }
+    return parts.join(";");
+  }
+  function mapChromeTextLabelInlineCss(opacity, blurPx, _themeColor, appearance = "light") {
+    const o = Math.min(1, Math.max(0, opacity));
+    return mapChromeSurfaceInlineCss(o, blurPx, appearance);
+  }
+
+  // utils/persistence/imageAssetStore.ts
+  function isMediaRefId(value) {
+    return typeof value === "string" && value.startsWith("img-");
+  }
+
+  // utils/persistence/mediaDisplay.ts
+  function isDisplayableImageSrc(src) {
+    if (!src) return false;
+    if (isMediaRefId(src)) return false;
+    return src.startsWith("data:image/") || src.startsWith("blob:") || src.startsWith("http://") || src.startsWith("https://");
+  }
+  function noteOrderedDisplayMediaSources(note) {
+    if (!note.media?.length) {
+      return [...note.images || [], note.sketch].filter((src) => isDisplayableImageSrc(src));
+    }
+    const ordered = [];
+    let imageIndex = 0;
+    let usedLegacySketch = false;
+    for (const item of note.media) {
+      if (item.kind === "image") {
+        const src = note.images?.[imageIndex++];
+        if (isDisplayableImageSrc(src)) ordered.push(src);
+        continue;
+      }
+      if (!usedLegacySketch && isDisplayableImageSrc(note.sketch)) {
+        ordered.push(note.sketch);
+        usedLegacySketch = true;
+      }
+    }
+    return ordered;
+  }
+  function isImageRefCropActive(ref) {
+    return !!ref?.variantId && ref.variantEnabled !== false;
+  }
+  function isMediaItemCropActive(item) {
+    return isImageRefCropActive(item);
+  }
+  function noteHasActiveFirstMediaCrop(note) {
+    if (note.media && note.media.length > 0) {
+      return isMediaItemCropActive(note.media[0]);
+    }
+    return isImageRefCropActive(note.imageRefs?.[0]);
+  }
+  function noteHasBoardMedia(note) {
+    return Boolean(
+      note.media?.length || note.imageRefs?.length || note.images?.length || note.sketch
+    );
+  }
+  function noteRendersAsMapMediaPin(note) {
+    return noteHasBoardMedia(note);
+  }
+
   // utils/theme/themeChrome.ts
   var THEME_CHROME_LAB_L_THRESHOLD = 80;
   var D65_YN = 1;
@@ -48,102 +155,6 @@
     return L > THEME_CHROME_LAB_L_THRESHOLD ? "#000000" : "#ffffff";
   }
 
-  // utils/map/mapChromeStyle.ts
-  var DEFAULT_MAP_UI_CHROME_OPACITY = 0.6;
-  var DEFAULT_MAP_UI_CHROME_BLUR_PX = 4;
-  function chromeGradientBackground(dark, opacity) {
-    const o = Math.min(1, Math.max(0, opacity));
-    const rgb = dark ? "24 24 27" : "255 255 255";
-    const top = `var(--map-ui-chrome-opacity-top, var(--map-ui-chrome-opacity, ${o}))`;
-    const bottom = `var(--map-ui-chrome-opacity-bottom, var(--map-ui-chrome-opacity, ${o}))`;
-    return `linear-gradient(180deg, rgb(${rgb} / ${top}) 0%, rgb(${rgb} / ${bottom}) 100%)`;
-  }
-  function mapChromeModalBackdropStyle(opacity, blurPx) {
-    const o = Math.min(1, Math.max(0, opacity));
-    const b = Math.min(48, Math.max(0, blurPx));
-    const style = {
-      // 透明面板对应更轻的背景压暗；满不透明面板也只到 20%，保持地图/画布仍可辨认。
-      backgroundColor: `rgba(0, 0, 0, ${0.04 + o * 0.16})`
-    };
-    if (b > 0) {
-      const f = `blur(${b}px)`;
-      style.backdropFilter = f;
-      style.WebkitBackdropFilter = f;
-    }
-    return style;
-  }
-  var MODAL_BACKDROP_MASK_STYLE = mapChromeModalBackdropStyle(
-    DEFAULT_MAP_UI_CHROME_OPACITY,
-    DEFAULT_MAP_UI_CHROME_BLUR_PX
-  );
-  var MAP_CHROME_SURFACE_BORDER_CLASS = "chrome-glass-edge border border-gray-100/80";
-  var MAP_CHROME_SURFACE_SHELL_CLASS = `rounded-lg shadow-lg ${MAP_CHROME_SURFACE_BORDER_CLASS}`;
-  function mapChromeSurfaceInlineCss(opacity, blurPx) {
-    const o = Math.min(1, Math.max(0, opacity));
-    const b = Math.min(48, Math.max(0, blurPx));
-    const parts = [
-      "background-color:transparent",
-      `background-image:${chromeGradientBackground(false, o)}`,
-      "border:1px solid rgba(243,244,246,0.8)",
-      "border-radius:0.5rem",
-      "box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1)"
-    ];
-    if (b > 0) {
-      parts.push(`backdrop-filter:blur(${b}px)`, `-webkit-backdrop-filter:blur(${b}px)`);
-    }
-    return parts.join(";");
-  }
-  function mapChromeTextLabelInlineCss(opacity, blurPx, themeColor, appearance = "light") {
-    const themeRgb = parseHexToRgb(themeColor);
-    if (!themeRgb) return mapChromeSurfaceInlineCss(opacity, blurPx);
-    const o = Math.min(1, Math.max(0, opacity));
-    if (appearance === "dark") {
-      return [
-        mapChromeSurfaceInlineCss(o, blurPx),
-        "background-color:transparent",
-        `background-image:linear-gradient(180deg,rgba(15,23,42,var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(15,23,42,var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
-        `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${Math.min(0.58, o * 0.65)})`
-      ].join(";");
-    }
-    const tint = 0.13;
-    const background = [themeRgb.r, themeRgb.g, themeRgb.b].map((channel) => Math.round(255 + (channel - 255) * tint)).join(",");
-    const borderOpacity = Math.min(0.72, o * 0.75);
-    return [
-      mapChromeSurfaceInlineCss(o, blurPx),
-      "background-color:transparent",
-      `background-image:linear-gradient(180deg,rgba(${background},var(--map-ui-chrome-opacity-top,var(--map-ui-chrome-opacity,${o}))) 0%,rgba(${background},var(--map-ui-chrome-opacity-bottom,var(--map-ui-chrome-opacity,${o}))) 100%)`,
-      `border-color:rgba(${themeRgb.r},${themeRgb.g},${themeRgb.b},${borderOpacity})`
-    ].join(";");
-  }
-
-  // utils/persistence/imageAssetStore.ts
-  function isMediaRefId(value) {
-    return typeof value === "string" && value.startsWith("img-");
-  }
-
-  // utils/persistence/mediaDisplay.ts
-  function isDisplayableImageSrc(src) {
-    if (!src) return false;
-    if (isMediaRefId(src)) return false;
-    return src.startsWith("data:image/") || src.startsWith("blob:") || src.startsWith("http://") || src.startsWith("https://");
-  }
-  function noteHasBoardTextContent(note) {
-    const text = note.text || "";
-    const firstNewline = text.indexOf("\n");
-    const rawTitle = firstNewline === -1 ? text : text.slice(0, firstNewline);
-    const detail = firstNewline === -1 ? "" : text.slice(firstNewline + 1);
-    const title = rawTitle.replace(/^#+\s+/, "").trim();
-    return title.length > 0 || detail.trim().length > 0;
-  }
-  function noteHasBoardMedia(note) {
-    return Boolean(
-      note.media?.length || note.imageRefs?.length || note.images?.length || note.sketch
-    );
-  }
-  function noteRendersAsBoardSticker(note) {
-    return !noteHasBoardTextContent(note) && noteHasBoardMedia(note);
-  }
-
   // utils/map/createMapNoteIcon.ts
   function escapeHtmlAttr(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -152,14 +163,15 @@
     const mapped = pinSize ? (pinSize - 0.5) * (1.2 - 0.2) / (2 - 0.5) + 0.2 : 1;
     return (isFavorite ? 2 : 1) * mapped;
   }
+  function mapImageScale(imageSize, isFavorite) {
+    const size = imageSize ?? 1;
+    return (isFavorite ? 2 : 1) * size;
+  }
   function photoThumbEdge(scale) {
     return Math.max(24, Math.round(96 * scale));
   }
   function firstDisplayableMapPhotoSrc(note) {
-    const img = note.images?.[0];
-    if (isDisplayableImageSrc(img)) return img;
-    if (isDisplayableImageSrc(note.sketch)) return note.sketch;
-    return null;
+    return noteOrderedDisplayMediaSources(note)[0] || null;
   }
   function clusterBadgeHtml(clusterCount, themeColor, scale, hang) {
     if (!clusterCount || clusterCount <= 1) return "";
@@ -178,34 +190,43 @@
     return `<div class="${cls}" style="position:relative;width:${width}px;height:${height}px;transform-origin:${width / 2}px ${height}px;overflow:visible;">${inner}</div>`;
   }
   function buildMapNoteIconModel(note, opts) {
-    const { themeColor, clusterCount, pinSize, motion } = opts;
-    const scale = mapPinScale(pinSize, note.isFavorite === true);
+    const { themeColor, clusterCount, pinSize, imageSize, motion } = opts;
+    const pinScale = mapPinScale(pinSize, note.isFavorite === true);
     const photoSrc = firstDisplayableMapPhotoSrc(note);
-    const asPhotoSticker = noteRendersAsBoardSticker(note);
-    const badge = clusterBadgeHtml(clusterCount, themeColor, scale, asPhotoSticker);
+    const asPhotoSticker = noteRendersAsMapMediaPin(note);
+    const usesImageOutline = note.hasActiveMediaCrop ?? noteHasActiveFirstMediaCrop(note);
     if (asPhotoSticker) {
-      const edge = photoThumbEdge(scale);
+      const imageScale = mapImageScale(imageSize, note.isFavorite === true);
+      const edge = photoThumbEdge(imageScale);
       const radius = Math.max(8, Math.round(edge * 0.16));
-      const media = photoSrc ? `<img src="${escapeHtmlAttr(photoSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" />` : `<div style="width:100%;height:100%;background:${themeColor};opacity:0.35;"></div>`;
-      const inner = `<div style="
+      const image = photoSrc ? `<img src="${escapeHtmlAttr(photoSrc)}" alt="" draggable="false" style="width:100%;height:100%;object-fit:${usesImageOutline ? "contain" : "cover"};display:block;" />` : `<div style="width:${Math.max(10, Math.round(edge * 0.18))}px;height:${Math.max(10, Math.round(edge * 0.18))}px;background:${themeColor};border-radius:50%;opacity:0.4;"></div>`;
+      const media = usesImageOutline ? `<div style="
+          width:${edge}px;height:${edge}px;display:flex;align-items:center;justify-content:center;
+          overflow:visible;background:transparent;
+          filter:
+            drop-shadow(1.25px 0 0 ${themeColor}) drop-shadow(-1.25px 0 0 ${themeColor})
+            drop-shadow(0 1.25px 0 ${themeColor}) drop-shadow(0 -1.25px 0 ${themeColor})
+            drop-shadow(0 8px 7px rgba(15,23,42,0.24)) drop-shadow(0 1px 1px rgba(15,23,42,0.12));
+        ">${image}</div>` : `<div style="
           width:${edge}px;height:${edge}px;border-radius:${radius}px;overflow:hidden;
-          background:#f3f4f6;box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
-          border:2px solid ${themeColor};
-        ">${media}</div>${badge}`;
+          background:#f3f4f6;border:2px solid ${themeColor};box-sizing:border-box;
+          box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
+        ">${image}</div>`;
+      const inner = `${media}${clusterBadgeHtml(clusterCount, themeColor, imageScale, true)}`;
       return {
         html: motionWrap(inner, edge, edge, motion),
         size: [edge, edge],
         anchor: [edge / 2, edge]
       };
     }
-    const size = 40 * scale;
+    const size = 40 * pinScale;
     let content = "";
     if (photoSrc) {
       content = `<div style="position:absolute;inset:-25%;overflow:hidden;transform:rotate(45deg);transform-origin:center;">
       <img src="${escapeHtmlAttr(photoSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;transform:scale(1.5);transform-origin:center;" />
     </div>`;
     } else if (note.emoji) {
-      content = `<span style="transform:rotate(45deg);font-size:${20 * scale}px;line-height:1;z-index:1;position:relative;">${escapeHtmlAttr(note.emoji)}</span>`;
+      content = `<span style="transform:rotate(45deg);font-size:${20 * pinScale}px;line-height:1;z-index:1;position:relative;">${escapeHtmlAttr(note.emoji)}</span>`;
     }
     const teardrop = `<div style="
       background-color:${themeColor};
@@ -214,7 +235,7 @@
       display:flex;align-items:center;justify-content:center;
       box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
       border:3px solid ${themeColor};overflow:hidden;
-    ">${content}</div>${badge}`;
+    ">${content}</div>${clusterBadgeHtml(clusterCount, themeColor, pinScale, false)}`;
     return {
       html: motionWrap(teardrop, size, size, motion),
       size: [size, size],
@@ -304,11 +325,12 @@
     });
     return clusters;
   }
-  function pinIconHtml(note, themeColor, clusterCount, pinSize) {
+  function pinIconHtml(note, themeColor, clusterCount, pinSize, imageSize) {
     const model = buildMapNoteIconModel(note, {
       themeColor,
       clusterCount,
-      pinSize
+      pinSize,
+      imageSize
     });
     return {
       html: model.html,
@@ -457,7 +479,13 @@
       lastClusters.forEach((cl) => {
         if (cl.notes.length === 1) {
           const note = cl.notes[0];
-          const { html, size, anchor } = pinIconHtml(note, payload.themeColor, void 0, payload.pinSize);
+          const { html, size, anchor } = pinIconHtml(
+            note,
+            payload.themeColor,
+            void 0,
+            payload.pinSize,
+            payload.imageSize ?? 1
+          );
           const m = L.marker(cl.position, {
             icon: L.divIcon({ className: "custom-icon", html, iconSize: size, iconAnchor: anchor })
           });
@@ -485,7 +513,13 @@
           m.addTo(markerLayer);
         } else {
           const note = cl.notes[0];
-          const { html, size, anchor } = pinIconHtml(note, payload.themeColor, cl.notes.length, payload.pinSize);
+          const { html, size, anchor } = pinIconHtml(
+            note,
+            payload.themeColor,
+            cl.notes.length,
+            payload.pinSize,
+            payload.imageSize ?? 1
+          );
           const m = L.marker(cl.position, {
             icon: L.divIcon({ className: "custom-icon", html, iconSize: size, iconAnchor: anchor })
           });

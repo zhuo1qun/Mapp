@@ -1192,6 +1192,10 @@ body {
     overflow-x: hidden;
     border-radius: 1rem !important;
     z-index: var(--z-map-sheet) !important;
+    /* ChromeWindow 在跨越断点的首帧可能仍带着宽屏居中的 inline transform。
+     * sheet 的左右锚点已完整定义几何，必须由它自身接管 transform，避免横向平移半屏。 */
+    transform: none !important;
+    translate: none !important;
   }
 
   /* 需要完整操作空间的二级窗口：窄屏占满安全视口，宽屏仍由 ChromeWindow 居中。 */
@@ -1254,6 +1258,12 @@ body {
     bottom: auto !important;
     transform: translate(-50%, -50%);
   }
+}
+
+/* 从 NoteEditor / 详情预览开启的二级窗口不能落在其窗口壳下面。
+ * 放在窄屏 sheet 规则之后，才能同时覆盖宽屏 anchored panel 与窄屏 sheet 的默认层级。 */
+.chrome-window-above-note-slot {
+  z-index: var(--z-note-editor-transient) !important;
 }
 
 /* 图层中的末级便签行不再固定使用浅灰底；深色地图上保持与玻璃容器同一明度层级。 */
@@ -1770,12 +1780,12 @@ body {
 
 /* Board 和待定箱使用同一套对象投影：便签是纸片，图片是脱离底板的贴纸。 */
 .board-note-elevation {
-  box-shadow: var(--workspace-object-shadow, 0 12px 28px rgb(15 23 42 / 0.1), 0 2px 8px rgb(15 23 42 / 0.045));
+  box-shadow: var(--workspace-object-shadow, 0 20px 26px -6px rgb(15 23 42 / 0.11), 0 1px 3px -2px rgb(15 23 42 / 0.07));
   transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .board-sticker-elevation {
-  filter: var(--workspace-object-sticker-shadow, drop-shadow(0 10px 28px rgb(15 23 42 / 0.18)));
+  filter: var(--workspace-object-sticker-shadow, drop-shadow(0 20px 18px rgb(15 23 42 / 0.2)) drop-shadow(0 1px 1.5px rgb(15 23 42 / 0.1)));
   transition: filter 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -1783,12 +1793,14 @@ body {
  * 传给内部的纸片或贴纸：hover、选中、拖动始终复用同一个放大后的 blur。 */
 .workspace-object-elevation {
   --workspace-object-shadow-base:
-    0 12px 28px rgb(15 23 42 / 0.1),
-    0 2px 8px rgb(15 23 42 / 0.045);
+    0 20px 26px -6px rgb(15 23 42 / 0.11),
+    0 1px 3px -2px rgb(15 23 42 / 0.07);
   --workspace-object-shadow-lifted:
     0 12px 64px rgb(15 23 42 / 0.075),
     0 2px 24px rgb(15 23 42 / 0.035);
-  --workspace-object-sticker-shadow-base: drop-shadow(0 10px 28px rgb(15 23 42 / 0.18));
+  --workspace-object-sticker-shadow-base:
+    drop-shadow(0 20px 18px rgb(15 23 42 / 0.2))
+    drop-shadow(0 1px 1.5px rgb(15 23 42 / 0.1));
   --workspace-object-sticker-shadow-lifted: drop-shadow(0 10px 64px rgb(15 23 42 / 0.12));
   --workspace-object-shadow: var(--workspace-object-shadow-base);
   --workspace-object-sticker-shadow: var(--workspace-object-sticker-shadow-base);

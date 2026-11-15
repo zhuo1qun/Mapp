@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 
 const UNPLACED_BOARD_NOTE_MIME = 'application/x-mapp-unplaced-board-note';
 const UNPLACED_DROP_ACCEPTED_EVENT = 'mapp:unplaced-note-drop-accepted';
+const UNPLACED_POINTER_DROP_EVENT = 'mapp:unplaced-note-pointer-drop';
 
 /**
  * 与地图的待定位落点一致：专用原生事件只接收待定箱卡片，
@@ -64,12 +65,26 @@ export function useBoardUnplacedNoteDropHandler({
       );
     };
 
+    const onPointerDrop = (event: Event) => {
+      const detail = (event as CustomEvent<{ placementDragMime?: string; noteIds?: string[]; clientX?: number; clientY?: number }>).detail;
+      if (detail?.placementDragMime !== UNPLACED_BOARD_NOTE_MIME || !Array.isArray(detail.noteIds)) return;
+      const pointer = { clientX: Number(detail.clientX), clientY: Number(detail.clientY) };
+      const rect = canvas.getBoundingClientRect();
+      if (!Number.isFinite(pointer.clientX) || !Number.isFinite(pointer.clientY) || pointer.clientX < rect.left || pointer.clientX > rect.right || pointer.clientY < rect.top || pointer.clientY > rect.bottom || isIgnoredDropTarget?.(pointer)) return;
+      const noteIds = detail.noteIds.filter((id): id is string => typeof id === 'string' && !!id);
+      if (!noteIds.length) return;
+      onDropNotes(noteIds, pointer);
+      window.dispatchEvent(new CustomEvent(UNPLACED_DROP_ACCEPTED_EVENT, { detail: { placementDragMime: UNPLACED_BOARD_NOTE_MIME, noteIds } }));
+    };
+
     // capture 阶段先接手，阻止 React 的文件导入 onDrop 与本次落点竞争。
     canvas.addEventListener('dragover', onDragOver, true);
     canvas.addEventListener('drop', onDrop, true);
+    window.addEventListener(UNPLACED_POINTER_DROP_EVENT, onPointerDrop);
     return () => {
       canvas.removeEventListener('dragover', onDragOver, true);
       canvas.removeEventListener('drop', onDrop, true);
+      window.removeEventListener(UNPLACED_POINTER_DROP_EVENT, onPointerDrop);
     };
   }, [canvasRef, enabled, isIgnoredDropTarget, onDropNotes]);
 }

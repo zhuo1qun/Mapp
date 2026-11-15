@@ -32,6 +32,8 @@ interface TextLabelsLayerProps {
   noteCoordOverrides?: Record<string, Coordinates>;
   /** 地图编辑模式：双击已展示的文字标签打开完整便签编辑器 */
   onLabelDoubleClickEdit?: (noteId: string) => void;
+  /** 浏览模式：已选中对象再次点击标签，与再次点击图钉相同，直接打开编辑器。 */
+  onSelectedLabelClick?: (noteId: string) => void;
   /** 与全局 UI chrome 一致的玻璃面（透明度 / 模糊） */
   mapUiChromeOpacity?: number;
   mapUiChromeBlurPx?: number;
@@ -150,6 +152,7 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
   hoveredNoteId,
   noteCoordOverrides = {},
   onLabelDoubleClickEdit,
+  onSelectedLabelClick,
   mapUiChromeOpacity = DEFAULT_MAP_UI_CHROME_OPACITY,
   mapUiChromeBlurPx = DEFAULT_MAP_UI_CHROME_BLUR_PX,
   chromeAppearance = 'light'
@@ -327,6 +330,12 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
                     mousedown: (e) => {
                       e.originalEvent?.stopPropagation();
                       e.originalEvent?.stopImmediatePropagation();
+                    },
+                    click: (e) => {
+                      e.originalEvent?.stopPropagation();
+                      e.originalEvent?.stopImmediatePropagation();
+                      // 与图钉一致：已选中时再次点击同一对象，直接进入编辑器。
+                      if (isSelected && onSelectedLabelClick) onSelectedLabelClick(note.id);
                     },
                     dblclick: (e) => {
                       e.originalEvent?.stopPropagation();
@@ -533,6 +542,12 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
                     mousedown: (e) => {
                       e.originalEvent?.stopPropagation();
                       e.originalEvent?.stopImmediatePropagation();
+                    },
+                    click: (e) => {
+                      e.originalEvent?.stopPropagation();
+                      e.originalEvent?.stopImmediatePropagation();
+                      // 标签属于同一可操作对象，重复点击行为与图钉保持一致。
+                      if (isSelected && onSelectedLabelClick) onSelectedLabelClick(note.id);
                     },
                     dblclick: (e) => {
                       e.originalEvent?.stopPropagation();

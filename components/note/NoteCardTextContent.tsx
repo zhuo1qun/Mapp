@@ -15,7 +15,6 @@ type Props = {
   expanded?: boolean;
   detailLineCount?: number;
   className?: string;
-  emptyClassName?: string;
 };
 
 /**
@@ -31,8 +30,7 @@ export function NoteCardTextContent({
   visualScale = 1,
   expanded = false,
   detailLineCount,
-  className = '',
-  emptyClassName = 'text-base'
+  className = ''
 }: Props) {
   const { title, detail } = parseNoteContent(text);
   const baseTypography = getNoteCardTypography({
@@ -87,9 +85,7 @@ export function NoteCardTextContent({
             </div>
           ) : null}
         </>
-      ) : (
-        <span className={`${emptyClassName} font-normal italic text-gray-400`}>Empty...</span>
-      )}
+      ) : null}
     </div>
   );
 }

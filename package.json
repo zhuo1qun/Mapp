@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.5",
+    "@huggingface/transformers": "^4.2.0",
     "@supabase/supabase-js": "^2.86.2",
     "@tiptap/extension-link": "^3.18.0",
     "@tiptap/pm": "^3.18.0",

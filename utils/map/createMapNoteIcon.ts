@@ -1,7 +1,8 @@
 import type { Note } from '../../types';
 import {
-  isDisplayableImageSrc,
-  noteRendersAsBoardSticker
+  noteOrderedDisplayMediaSources,
+  noteHasActiveFirstMediaCrop,
+  noteRendersAsMapMediaPin
 } from '../persistence/mediaDisplay';
 import { getThemeChromeForegroundHex } from '../theme/themeChrome';
 
@@ -18,7 +19,7 @@ export type MapNoteIconModel = {
 type MapNoteIconSource = Pick<
   Note,
   'text' | 'images' | 'imageRefs' | 'media' | 'sketch' | 'emoji' | 'isFavorite'
->;
+> & { hasActiveMediaCrop?: boolean };
 
 function escapeHtmlAttr(s: string): string {
   return s
@@ -35,18 +36,20 @@ function mapPinScale(pinSize: number | undefined, isFavorite: boolean): number {
   return (isFavorite ? 2 : 1) * mapped;
 }
 
-/** 仅媒体贴纸边长：与泪滴钉同样跟 pinSize 线性缩放。 */
+/** 媒体贴纸边长：与泪滴图钉分开控制，允许承担地图上的主要视觉内容。 */
+function mapImageScale(imageSize: number | undefined, isFavorite: boolean): number {
+  const size = imageSize ?? 1;
+  return (isFavorite ? 2 : 1) * size;
+}
+
 function photoThumbEdge(scale: number): number {
   return Math.max(24, Math.round(96 * scale));
 }
 
 export function firstDisplayableMapPhotoSrc(
-  note: Pick<Note, 'images' | 'sketch'>
+  note: Pick<Note, 'images' | 'media' | 'sketch'>
 ): string | null {
-  const img = note.images?.[0];
-  if (isDisplayableImageSrc(img)) return img!;
-  if (isDisplayableImageSrc(note.sketch)) return note.sketch!;
-  return null;
+  return noteOrderedDisplayMediaSources(note)[0] || null;
 }
 
 /** 聚合角标：主题色实心圆，数字色走 theme chrome 前景规则。
@@ -80,8 +83,7 @@ function motionWrap(
 }
 
 /**
- * 地图图钉 HTML：仅媒体（与 Board sticker 同判定）→ 圆角矩形缩略图；
- * 其余 → 主题色泪滴钉（可内嵌图 / emoji）。
+ * 地图图钉 HTML：有媒体 → 保留图片 Alpha 轮廓；其余 → 主题色泪滴钉（可内嵌 emoji）。
  */
 export function buildMapNoteIconModel(
   note: MapNoteIconSource,
@@ -89,27 +91,38 @@ export function buildMapNoteIconModel(
     themeColor: string;
     clusterCount?: number;
     pinSize?: number;
+    imageSize?: number;
     motion?: MapNoteIconMotion;
   }
 ): MapNoteIconModel {
-  const { themeColor, clusterCount, pinSize, motion } = opts;
-  const scale = mapPinScale(pinSize, note.isFavorite === true);
+  const { themeColor, clusterCount, pinSize, imageSize, motion } = opts;
+  const pinScale = mapPinScale(pinSize, note.isFavorite === true);
   const photoSrc = firstDisplayableMapPhotoSrc(note);
-  const asPhotoSticker = noteRendersAsBoardSticker(note);
-  const badge = clusterBadgeHtml(clusterCount, themeColor, scale, asPhotoSticker);
+  const asPhotoSticker = noteRendersAsMapMediaPin(note);
+  const usesImageOutline = note.hasActiveMediaCrop ?? noteHasActiveFirstMediaCrop(note);
 
   if (asPhotoSticker) {
-    const edge = photoThumbEdge(scale);
+    const imageScale = mapImageScale(imageSize, note.isFavorite === true);
+    const edge = photoThumbEdge(imageScale);
     const radius = Math.max(8, Math.round(edge * 0.16));
-    const media = photoSrc
-      ? `<img src="${escapeHtmlAttr(photoSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" />`
-      : `<div style="width:100%;height:100%;background:${themeColor};opacity:0.35;"></div>`;
-    // 圆角裁切只包图片；角标探出右上角。
-    const inner = `<div style="
+    const image = photoSrc
+      ? `<img src="${escapeHtmlAttr(photoSrc)}" alt="" draggable="false" style="width:100%;height:100%;object-fit:${usesImageOutline ? 'contain' : 'cover'};display:block;" />`
+      : `<div style="width:${Math.max(10, Math.round(edge * 0.18))}px;height:${Math.max(10, Math.round(edge * 0.18))}px;background:${themeColor};border-radius:50%;opacity:0.4;"></div>`;
+    const media = usesImageOutline
+      ? `<div style="
+          width:${edge}px;height:${edge}px;display:flex;align-items:center;justify-content:center;
+          overflow:visible;background:transparent;
+          filter:
+            drop-shadow(1.25px 0 0 ${themeColor}) drop-shadow(-1.25px 0 0 ${themeColor})
+            drop-shadow(0 1.25px 0 ${themeColor}) drop-shadow(0 -1.25px 0 ${themeColor})
+            drop-shadow(0 8px 7px rgba(15,23,42,0.24)) drop-shadow(0 1px 1px rgba(15,23,42,0.12));
+        ">${image}</div>`
+      : `<div style="
           width:${edge}px;height:${edge}px;border-radius:${radius}px;overflow:hidden;
-          background:#f3f4f6;box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
-          border:2px solid ${themeColor};
-        ">${media}</div>${badge}`;
+          background:#f3f4f6;border:2px solid ${themeColor};box-sizing:border-box;
+          box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
+        ">${image}</div>`;
+    const inner = `${media}${clusterBadgeHtml(clusterCount, themeColor, imageScale, true)}`;
     return {
       html: motionWrap(inner, edge, edge, motion),
       size: [edge, edge],
@@ -117,14 +130,14 @@ export function buildMapNoteIconModel(
     };
   }
 
-  const size = 40 * scale;
+  const size = 40 * pinScale;
   let content = '';
   if (photoSrc) {
     content = `<div style="position:absolute;inset:-25%;overflow:hidden;transform:rotate(45deg);transform-origin:center;">
       <img src="${escapeHtmlAttr(photoSrc)}" alt="" style="width:100%;height:100%;object-fit:cover;transform:scale(1.5);transform-origin:center;" />
     </div>`;
   } else if (note.emoji) {
-    content = `<span style="transform:rotate(45deg);font-size:${20 * scale}px;line-height:1;z-index:1;position:relative;">${escapeHtmlAttr(note.emoji)}</span>`;
+    content = `<span style="transform:rotate(45deg);font-size:${20 * pinScale}px;line-height:1;z-index:1;position:relative;">${escapeHtmlAttr(note.emoji)}</span>`;
   }
 
   // 角标贴齐右上（不 hang）；泪滴本体 overflow:hidden 只裁切内嵌图。
@@ -135,7 +148,7 @@ export function buildMapNoteIconModel(
       display:flex;align-items:center;justify-content:center;
       box-shadow:0 4px 6px -1px rgba(0,0,0,0.2);
       border:3px solid ${themeColor};overflow:hidden;
-    ">${content}</div>${badge}`;
+    ">${content}</div>${clusterBadgeHtml(clusterCount, themeColor, pinScale, false)}`;
 
   return {
     html: motionWrap(teardrop, size, size, motion),

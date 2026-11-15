@@ -4,8 +4,8 @@ import L from 'leaflet';
 import type { Note } from '../../../types';
 import { buildMapNoteIconModel } from '../../../utils/map/createMapNoteIcon';
 import {
-  isDisplayableImageSrc,
-  noteRendersAsBoardSticker
+  noteOrderedDisplayMediaSources,
+  noteRendersAsMapMediaPin
 } from '../../../utils/persistence/mediaDisplay';
 
 function createNoteIcon(
@@ -14,12 +14,14 @@ function createNoteIcon(
   count: number | undefined,
   _showTextLabels: boolean | undefined,
   pinSize: number | undefined,
+  imageSize: number | undefined,
   motion: 'enter' | 'settle' | 'exit' | undefined
 ): L.DivIcon {
   const model = buildMapNoteIconModel(note, {
     themeColor,
     clusterCount: count,
     pinSize,
+    imageSize,
     motion
   });
   return L.divIcon({
@@ -37,6 +39,7 @@ interface NoteMarkerProps {
   clusterCount?: number;
   showTextLabels?: boolean;
   pinSize?: number;
+  imageSize?: number;
   themeColor: string;
   zIndexOffset?: number;
   onClick: (e: L.LeafletMouseEvent) => void;
@@ -62,6 +65,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
   clusterCount,
   showTextLabels,
   pinSize,
+  imageSize,
   themeColor,
   zIndexOffset = 0,
   onClick,
@@ -92,13 +96,11 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
     onDrag: onLongPressDrag,
     onEnd: onLongPressDragEnd
   };
-  const photoKey =
-    (note.images?.[0] && isDisplayableImageSrc(note.images[0]) && note.images[0].slice(0, 48)) ||
-    (note.sketch && isDisplayableImageSrc(note.sketch) && note.sketch.slice(0, 48)) ||
-    '';
-  const asSticker = noteRendersAsBoardSticker(note);
+  const photoKey = noteOrderedDisplayMediaSources(note)[0]?.slice(0, 48) || '';
+  const mediaOrderKey = note.media?.map((item) => item.id).join('|') || '';
+  const asSticker = noteRendersAsMapMediaPin(note);
   const icon = useMemo(
-    () => createNoteIcon(note, themeColor, clusterCount, showTextLabels, pinSize, motion),
+    () => createNoteIcon(note, themeColor, clusterCount, showTextLabels, pinSize, imageSize, motion),
     [
       note.id,
       note.text,
@@ -106,7 +108,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       note.sketch,
       note.emoji,
       note.isFavorite,
-      note.media?.length,
+      mediaOrderKey,
       note.imageRefs?.length,
       photoKey,
       asSticker,
@@ -114,6 +116,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       clusterCount,
       showTextLabels,
       pinSize,
+      imageSize,
       motion
     ]
   );

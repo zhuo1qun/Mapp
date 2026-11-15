@@ -10,6 +10,7 @@ import {
   syncNoteLegacyFromMedia
 } from '../../utils/persistence/noteMediaSync';
 import { createLassoSticker } from '../../utils/media/createLassoSticker';
+import { createAutoBackgroundRemovalSticker, type AutoMaskProgress } from '../../utils/media/autoBackgroundRemoval';
 import { resolveVariantDisplayUrl } from '../../utils/media/imageMaskRender';
 
 interface UseMediaHandlerArgs {
@@ -285,37 +286,45 @@ export function useMediaHandler({
     });
   }, []);
 
-  /** 将远程图片下载到本地资产。跨域禁止下载时保留远程引用并向调用方返回失败。 */
-  const materializeRemoteAt = useCallback(async (index: number): Promise<boolean> => {
+  const replaceMediaWithLocalBlob = useCallback(async (index: number, blob: Blob) => {
+    if (!blob.type.startsWith('image/')) throw new Error('所选内容不是图片');
+    const dataUrl = await blobToDataUrl(blob);
+    const assetId = await saveImage(dataUrl);
+    setMediaItems((prev) => prev.map((entry, i) => i === index ? {
+      ...entry,
+      assetId,
+      source: { kind: 'local' as const },
+      variantId: undefined,
+      variantEnabled: undefined
+    } : entry));
+    setDisplaySrcs((prev) => prev.map((src, i) => i === index ? dataUrl : src));
+    if (previewImageIndex === index) setPreviewImage(dataUrl);
+    return { assetId, dataUrl };
+  }, [previewImageIndex]);
+
+  /** 将远程图片自动保存为本地资产；跨域禁止读取像素时返回 null。 */
+  const materializeRemoteAt = useCallback(async (index: number) => {
     const item = mediaItems[index];
     const remoteUrl = item?.source?.kind === 'remote' ? item.source.url : null;
-    if (!remoteUrl) return true;
+    if (!remoteUrl) return null;
     setIsProcessingImages(true);
     try {
       const response = await fetch(remoteUrl, { mode: 'cors', credentials: 'omit' });
       if (!response.ok) throw new Error(`Image download failed: ${response.status}`);
       const blob = await response.blob();
       if (!blob.type.startsWith('image/')) throw new Error('Remote resource is not an image');
-      const dataUrl = await blobToDataUrl(blob);
-      const assetId = await saveImage(dataUrl);
-      setMediaItems((prev) => prev.map((entry, i) => i === index ? {
-        ...entry,
-        assetId,
-        source: { kind: 'local' as const }
-      } : entry));
-      setDisplaySrcs((prev) => prev.map((src, i) => i === index ? dataUrl : src));
-      return true;
+      return await replaceMediaWithLocalBlob(index, blob);
     } catch (error) {
       console.warn('Failed to save remote image locally', error);
       setMediaItems((prev) => prev.map((entry, i) => i === index && entry.source?.kind === 'remote' ? {
         ...entry,
         source: { ...entry.source, cacheStatus: 'failed' as const }
       } : entry));
-      return false;
+      return null;
     } finally {
       setIsProcessingImages(false);
     }
-  }, [mediaItems]);
+  }, [mediaItems, replaceMediaWithLocalBlob]);
 
   const removeMediaAt = useCallback((index: number) => {
     setMediaItems((prev) => prev.filter((_, i) => i !== index));
@@ -421,7 +430,71 @@ export function useMediaHandler({
     [mediaItems, displaySrcs]
   );
 
-  const setLassoStickerEnabled = useCallback(
+  const applyAutoBackgroundRemoval = useCallback(
+    async (
+      index: number,
+      onProgress?: (progress: AutoMaskProgress) => void,
+      localInput?: { assetId: string; imageSrc: string }
+    ): Promise<{ width: number; height: number } | null> => {
+      const item = mediaItems[index];
+      if (!item || item.kind !== 'image') throw new Error('Media missing');
+      let displaySrc = localInput?.imageSrc || displaySrcs[index] || '';
+      let assetId = localInput?.assetId || item.assetId;
+
+      if (localInput) {
+        // 剪贴板或文件恢复已经产生本地资产，可直接继续原请求。
+      } else if (item.source?.kind === 'remote') {
+        const local = await materializeRemoteAt(index);
+        if (!local) throw new Error('REMOTE_IMAGE_ACCESS_BLOCKED');
+        assetId = local.assetId;
+        displaySrc = local.dataUrl;
+      } else if (isMediaRefId(assetId)) {
+        // 重制蒙版始终以原始资产为输入，不能把已经抠过的显示结果再次送入模型。
+        displaySrc = (await loadAssetOriginal(assetId, item.kind)) || displaySrc;
+      } else {
+        if (/^https?:\/\//i.test(displaySrc)) {
+          const response = await fetch(displaySrc, { mode: 'cors', credentials: 'omit' });
+          if (!response.ok) throw new Error(`图片下载失败（${response.status}）`);
+          const blob = await response.blob();
+          if (!blob.type.startsWith('image/')) throw new Error('远程资源不是图片');
+          displaySrc = await blobToDataUrl(blob);
+        }
+        assetId = await ensureAssetIdForKind(displaySrc, item.kind, assetId);
+      }
+
+      const { ref, variant } = await createAutoBackgroundRemovalSticker({
+        assetId,
+        imageSrc: displaySrc,
+        onProgress
+      });
+      const displayUrl =
+        (await resolveVariantDisplayUrl(variant.id, { rasterizeIfMissing: true })) || displaySrc;
+
+      setMediaItems((prev) => prev.map((entry, i) => i === index ? {
+        ...entry,
+        assetId,
+        source: { kind: 'local' as const },
+        variantId: ref.variantId,
+        variantEnabled: true
+      } : entry));
+      setDisplaySrcs((prev) => prev.map((src, i) => i === index ? displayUrl : src));
+      setPreviewImageIndex(index);
+      setPreviewImage(displayUrl);
+
+      return new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve({
+          width: image.naturalWidth || image.width,
+          height: image.naturalHeight || image.height
+        });
+        image.onerror = () => resolve(null);
+        image.src = displayUrl;
+      });
+    },
+    [mediaItems, displaySrcs, materializeRemoteAt]
+  );
+
+  const setImageVariantEnabled = useCallback(
     async (index: number, enabled: boolean) => {
       const item = mediaItems[index];
       if (!item || !isMediaRefId(item.assetId)) return;
@@ -449,11 +522,6 @@ export function useMediaHandler({
       }
     },
     [mediaItems, previewImageIndex]
-  );
-
-  const clearLassoSticker = useCallback(
-    async (index: number) => setLassoStickerEnabled(index, false),
-    [setLassoStickerEnabled]
   );
 
   const loadOriginalImageSrc = useCallback(
@@ -600,12 +668,13 @@ export function useMediaHandler({
     removeImage,
     removeSketch,
     applyLassoSticker,
-    setLassoStickerEnabled,
-    clearLassoSticker,
+    applyAutoBackgroundRemoval,
+    setImageVariantEnabled,
     loadOriginalImageSrc,
     persistMediaForSave,
     materializeRemoteAt,
-    isCropActiveAt: (index: number) => isMediaItemCropActive(mediaItems[index]),
+    replaceMediaWithLocalBlob,
+    isVariantAppliedAt: (index: number) => isMediaItemCropActive(mediaItems[index]),
     previewImage,
     setPreviewImage,
     previewImageIndex,

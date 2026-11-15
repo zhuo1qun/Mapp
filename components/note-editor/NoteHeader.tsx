@@ -16,7 +16,7 @@ interface NoteHeaderProps {
   showLocateBoard: boolean;
   onLocateBoard?: () => void;
 
-  /** 有 GPS 时：打开外部地图 App / 网页导航 */
+  /** 有 GPS 时：在外部地图 App / 网页地图中查看点位 */
   showNavigateGo?: boolean;
   onNavigateGo?: () => void;
 
@@ -84,7 +84,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
         )}
 
         {showNavigateGo && onNavigateGo && (
-          <NoteIconButton onClick={onNavigateGo} variant="neutral" label="导航" title="Go · 外部导航">
+          <NoteIconButton onClick={onNavigateGo} variant="neutral" label="地图" title="在地图中打开">
             <Navigation size={22} strokeWidth={2} className="text-gray-700 hover:text-gray-900" />
           </NoteIconButton>
         )}

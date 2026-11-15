@@ -1,8 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, ChevronDown, Palette } from 'lucide-react';
+import { Camera, Check, ChevronDown, Palette } from 'lucide-react';
 import { set } from 'idb-keyval';
-import { MAP_STYLE_OPTIONS } from '../constants';
+import { MAP_STYLE_OPTIONS, type MapStyleOption } from '../constants';
 import { ThemeColorPicker } from './ThemeColorPicker';
 import { HelpHint } from './ui/HelpHint';
 import { SettingsCompactSlider } from './ui/SettingsCompactSlider';
@@ -30,6 +30,104 @@ const PANEL_WIDTH = 320;
 const PANEL_GAP = 8;
 const PANEL_PAD = 8;
 
+const mapStylePreviewFallback: Record<string, string> = {
+  blank: 'linear-gradient(135deg, rgb(248 250 252), rgb(226 232 240))',
+  satellite: 'linear-gradient(135deg, #35543b, #a58e63)',
+  'carto-light-nolabels': 'linear-gradient(135deg, #f6f7f5, #d8dee4)',
+  'carto-light': 'linear-gradient(135deg, #dfe8c8, #c7d8e8)',
+  'carto-dark': 'linear-gradient(135deg, #1f2937, #4b5563)',
+  'osm-standard': 'linear-gradient(135deg, #d4e5be, #d8e4ed)'
+};
+
+type MapStylePreviewGridProps = {
+  currentMapStyle: string;
+  themeColor: string;
+  onSelect: (styleId: string) => void;
+};
+
+function MapStylePreviewCard({
+  style,
+  selected,
+  themeColor,
+  onSelect
+}: {
+  style: MapStyleOption;
+  selected: boolean;
+  themeColor: string;
+  onSelect: () => void;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = Boolean(style.preview) && !imageFailed;
+
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      onClick={onSelect}
+      className={`group w-full min-w-0 overflow-hidden rounded-lg text-left transition-[box-shadow,transform,background-color] hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+        selected
+          ? 'shadow-sm'
+          : 'hover:bg-white/10'
+      }`}
+      style={
+        selected
+          ? {
+              boxShadow: `inset 0 0 0 2px ${themeColor}, 0 1px 2px rgb(15 23 42 / 0.10)`,
+              ['--tw-ring-color' as string]: themeColor
+            }
+          : undefined
+      }
+    >
+      <div
+        className="relative aspect-[16/8.5] overflow-hidden"
+        style={{ background: mapStylePreviewFallback[style.id] ?? mapStylePreviewFallback.blank }}
+      >
+        {showImage ? (
+          <img
+            src={style.preview}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.035]"
+            onError={() => setImageFailed(true)}
+          />
+        ) : null}
+        {style.id === 'blank' ? (
+          <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:linear-gradient(90deg,transparent_49%,rgb(148_163_184_/_0.22)_50%,transparent_51%),linear-gradient(transparent_49%,rgb(148_163_184_/_0.18)_50%,transparent_51%)] [background-size:20px_20px]" />
+        ) : null}
+      </div>
+      <div className="flex min-w-0 items-center justify-between gap-2 px-2.5 py-2">
+        <span className="min-w-0 truncate text-xs font-medium text-gray-800">{style.name}</span>
+        {selected ? (
+          <span
+            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-theme-chrome-fg"
+            style={{ backgroundColor: themeColor }}
+            aria-label="当前底图"
+          >
+            <Check size={11} strokeWidth={2.75} aria-hidden />
+          </span>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
+function MapStylePreviewGrid({ currentMapStyle, themeColor, onSelect }: MapStylePreviewGridProps) {
+  return (
+    <div className="grid grid-cols-2 gap-2 p-2" role="listbox" aria-label="选择底图">
+      {MAP_STYLE_OPTIONS.map((style) => (
+        <div key={style.id} className="min-w-0">
+          <MapStylePreviewCard
+            style={style}
+            selected={style.id === currentMapStyle}
+            themeColor={themeColor}
+            onSelect={() => onSelect(style.id)}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -51,6 +149,9 @@ interface SettingsPanelProps {
   onMapStyleChange: (styleId: string) => void;
   pinSize?: number;
   onPinSizeChange?: (size: number) => void;
+  /** Mapping 媒体缩略图点位的独立尺寸。 */
+  imageSize?: number;
+  onImageSizeChange?: (size: number) => void;
   clusterThreshold?: number;
   onClusterThresholdChange?: (threshold: number) => void;
   labelSize?: number;
@@ -89,6 +190,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onMapStyleChange,
   pinSize,
   onPinSizeChange,
+  imageSize,
+  onImageSizeChange,
   clusterThreshold,
   onClusterThresholdChange,
   labelSize,
@@ -155,12 +258,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       const r = el.getBoundingClientRect();
       const gap = 6;
       const pad = 10;
+      const width = Math.min(448, window.innerWidth - pad * 2);
       const belowTop = r.bottom + gap;
       const maxHeight = Math.max(120, window.innerHeight - belowTop - pad);
       setMapBgMenuRect({
         top: belowTop,
-        left: r.left,
-        width: r.width,
+        left: Math.max(pad, Math.min(r.left, window.innerWidth - width - pad)),
+        width,
         maxHeight
       });
     };
@@ -241,30 +345,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   {(menuPhase) => (
                 <div
                   ref={mapBgMenuRef}
-                  role="listbox"
-                  className={`overflow-hidden rounded-xl border border-gray-200 py-1 chrome-menu-${menuPhase}`}
+                  className={`overflow-hidden rounded-2xl chrome-menu-${menuPhase}`}
                 >
-                  {MAP_STYLE_OPTIONS.map((style) => (
-                    <button
-                      key={style.id}
-                      type="button"
-                      role="option"
-                      aria-selected={currentMapStyle === style.id}
-                      onClick={() => handleMapStyleSelect(style.id)}
-                      className={`flex w-full border-0 px-3 py-2.5 text-left text-sm transition-colors ${
-                        currentMapStyle === style.id
-                          ? 'font-medium text-gray-900'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                      style={
-                        currentMapStyle === style.id
-                          ? { boxShadow: `inset 3px 0 0 0 ${themeColor}` }
-                          : undefined
-                      }
-                    >
-                      {style.name}
-                    </button>
-                  ))}
+                  <MapStylePreviewGrid
+                    currentMapStyle={currentMapStyle}
+                    themeColor={themeColor}
+                    onSelect={handleMapStyleSelect}
+                  />
                 </div>
                   )}
                 </ChromePresence>
@@ -287,7 +374,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     <SettingsCompactSlider
                     label="Pin Size"
                     hint={
-                      <HelpHint>缩放地图上每个便签定位图钉（水滴标）的显示大小，便于在密集区域点选。</HelpHint>
+                      <HelpHint>缩放地图上普通泪滴图钉（文字或 emoji 点位）的显示大小；媒体缩略图请用下方 Image Size 调整。</HelpHint>
                     }
                     themeColor={themeColor}
                     value={pinSize}
@@ -299,6 +386,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     minCaption="0.5x"
                     maxCaption="2.0x"
                   />
+                    {imageSize !== undefined && onImageSizeChange ? (
+                      <SettingsCompactSlider
+                        label="Image Size"
+                        hint={
+                          <HelpHint>单独缩放地图上的媒体缩略图点位；不影响普通图钉、emoji 或文字标签。</HelpHint>
+                        }
+                        themeColor={themeColor}
+                        value={imageSize}
+                        min={0.5}
+                        max={2}
+                        step={0.1}
+                        onChange={(value) => onImageSizeChange(Math.min(2, value))}
+                        formatValue={(v) => `${v.toFixed(1)}x`}
+                        minCaption="0.5x"
+                        maxCaption="2.0x"
+                      />
+                    ) : null}
                     {labelSize !== undefined && onLabelSizeChange ? (
                       <SettingsCompactSlider
                       label="Label Size"
@@ -522,7 +626,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             data-chrome-window-nested=""
             data-workspace-transient=""
             role="listbox"
-            className={`map-chrome-content-${settingsAppearance} chrome-menu-${menuPhase} fixed overflow-hidden rounded-lg border border-gray-200 py-1 shadow-xl theme-surface-scrollbar`}
+            className={`map-chrome-content-${settingsAppearance} chrome-menu-${menuPhase} fixed overflow-hidden rounded-2xl py-1 shadow-xl theme-surface-scrollbar`}
             style={{
               ...settingsCardChrome,
               zIndex: PORTAL_TOOLTIP_Z,
@@ -533,27 +637,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               overflowY: 'auto'
             }}
           >
-            {MAP_STYLE_OPTIONS.map((style) => (
-              <button
-                key={style.id}
-                type="button"
-                role="option"
-                aria-selected={currentMapStyle === style.id}
-                onClick={() => handleMapStyleSelect(style.id)}
-                className={`flex w-full border-0 px-2.5 py-1.5 text-left text-xs transition-colors ${
-                  currentMapStyle === style.id
-                    ? 'font-medium text-gray-900'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-                style={
-                  currentMapStyle === style.id
-                    ? { boxShadow: `inset 3px 0 0 0 ${themeColor}` }
-                    : undefined
-                }
-              >
-                {style.name}
-              </button>
-            ))}
+            <MapStylePreviewGrid
+              currentMapStyle={currentMapStyle}
+              themeColor={themeColor}
+              onSelect={handleMapStyleSelect}
+            />
           </div>
             )}
           </ChromePresence>,

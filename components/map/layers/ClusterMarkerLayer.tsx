@@ -19,6 +19,7 @@ interface ClusterMarkerLayerProps {
   fallbackNotes: Note[];
   showTextLabels: boolean;
   pinSize: number;
+  imageSize: number;
   themeColor: string;
   mapInstance: LeafletMap | null;
   onMarkerClick: (note: Note, e?: LeafletMouseEvent) => void;
@@ -52,6 +53,7 @@ function ClusterMarkerLayerInner({
   fallbackNotes,
   showTextLabels,
   pinSize,
+  imageSize,
   themeColor,
   mapInstance,
   onMarkerClick,
@@ -184,6 +186,7 @@ function ClusterMarkerLayerInner({
                 position={[lat, lng + 360 * k]}
                 showTextLabels={showTextLabels}
                 pinSize={pinSize}
+                imageSize={imageSize}
                 themeColor={themeColor}
                 zIndexOffset={zBoost(note)}
                 onClick={(e) => {
@@ -227,6 +230,7 @@ function ClusterMarkerLayerInner({
                 clusterCount={cluster.notes.length}
                 showTextLabels={showTextLabels}
                 pinSize={pinSize}
+                imageSize={imageSize}
                 themeColor={themeColor}
                 zIndexOffset={clusterZ}
                 onClick={(e) => {
@@ -258,6 +262,7 @@ function ClusterMarkerLayerInner({
             position={[lat, lng + 360 * k]}
             showTextLabels={showTextLabels}
             pinSize={pinSize}
+            imageSize={imageSize}
             themeColor={themeColor}
             zIndexOffset={zBoost(note)}
             onClick={(e) => {

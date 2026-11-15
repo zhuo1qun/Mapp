@@ -2,6 +2,7 @@ import type { Map as LeafletMap } from 'leaflet';
 import { MAP_MAX_ZOOM, MAP_STYLE_OPTIONS } from '../../constants';
 import type { Connection, Note, Project } from '../../types';
 import { parseNoteContent } from '../../utils';
+import { noteHasActiveFirstMediaCrop } from '../persistence/mediaDisplay';
 
 export interface MapTabExportNote {
   id: string;
@@ -17,6 +18,7 @@ export interface MapTabExportNote {
   sketch?: string;
   previewTitle: string;
   previewDetailMd: string;
+  hasActiveMediaCrop: boolean;
 }
 
 export interface MapTabExportPayload {
@@ -33,6 +35,7 @@ export interface MapTabExportPayload {
   center: [number, number];
   zoom: number;
   pinSize: number;
+  imageSize: number;
   labelSize: number;
   clusterThreshold: number;
   showTextLabels: boolean;
@@ -65,6 +68,7 @@ export async function buildMapTabExportPayload(
   map: LeafletMap,
   opts: {
     pinSize: number;
+    imageSize: number;
     labelSize: number;
     clusterThreshold: number;
     showTextLabels: boolean;
@@ -114,7 +118,8 @@ export async function buildMapTabExportPayload(
         images,
         sketch,
         previewTitle,
-        previewDetailMd: detail || ''
+        previewDetailMd: detail || '',
+        hasActiveMediaCrop: noteHasActiveFirstMediaCrop(n)
       };
     })
   );
@@ -132,6 +137,7 @@ export async function buildMapTabExportPayload(
     center: [c.lat, c.lng],
     zoom: map.getZoom(),
     pinSize: opts.pinSize,
+    imageSize: opts.imageSize,
     labelSize: opts.labelSize,
     clusterThreshold: opts.clusterThreshold,
     showTextLabels: opts.showTextLabels,

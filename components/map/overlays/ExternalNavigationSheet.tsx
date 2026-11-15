@@ -1,14 +1,18 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, Copy, MapPinned, Share2 } from 'lucide-react';
 import {
+  externalMapShareUrl,
   listExternalMapApps,
   openExternalMapApp,
+  type ExternalMapAppChoice,
   type ExternalMapAppId
 } from '../../../utils/map/openExternalNavigation';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../../ui/chromeAppearanceContext';
 import { ChromeWindow } from '../../ui/ChromeWindow';
-import { ChromeActionButton } from '../../ui/ChromeActionButton';
+import { ChromeWindowHeader } from '../../ui/ChromeWindowHeader';
+import { ChromeMenuItem } from '../../ui/ChromeMenuItem';
+import { chromePanelGhostIconButtonClass } from '../../ui/chromePanelIconButton';
 
 type Props = {
   open: boolean;
@@ -16,15 +20,13 @@ type Props = {
   lng: number;
   label?: string;
   onClose: () => void;
-  themeColor?: string;
   /** 与触发它的详情卡/编辑器共用同一层玻璃材质。 */
   panelChromeStyle?: React.CSSProperties;
   chromeAppearance?: MapChromeAppearance;
 };
 
 /**
- * 选择用地图 App 打开导航（移动端接近系统「用何应用打开」；
- * Android 选「系统地图」即弹出系统选择器）。
+ * 在地图 App 中标出点位。移动端优先唤起已安装应用；网页地图只作兜底。
  */
 export const ExternalNavigationSheet: React.FC<Props> = ({
   open,
@@ -32,75 +34,130 @@ export const ExternalNavigationSheet: React.FC<Props> = ({
   lng,
   label,
   onClose,
-  themeColor = '#3b82f6',
   panelChromeStyle,
   chromeAppearance: chromeAppearanceProp
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const apps = listExternalMapApps();
+  const canUseSystemShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const [copiedAppId, setCopiedAppId] = useState<ExternalMapAppId | null>(null);
+  const copiedResetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedResetTimerRef.current != null) window.clearTimeout(copiedResetTimerRef.current);
+    };
+  }, []);
 
   const pick = (id: ExternalMapAppId) => {
     openExternalMapApp(id, lat, lng, { label });
     onClose();
   };
 
+  const share = async (app: ExternalMapAppChoice) => {
+    const url = externalMapShareUrl(app.id, lat, lng, { label });
+    if (!url || !canUseSystemShare) return;
+    try {
+      await navigator.share({
+        title: label || '点位',
+        text: `在${app.label}中查看此点`,
+        url
+      });
+    } catch (error) {
+      // 关闭系统分享面板会抛 AbortError，属于用户的正常取消，不需要提示。
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.warn('Unable to share map link', error);
+      }
+    }
+  };
+
+  const copyLink = async (app: ExternalMapAppChoice) => {
+    const url = externalMapShareUrl(app.id, lat, lng, { label });
+    if (!url) return;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = url;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand('copy');
+        input.remove();
+        if (!copied) throw new Error('Clipboard copy was rejected');
+      }
+      setCopiedAppId(app.id);
+      if (copiedResetTimerRef.current != null) window.clearTimeout(copiedResetTimerRef.current);
+      copiedResetTimerRef.current = window.setTimeout(() => {
+        setCopiedAppId((current) => (current === app.id ? null : current));
+        copiedResetTimerRef.current = null;
+      }, 1500);
+    } catch (error) {
+      console.warn('Unable to copy map link', error);
+    }
+  };
+
   return (
     <ChromeWindow
       open={open}
       onClose={onClose}
-      backdropLabel="关闭地图应用选择"
+      backdropLabel="关闭地图应用"
       placement="center"
       surface="window"
       appearance={chromeAppearance}
       compactBehavior="sheet"
+      showBackdrop={false}
+      elevation="above-note-slot"
       role="dialog"
       aria-modal="true"
-      aria-label="选择地图应用"
+      aria-label="在地图中打开"
       className={`w-full sm:max-w-sm ${panelChromeStyle ? '' : 'bg-white'}`}
       style={panelChromeStyle}
     >
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <div>
-            <div className="text-base font-bold text-gray-900">导航到此点</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">将在新窗口打开网页导航</div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 border-0"
-            aria-label="关闭"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <ul className="px-2 pb-2">
+        <ChromeWindowHeader title="在地图中打开" onClose={onClose} closeLabel="关闭地图应用" />
+        <ul className="pb-2 pt-1" aria-label="可用地图服务">
           {apps.map((app) => (
-            <li key={app.id}>
+            <li key={app.id} className="mx-1 my-px flex items-center gap-1">
+              <ChromeMenuItem
+                onClick={() => pick(app.id)}
+                icon={<MapPinned size={16} strokeWidth={1.8} aria-hidden />}
+                aria-label={`在${app.label}中查看此点`}
+                className="!mx-0 !w-auto flex-1"
+              >
+                {app.label}
+              </ChromeMenuItem>
               <button
                 type="button"
-                onClick={() => pick(app.id)}
-                className={`w-full text-left px-3 py-3 rounded-xl border-0 flex flex-col gap-0.5 transition-colors ${
-                  chromeAppearance === 'dark' ? 'hover:bg-white/10' : 'hover:bg-gray-50'
-                }`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void copyLink(app);
+                }}
+                className={chromePanelGhostIconButtonClass}
+                title={copiedAppId === app.id ? '链接已复制' : `复制${app.label}点位链接`}
+                aria-label={copiedAppId === app.id ? '链接已复制' : `复制${app.label}点位链接`}
               >
-                <span className="text-sm font-semibold text-gray-800">{app.label}</span>
-                {app.hint ? (
-                  <span className="text-[11px] text-gray-400 leading-snug">{app.hint}</span>
-                ) : null}
+                {copiedAppId === app.id ? <Check size={15} strokeWidth={2} aria-hidden /> : <Copy size={15} strokeWidth={1.9} aria-hidden />}
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void share(app);
+                }}
+                className={chromePanelGhostIconButtonClass}
+                title={canUseSystemShare ? `分享${app.label}点位链接` : '当前浏览器不支持系统分享'}
+                aria-label={canUseSystemShare ? `分享${app.label}点位链接` : '当前浏览器不支持系统分享'}
+                disabled={!canUseSystemShare}
+              >
+                <Share2 size={15} strokeWidth={1.9} aria-hidden />
               </button>
             </li>
           ))}
         </ul>
-        <div className="px-4 pb-4 pt-1 safe-area-pb">
-          <ChromeActionButton
-            tone="primary"
-            themeColor={themeColor}
-            onClick={onClose}
-            className="w-full rounded-xl py-2.5 text-sm"
-          >
-            取消
-          </ChromeActionButton>
-        </div>
     </ChromeWindow>
   );
 };
