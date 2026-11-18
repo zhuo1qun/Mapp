@@ -25,7 +25,7 @@ export function BoardTopChrome({
       <div
         ref={leftToolbarRef}
         data-allow-context-menu
-        className="fixed top-2 sm:top-4 ui-workspace-left z-[500] pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2"
+        className="fixed ui-workspace-safe-top ui-workspace-left z-[500] pointer-events-auto flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2"
         onPointerDown={onLeftPointerDown}
       >
         {left}

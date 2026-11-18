@@ -526,6 +526,42 @@ body {
   touch-action: manipulation;
 }
 
+/* iOS 独立 PWA 会按状态栏下方的页面内容自动叠加可读性渐变；浮层打开后
+ * 因为出现新的全屏合成层，这个渐变又会改变。用稳定的纯色安全区承接状态栏，
+ * 让主页与开窗状态一致。仅在安装后的窄屏应用中启用。 */
+@media (display-mode: standalone) and (max-width: 639px) {
+  body::before {
+    content: '';
+    position: fixed;
+    z-index: 11000;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: env(safe-area-inset-top, 0px);
+    pointer-events: none;
+    background: var(--theme-color);
+  }
+}
+
+/* 页面延伸到 iPhone 状态栏下方时，所有工作区顶栏控件共享同一个安全起点。 */
+.ui-workspace-safe-top {
+  top: max(0.5rem, calc(env(safe-area-inset-top, 0px) + 0.5rem)) !important;
+}
+
+.ui-home-safe-top {
+  top: max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem)) !important;
+}
+
+@media (min-width: 640px) {
+  .ui-workspace-safe-top {
+    top: 1rem !important;
+  }
+
+  .ui-home-safe-top {
+    top: 1rem !important;
+  }
+}
+
 .app-root {
   height: 100%;
   max-height: 100dvh;

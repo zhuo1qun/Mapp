@@ -1922,7 +1922,7 @@ export const MapView: React.FC<MapViewProps> = ({
           <div
             data-allow-context-menu
             data-mapp-chrome-ui=""
-            className={`fixed top-2 z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 pointer-events-none sm:top-4 sm:gap-3 ui-workspace-left ${
+            className={`fixed ui-workspace-safe-top z-[var(--z-map-toolbar)] flex flex-col items-start gap-2 pointer-events-none sm:gap-3 ui-workspace-left ${
               toolbarSlotKind ? 'map-toolbar--sheet-open' : ''
             }`}
           >
@@ -1983,7 +1983,7 @@ export const MapView: React.FC<MapViewProps> = ({
                   /> : null}
                 </div>
                 <div
-                  className="fixed right-2 top-2 z-[var(--z-map-toolbar)] flex h-10 shrink-0 items-center gap-1.5 pointer-events-auto sm:right-4 sm:top-4 sm:h-12 sm:gap-2"
+                  className="fixed right-2 ui-workspace-safe-top z-[var(--z-map-toolbar)] flex h-10 shrink-0 items-center gap-1.5 pointer-events-auto sm:right-4 sm:h-12 sm:gap-2"
                   onPointerDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}

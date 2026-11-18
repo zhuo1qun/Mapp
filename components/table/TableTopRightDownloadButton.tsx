@@ -21,7 +21,7 @@ export const TableTopRightDownloadButton: React.FC<Props> = ({
   return (
     <div
       data-allow-context-menu
-      className="fixed top-2 sm:top-4 right-2 sm:right-4 z-[500] pointer-events-auto flex h-10 sm:h-12 items-center"
+      className="fixed ui-workspace-safe-top right-2 sm:right-4 z-[500] pointer-events-auto flex h-10 sm:h-12 items-center"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <ChromeIconButton

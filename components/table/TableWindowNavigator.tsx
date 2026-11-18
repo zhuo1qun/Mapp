@@ -78,7 +78,7 @@ export const TableWindowNavigator: React.FC<TableWindowNavigatorProps> = ({
       {(phase) => (
         <div
           data-allow-context-menu
-          className={`fixed top-2 sm:top-4 ui-workspace-center-x -translate-x-1/2 z-[500] pointer-events-auto chrome-menu-${phase}`}
+          className={`fixed ui-workspace-safe-top ui-workspace-center-x -translate-x-1/2 z-[500] pointer-events-auto chrome-menu-${phase}`}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <div

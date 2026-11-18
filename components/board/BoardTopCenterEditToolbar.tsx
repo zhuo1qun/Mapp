@@ -87,7 +87,7 @@ export const BoardTopCenterEditToolbar: React.FC<Props> = ({
       {isEditMode ? <div
         data-allow-context-menu
         data-mapp-chrome-ui=""
-        className="fixed top-2 sm:top-4 ui-workspace-center-x z-[500] hidden -translate-x-1/2 animate-in fade-in items-center gap-1.5 sm:gap-2 pointer-events-auto sm:flex"
+        className="fixed ui-workspace-safe-top ui-workspace-center-x z-[500] hidden -translate-x-1/2 animate-in fade-in items-center gap-1.5 sm:gap-2 pointer-events-auto sm:flex"
         style={{ height: 40, alignItems: 'center' }}
         onPointerDown={(e) => {
           e.stopPropagation();

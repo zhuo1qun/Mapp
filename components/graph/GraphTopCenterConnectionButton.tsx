@@ -22,7 +22,7 @@ export const GraphTopCenterConnectionButton: React.FC<Props> = ({
   return (
     <div
       data-allow-context-menu
-      className="fixed top-2 sm:top-4 ui-workspace-center-x -translate-x-1/2 z-[500] pointer-events-auto flex h-10 sm:h-12 items-center justify-center"
+      className="fixed ui-workspace-safe-top ui-workspace-center-x -translate-x-1/2 z-[500] pointer-events-auto flex h-10 sm:h-12 items-center justify-center"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <ChromeIconButton

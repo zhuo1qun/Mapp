@@ -1231,7 +1231,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => void requestAppInstall()}
-                  className={`${themeChromeInteractiveClass} ${MAP_CHROME_SURFACE_BORDER_CLASS} absolute top-4 right-4 z-[2010] flex h-10 w-10 items-center justify-center rounded-xl shadow-lg pointer-events-auto`}
+                  className={`${themeChromeInteractiveClass} ${MAP_CHROME_SURFACE_BORDER_CLASS} ui-home-safe-top absolute right-4 z-[2010] flex h-10 w-10 items-center justify-center rounded-xl shadow-lg pointer-events-auto`}
                   style={mapChromeSurface}
                   title="安装 Mapp"
                   aria-label="安装 Mapp"
@@ -1241,7 +1241,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               ) : null}
               <div
                 ref={homeActionsRef}
-                className="absolute top-4 left-4 z-[2010] flex items-center gap-2 pointer-events-auto"
+                className="ui-home-safe-top absolute left-4 z-[2010] flex items-center gap-2 pointer-events-auto"
                 onMouseLeave={() => setHoveredHomeActionId(null)}
               >
                 {renderSharedActionWindow(homeActionSelectionRect)}
@@ -1358,7 +1358,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         <>
           <div
             ref={sidebarLeftActionsRef}
-            className="project-sidebar-actions project-sidebar-actions--left absolute top-4 left-4 z-[2010] flex flex-nowrap items-center gap-2"
+            className="project-sidebar-actions project-sidebar-actions--left ui-home-safe-top absolute left-4 z-[2010] flex flex-nowrap items-center gap-2"
             onMouseLeave={() => setHoveredSidebarLeftActionId(null)}
           >
             {renderSharedActionWindow(sidebarLeftSelectionRect)}
@@ -1439,7 +1439,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </div>
           <div
             ref={sidebarRightActionsRef}
-            className="project-sidebar-actions project-sidebar-actions--right absolute top-4 right-4 z-[2000] flex flex-nowrap items-center gap-2"
+            className="project-sidebar-actions project-sidebar-actions--right ui-home-safe-top absolute right-4 z-[2000] flex flex-nowrap items-center gap-2"
             onMouseLeave={() => setHoveredSidebarRightActionId(null)}
           >
             {renderSharedActionWindow(sidebarRightSelectionRect)}

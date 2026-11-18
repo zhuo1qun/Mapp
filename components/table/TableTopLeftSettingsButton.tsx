@@ -25,7 +25,7 @@ export const TableTopLeftSettingsButton: React.FC<Props> = ({
   return (
     <div
       data-allow-context-menu
-      className="fixed top-2 sm:top-4 ui-workspace-left z-[500] pointer-events-auto flex h-10 sm:h-12 items-center"
+      className="fixed ui-workspace-safe-top ui-workspace-left z-[500] pointer-events-auto flex h-10 sm:h-12 items-center"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <ChromeIconButton

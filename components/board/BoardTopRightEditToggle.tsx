@@ -25,7 +25,7 @@ export const BoardTopRightEditToggle: React.FC<Props> = ({
   return (
     <div
       data-allow-context-menu
-      className="fixed right-2 top-2 z-[500] hidden h-10 items-center gap-3 pointer-events-auto sm:right-4 sm:top-4 sm:h-12 sm:flex"
+      className="fixed right-2 ui-workspace-safe-top z-[500] hidden h-10 items-center gap-3 pointer-events-auto sm:right-4 sm:h-12 sm:flex"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
