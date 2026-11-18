@@ -14,6 +14,8 @@ import { mapChromeContentStyle, mapChromeSurfaceStyle } from '../utils/map/mapCh
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { ChromeNoteSlot, chromeNoteEditorSlotLayout } from './ui/ChromeNoteSlot';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
+import { SaveBeforeCloseDialog } from './ui/SaveBeforeCloseDialog';
+import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { useCompactViewport } from '../utils/ui/useCompactViewport';
 import { parseHexToRgb } from '../utils/theme/themeChrome';
@@ -236,6 +238,9 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [pendingKeyboardDeleteIds, setPendingKeyboardDeleteIds] = useState<string[] | null>(null);
+  const boardNoteSaveRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
+  const [confirmOutsideClose, setConfirmOutsideClose] = useState(false);
+  const [savingOutsideClose, setSavingOutsideClose] = useState(false);
   const {
     editingNote,
     setEditingNote,
@@ -2508,7 +2513,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
         <ChromeNoteSlot
           kind={editingNote && !isIntroPending ? 'editor' : null}
-          onClose={closeEditor}
+          onClose={() => setConfirmOutsideClose(true)}
           appearance={chromeAppearance}
           motionAnchor={noteEditorAnimationAnchor}
           dismissIgnoreRefs={[boardToolbarRef]}
@@ -2522,6 +2527,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           <DeferredNoteEditor
               shell={false}
               isOpen={!!editingNote && !isIntroPending}
+              saveDraftRef={boardNoteSaveRef}
               onClose={closeEditor}
               onSaveClose={() => closeEditor('saved')}
               animationAnchor={noteEditorAnimationAnchor}
@@ -2598,6 +2604,30 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
         <BoardImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />
       </BoardCanvasShell>
+
+      <SaveBeforeCloseDialog
+        open={confirmOutsideClose && !!editingNote && !isIntroPending}
+        saving={savingOutsideClose}
+        themeColor={themeColor}
+        panelChromeStyle={panelChromeStyle}
+        onCancel={() => setConfirmOutsideClose(false)}
+        onDiscard={() => {
+          setConfirmOutsideClose(false);
+          closeEditor('discarded');
+        }}
+        onSave={async () => {
+          const save = boardNoteSaveRef.current;
+          if (!save) return;
+          setSavingOutsideClose(true);
+          try {
+            const outcome = await save();
+            setConfirmOutsideClose(false);
+            closeEditor(outcome);
+          } finally {
+            setSavingOutsideClose(false);
+          }
+        }}
+      />
 
       {/* 必须位于画布容器之外：Board 的原生双指/滚轮监听只属于画布，不能截获待定箱滚动。 */}
       <UnplacedNotesSidebar

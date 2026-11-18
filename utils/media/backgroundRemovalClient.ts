@@ -1,3 +1,5 @@
+import { reportCutoutRuntime } from '../resources/featureResources';
+
 export type BackgroundRemovalProgress = {
   phase: 'loading' | 'processing';
   progress?: number;
@@ -94,11 +96,13 @@ function getWorker() {
     const request = pending.get(response.id);
     if (!request) return;
     if (response.type === 'progress') {
+      reportCutoutRuntime(response.phase === 'loading' ? 'initializing' : 'processing', response.progress);
       request.onProgress?.({ phase: response.phase, progress: response.progress });
       return;
     }
     pending.delete(response.id);
     if (response.type === 'error') {
+      reportCutoutRuntime('error');
       request.reject(new Error(response.message));
       return;
     }
@@ -110,7 +114,9 @@ function getWorker() {
         height: response.height,
         dataUrl: pixelsToDataUrl(pixels, response.width, response.height)
       });
+      reportCutoutRuntime('ready', 100);
     } catch (error) {
+      reportCutoutRuntime('error');
       request.reject(
         error instanceof Error ? error : new Error('Could not create the cutout')
       );
@@ -125,6 +131,7 @@ function getWorker() {
     createdWorker.terminate();
     const retryable: Array<[number, PendingRequest]> = [];
     const error = new Error(workerFailureMessage(event));
+    reportCutoutRuntime('error');
     for (const entry of pending.entries()) {
       const [id, request] = entry;
       if (request.retries < 1) {

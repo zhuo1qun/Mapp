@@ -21,6 +21,7 @@ import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { ProjectNotesLayerPanel } from './layer/ProjectNotesLayerPanel';
 import { WorkspaceWindowLinkOverlay } from './ui/WorkspaceWindowLinkOverlay';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
+import { SaveBeforeCloseDialog } from './ui/SaveBeforeCloseDialog';
 import { SettingsPanel } from './SettingsPanel';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { TableTopLeftSettingsButton } from './table/TableTopLeftSettingsButton';
@@ -112,6 +113,8 @@ export const TableView: React.FC<TableViewProps> = ({
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [editorNoteId, setEditorNoteId] = useState<string | null>(null);
   const editorSaveDraftRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
+  const [confirmOutsideClose, setConfirmOutsideClose] = useState(false);
+  const [savingOutsideClose, setSavingOutsideClose] = useState(false);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const canvasStageRef = useRef<HTMLDivElement>(null);
   const listWindowRef = useRef<HTMLDivElement>(null);
@@ -974,6 +977,7 @@ export const TableView: React.FC<TableViewProps> = ({
           initialNote={project.notes.find(n => n.id === editorNoteId)}
           isOpen={!!editorNoteId}
           onClose={() => setEditorNoteId(null)}
+          onRequestOutsideClose={() => setConfirmOutsideClose(true)}
           saveDraftRef={editorSaveDraftRef}
           onDelete={onDeleteNote}
           onSave={(updatedNote) => {
@@ -994,6 +998,30 @@ export const TableView: React.FC<TableViewProps> = ({
           onCanvasMediaDetailOpenChange={handleCanvasMediaDetailOpenChange}
         />
         </div>
+
+      <SaveBeforeCloseDialog
+        open={confirmOutsideClose && !!editorNoteId}
+        saving={savingOutsideClose}
+        themeColor={themeColor}
+        panelChromeStyle={panelChromeStyle}
+        onCancel={() => setConfirmOutsideClose(false)}
+        onDiscard={() => {
+          setConfirmOutsideClose(false);
+          setEditorNoteId(null);
+        }}
+        onSave={async () => {
+          const save = editorSaveDraftRef.current;
+          if (!save) return;
+          setSavingOutsideClose(true);
+          try {
+            await save();
+            setConfirmOutsideClose(false);
+            setEditorNoteId(null);
+          } finally {
+            setSavingOutsideClose(false);
+          }
+        }}
+      />
 
       {edgesTableEnabled && showConnectionPanel && onUpdateConnections && isUIVisible && (
         <GraphConnectionPanel

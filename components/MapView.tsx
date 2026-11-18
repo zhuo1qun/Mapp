@@ -26,6 +26,7 @@ import { useMapMarkerDrag } from '@/components/hooks/useMapMarkerDrag';
 import { useMapMarkerSelection } from '@/components/hooks/useMapMarkerSelection';
 import { useDataImport } from '@/components/hooks/useDataImport';
 import { useFileDrop } from '@/components/hooks/useFileDrop';
+import { extractDroppedImageFiles } from '@/utils/media/dataTransferImages';
 import { useCsvImport } from '@/components/hooks/useCsvImport';
 import { MapWorldMinZoom } from './map/MapWorldMinZoom';
 import { MapSmoothZoom } from './map/MapSmoothZoom';
@@ -100,6 +101,7 @@ import {
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { MapNoteSlot } from './map/overlays/MapNoteSlot';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
+import { SaveBeforeCloseDialog } from './ui/SaveBeforeCloseDialog';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -133,6 +135,8 @@ interface MapViewProps {
   setBorderGeoJSON?: (data: any | null) => void;
   onMapClick?: () => void;
   isUIVisible?: boolean;
+  /** 项目侧边栏展开时，Tab 预览态也不能把工作区右上角按钮重新显示出来。 */
+  isWorkspaceSidebarOpen?: boolean;
   /** 与 Board / Graph 共用的视图编辑模式（由 App 持有，切换视图时保持） */
   workspaceEditMode: boolean;
   onWorkspaceEditModeChange: (edit: boolean) => void;
@@ -195,6 +199,7 @@ export const MapView: React.FC<MapViewProps> = ({
   setBorderGeoJSON,
   onMapClick,
   isUIVisible = true,
+  isWorkspaceSidebarOpen = false,
   onThemeColorChange,
   uiDarkMode,
   onUiDarkModeChange,
@@ -261,6 +266,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(() => new Set());
   const [pendingKeyboardDeleteIds, setPendingKeyboardDeleteIds] = useState<string[] | null>(null);
+  const [confirmOutsideClose, setConfirmOutsideClose] = useState(false);
+  const [savingOutsideClose, setSavingOutsideClose] = useState(false);
   const [preSelectedNotes, setPreSelectedNotes] = useState<Note[] | null>(null);
   const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState(0);
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -842,22 +849,18 @@ export const MapView: React.FC<MapViewProps> = ({
 
   /** 外部图片投到地图时使用照片自身 GPS；没有 GPS 的图片自动进入待定位箱。 */
   const handleMapShellDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
+    async (event: React.DragEvent<HTMLDivElement>) => {
       if (!allowPhotoImport) {
         event.preventDefault();
         return;
       }
-      const files = event.dataTransfer.files;
-      const hasImage = Array.from(files).some(
-        (file) =>
-          file.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp|gif|avif|tiff?)$/i.test(file.name)
-      );
+      event.preventDefault();
+      const imageFiles = await extractDroppedImageFiles(event.dataTransfer);
       const map = mapInstanceRef.current;
-      if (!isEditorOpen && hasImage && map) {
-        event.preventDefault();
+      if (!isEditorOpen && imageFiles.length && map) {
         event.stopPropagation();
         dismissDrag();
-        handleImageImport(files, { target: { kind: 'map-exif' } });
+        handleImageImport(imageFiles, { target: { kind: 'map-exif' } });
         return;
       }
       rootProps.onDrop(event);
@@ -1370,12 +1373,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const closeMapNoteSlot = useCallback(() => {
     if (isEditorOpen) {
-      const save = mapNoteSaveRef.current;
-      if (save) {
-        void save().then((outcome) => closeEditorAndDismissNoteSlot(outcome));
-        return;
-      }
-      closeEditorAndDismissNoteSlot('discarded');
+      setConfirmOutsideClose(true);
       return;
     }
     setSelectedNoteId(null);
@@ -2234,7 +2232,7 @@ export const MapView: React.FC<MapViewProps> = ({
       )}
 
       {/* 预览模式：顶栏仅保留搜索、图层与导出（与正常模式顶栏分离） */}
-      {!isUIVisible && (
+      {!isUIVisible && !isWorkspaceSidebarOpen && (
         <MapPreviewTopRightToolbar
           showBorderPanel={!!showBorderPanel}
           onToggleBorderPanel={handleToggleBorderPanel}
@@ -2283,6 +2281,30 @@ export const MapView: React.FC<MapViewProps> = ({
           isEditMode={isMapToolbarEditMode}
         />
       ) : null}
+
+      <SaveBeforeCloseDialog
+        open={confirmOutsideClose && isEditorOpen}
+        saving={savingOutsideClose}
+        themeColor={themeColor}
+        panelChromeStyle={mapChromeContentSurface}
+        onCancel={() => setConfirmOutsideClose(false)}
+        onDiscard={() => {
+          setConfirmOutsideClose(false);
+          closeEditorAndDismissNoteSlot('discarded');
+        }}
+        onSave={async () => {
+          const save = mapNoteSaveRef.current;
+          if (!save) return;
+          setSavingOutsideClose(true);
+          try {
+            const outcome = await save();
+            setConfirmOutsideClose(false);
+            closeEditorAndDismissNoteSlot(outcome);
+          } finally {
+            setSavingOutsideClose(false);
+          }
+        }}
+      />
 
       <DeleteConfirmDialog
         open={!!pendingKeyboardDeleteIds?.length}

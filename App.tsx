@@ -73,6 +73,7 @@ import { installBuiltinExamples } from './utils/builtinExamples/install';
 import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
 import { dismissWorkspaceTransients } from './utils/ui/workspaceTransientDismiss';
 import { hasSupabaseClientConfig, isSupabaseEnabled } from './utils/supabaseEnv';
+import { loadBoardResource, loadMapResource, loadTableResource } from './utils/resources/featureResources';
 
 type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
 
@@ -119,13 +120,13 @@ async function deleteUnreferencedNoteMedia(removedNotes: Note[], remainingNotes:
 // Matter.js, editors, and export helpers). Loading them only when their surface is
 // opened keeps the initial shell responsive, especially on the project home screen.
 const MapView = lazy(() =>
-  import('./components/MapView').then(({ MapView }) => ({ default: MapView }))
+  loadMapResource().then(({ MapView }) => ({ default: MapView }))
 );
 const BoardView = lazy(() =>
-  import('./components/BoardView').then(({ BoardView }) => ({ default: BoardView }))
+  loadBoardResource().then(({ BoardView }) => ({ default: BoardView }))
 );
 const TableView = lazy(() =>
-  import('./components/TableView').then(({ TableView }) => ({ default: TableView }))
+  loadTableResource().then(({ TableView }) => ({ default: TableView }))
 );
 const ProjectManager = lazy(() =>
   import('./components/ProjectManager').then(({ ProjectManager }) => ({ default: ProjectManager }))
@@ -851,6 +852,7 @@ export default function App() {
   const workspaceModuleLoadingFallback = (
     <ModuleLoadProgress
       key={`mapping-${viewMode}`}
+      resourceId={viewMode}
       title={workspaceModuleMeta.title}
       icon={workspaceModuleMeta.icon}
       themeColor={themeColor}
@@ -1945,6 +1947,7 @@ export default function App() {
               }
             }}
             isUIVisible={isUIVisible && !isSidebarOpen}
+            isWorkspaceSidebarOpen={isSidebarOpen}
             isRouteMode={isRouteMode}
             setIsRouteMode={setIsRouteMode}
             waypoints={waypoints}

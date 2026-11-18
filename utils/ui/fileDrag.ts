@@ -1,6 +1,8 @@
 /** OS 文件拖拽（Finder / 资源管理器） */
 export function isFileDragTypes(types: DataTransfer['types'] | undefined) {
-  return !!types && Array.from(types).includes('Files');
+  return !!types && Array.from(types).some(
+    (type) => type === 'Files' || type === 'application/x-moz-file' || type.startsWith('image/')
+  );
 }
 
 /** 拖出浏览器窗口：坐标落到视口外。 */

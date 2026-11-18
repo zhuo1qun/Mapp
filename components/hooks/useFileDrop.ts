@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
 import { isFileDragLeavingViewport, isFileDragTypes } from '../../utils/ui/fileDrag';
+import { extractDroppedImageFiles } from '../../utils/media/dataTransferImages';
 
 interface UseFileDropProps {
   isEditorOpen: boolean;
-  handleImageImport: (files: FileList | null) => void;
+  handleImageImport: (files: FileList | File[] | null) => void;
   handleDataImport: (file: File) => void;
   handleCsvImport: (file: File) => void;
   /** 为 true 时仅处理 JSON/CSV（不触发图片导入） */
@@ -67,20 +68,15 @@ export function useFileDrop({
 
       setIsDragging(false);
 
-      const files = e.dataTransfer.files;
-      if (!files || files.length === 0) return;
+      const files = Array.from(e.dataTransfer.files || []);
+      const imageFiles = await extractDroppedImageFiles(e.dataTransfer);
+      if (files.length === 0 && imageFiles.length === 0) return;
 
-      const imageFiles = Array.from(files).filter(
-        (file: File) =>
-          file.type.startsWith('image/') ||
-          file.name.toLowerCase().endsWith('.heic') ||
-          file.name.toLowerCase().endsWith('.heif')
-      );
-      const jsonFiles = Array.from(files).filter(
+      const jsonFiles = files.filter(
         (file: File) =>
           file.type === 'application/json' || file.name.endsWith('.json')
       );
-      const csvFiles = Array.from(files).filter(
+      const csvFiles = files.filter(
         (file: File) =>
           file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')
       );
@@ -95,9 +91,7 @@ export function useFileDrop({
       }
 
       if (imageFiles.length > 0) {
-        const dataTransfer = new DataTransfer();
-        imageFiles.forEach((file) => dataTransfer.items.add(file as File));
-        handleImageImport(dataTransfer.files);
+        handleImageImport(imageFiles);
       } else if (jsonFiles.length > 0 && jsonFiles[0]) {
         handleDataImport(jsonFiles[0] as File);
       } else if (csvFiles.length > 0 && csvFiles[0]) {

@@ -2,6 +2,7 @@ import { get, set } from 'idb-keyval';
 import type { ImageEdit, ImageVariant, NoteImageRef } from '../../types';
 import { createStickerVariantFromOperations, loadImageVariant, saveMaskBitmapBlob } from '../persistence/imageVariantStore';
 import { removeImageBackground } from './backgroundRemovalClient';
+import { loadCutoutResource } from '../resources/featureResources';
 
 const AUTO_MASK_MODEL = 'BritishWerewolf/U-2-Netp';
 const AUTO_MASK_VERSION = 'u2netp-sticker-forge-v1';
@@ -107,6 +108,8 @@ export async function createAutoBackgroundRemovalSticker(options: {
   if (hasAlpha) {
     maskBlob = await alphaMaskBlob(sourcePixels.width, sourcePixels.height, sourcePixels.data, true);
   } else {
+    options.onProgress?.({ status: 'downloading' });
+    await loadCutoutResource();
     const result = await removeImageBackground(options.imageSrc, ({ phase, progress }) => {
       options.onProgress?.({
         status: phase === 'loading' ? 'downloading' : 'processing',

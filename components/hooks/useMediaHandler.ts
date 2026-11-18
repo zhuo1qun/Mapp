@@ -11,6 +11,7 @@ import {
 } from '../../utils/persistence/noteMediaSync';
 import { createLassoSticker } from '../../utils/media/createLassoSticker';
 import { createAutoBackgroundRemovalSticker, type AutoMaskProgress } from '../../utils/media/autoBackgroundRemoval';
+import { extractDroppedImageFiles } from '../../utils/media/dataTransferImages';
 import { resolveVariantDisplayUrl } from '../../utils/media/imageMaskRender';
 
 interface UseMediaHandlerArgs {
@@ -631,8 +632,8 @@ export function useMediaHandler({
     async (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const files = Array.from(e.dataTransfer.files) as File[];
-      const imageFiles = files.filter((file: File) => file.type.startsWith('image/'));
+      // Apple 的“长按主体抠图”常以 promised file / image item 传递，files 可能为空。
+      const imageFiles = await extractDroppedImageFiles(e.dataTransfer);
       if (imageFiles.length === 0 || isProcessingImages) return;
       setIsProcessingImages(true);
       try {

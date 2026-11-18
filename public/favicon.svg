@@ -1,3 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <text x="32" y="48" text-anchor="middle" font-size="48" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif">📌</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#FFDD00"/>
+  <path d="M256 76c-78.4 0-142 63.6-142 142 0 105.8 142 226 142 226s142-120.2 142-226c0-78.4-63.6-142-142-142Z" fill="#111827"/>
+  <circle cx="256" cy="218" r="58" fill="#FFDD00"/>
 </svg>

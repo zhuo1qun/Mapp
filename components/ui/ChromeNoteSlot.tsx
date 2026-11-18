@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useStickyValue } from '../../utils/ui/useStickyValue';
+import { useCompactViewport } from '../../utils/ui/useCompactViewport';
 import { ChromeWindow } from './ChromeWindow';
 
 export type ChromeNoteSlotSpec = {
@@ -74,6 +75,7 @@ export function ChromeNoteSlot<K extends string>({
   dismissIgnoreRefs,
   resolve
 }: ChromeNoteSlotProps<K>) {
+  const compact = useCompactViewport();
   const sticky = useStickyValue(kind);
   const previousKindRef = useRef<K | null>(sticky);
   const previousSpecRef = useRef<ChromeNoteSlotSpec | null>(null);
@@ -114,17 +116,19 @@ export function ChromeNoteSlot<K extends string>({
   }, []);
 
   if (sticky == null || spec == null) return null;
+  const compactPreview = compact && sticky === 'preview';
 
   return (
     <ChromeWindow
       open={kind != null}
       onClose={onClose}
       appearance={appearance}
-      motion="note-editor"
+      motion={compactPreview ? 'chrome' : 'note-editor'}
       motionAnchor={motionAnchor}
-      compactBehavior="none"
+      compactBehavior={compactPreview ? 'sheet' : 'none'}
+      showCompactDrawerHandle={!compactPreview}
       pageEdge={false}
-      showBackdrop={false}
+      showBackdrop={compactPreview}
       dismissStopEvent={sticky === 'editor'}
       surface="window"
       className={spec.className}

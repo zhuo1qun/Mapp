@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import { featureResourceSnapshot, subscribeFeatureResources, type FeatureResourceId } from '../../utils/resources/featureResources';
 
 interface ModuleLoadProgressProps {
   title: string;
@@ -6,6 +7,7 @@ interface ModuleLoadProgressProps {
   icon?: React.ReactNode;
   themeColor: string;
   className?: string;
+  resourceId?: FeatureResourceId;
 }
 
 /**
@@ -18,11 +20,15 @@ export const ModuleLoadProgress: React.FC<ModuleLoadProgressProps> = ({
   description = '首次使用时需要下载，后续打开会更快',
   icon,
   themeColor,
-  className = ''
+  className = '',
+  resourceId
 }) => {
-  const [progress, setProgress] = useState(10);
+  const [localProgress, setLocalProgress] = useState(10);
+  const resourceTasks = useSyncExternalStore(subscribeFeatureResources, featureResourceSnapshot, featureResourceSnapshot);
+  const progress = resourceId ? resourceTasks[resourceId].progress : localProgress;
 
   useEffect(() => {
+    if (resourceId) return;
     const startedAt = performance.now();
     let frame = 0;
 
@@ -30,13 +36,13 @@ export const ModuleLoadProgress: React.FC<ModuleLoadProgressProps> = ({
       const elapsed = now - startedAt;
       // 快速反馈后逐渐放缓，并停在 92%；组件真正完成加载时由 Suspense 卸载。
       const next = Math.min(92, 10 + 82 * (1 - Math.exp(-elapsed / 1900)));
-      setProgress(Math.floor(next));
+      setLocalProgress(Math.floor(next));
       frame = window.requestAnimationFrame(update);
     };
 
     frame = window.requestAnimationFrame(update);
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [resourceId]);
 
   return (
     <div

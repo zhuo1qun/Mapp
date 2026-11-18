@@ -1,8 +1,9 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import type { NoteEditorProps } from '../NoteEditor';
+import { loadEditorResource } from '../../utils/resources/featureResources';
 
 const LazyNoteEditor = React.lazy(async () => {
-  const module = await import('../NoteEditor');
+  const module = await loadEditorResource();
   return { default: module.NoteEditor };
 });
 

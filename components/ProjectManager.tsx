@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, Note } from '../types';
-import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, RefreshCw } from 'lucide-react';
+import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, RefreshCw, PackageCheck } from 'lucide-react';
 import { generateId, formatDate, compressImageFromBase64 } from '../utils';
 import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
@@ -45,6 +45,7 @@ import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
 import { ChromeSearchField } from './ui/ChromeSearchField';
+import { ResourcePermissionsPanel } from './ResourcePermissionsPanel';
 import { fetchBuiltinExamplesManifest } from '../utils/builtinExamples/manifest';
 import { parseExportPayload } from '../utils/builtinExamples/projectFromExport';
 import {
@@ -309,13 +310,36 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [isCreateFileDragging, setIsCreateFileDragging] = useState(false);
   const [showThemeColorPicker, setShowThemeColorPicker] = useState(false);
   const [showHomeSettings, setShowHomeSettings] = useState(false);
+  const [showResourcePermissions, setShowResourcePermissions] = useState(false);
   const [showAppearanceSettingsBlockInSettings, setShowAppearanceSettingsBlockInSettings] = useState(true);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [projectMoreAnchor, setProjectMoreAnchor] = useState<{
     row: DOMRectReadOnly;
     button: DOMRectReadOnly;
   } | null>(null);
   const [pendingBuiltinExampleUpdate, setPendingBuiltinExampleUpdate] = useState<Project | null>(null);
   const [isUpdatingBuiltinExample, setIsUpdatingBuiltinExample] = useState(false);
+
+  useEffect(() => {
+    const captureInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    const clearInstallPrompt = () => setInstallPrompt(null);
+    window.addEventListener('beforeinstallprompt', captureInstallPrompt);
+    window.addEventListener('appinstalled', clearInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', captureInstallPrompt);
+      window.removeEventListener('appinstalled', clearInstallPrompt);
+    };
+  }, []);
+
+  const requestAppInstall = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
 
   // 这张板只存在一份：hover 优先，其次是已展开的更多菜单，最后才是当前项目。
   // 因为它不随着项目行挂载/卸载，切换、淡出和重新进入都是同一个实体的连续动画。
@@ -351,7 +375,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     return () => resizeObserver.disconnect();
   }, [selectedHomeActionId]);
 
-  const selectedSidebarLeftActionId = hoveredSidebarLeftActionId ?? (showHomeSettings ? 'settings' : null);
+  const selectedSidebarLeftActionId = hoveredSidebarLeftActionId ?? (showResourcePermissions ? 'resources' : null) ?? (showHomeSettings ? 'settings' : null);
 
   useLayoutEffect(() => {
     const group = sidebarLeftActionsRef.current;
@@ -1213,31 +1237,44 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         onMapUiChromeBlurPxChange && (
         <>
           {!isSidebar || expandToHomeLayout ? (
-            <div
-              ref={homeActionsRef}
-              className="absolute top-4 left-4 z-[2010] flex items-center gap-2 pointer-events-auto"
-              onMouseLeave={() => setHoveredHomeActionId(null)}
-            >
-              {renderSharedActionWindow(homeActionSelectionRect)}
-              <button
-                ref={(element) => {
-                  if (element) homeActionRefs.current.set('settings', element);
-                  else homeActionRefs.current.delete('settings');
-                }}
-                type="button"
-                onClick={() => {
-                  setShowAppearanceSettingsBlockInSettings(true);
-                  setShowHomeSettings(true);
-                }}
-                className={`${themeChromeInteractiveClass} shared-window-hover-item relative z-[1] flex h-10 w-10 items-center justify-center rounded-xl`}
-                onMouseEnter={() => setHoveredHomeActionId('settings')}
-                onFocus={() => setHoveredHomeActionId('settings')}
-                onBlur={() => setHoveredHomeActionId(null)}
-                title="设置"
-                aria-expanded={showHomeSettings}
+            <>
+              {installPrompt ? (
+                <button
+                  type="button"
+                  onClick={() => void requestAppInstall()}
+                  className={`${themeChromeInteractiveClass} ${MAP_CHROME_SURFACE_BORDER_CLASS} absolute top-4 right-4 z-[2010] flex h-10 w-10 items-center justify-center rounded-xl shadow-lg pointer-events-auto`}
+                  style={mapChromeSurface}
+                  title="安装 Mapp"
+                  aria-label="安装 Mapp"
+                >
+                  <Download size={22} strokeWidth={2} aria-hidden />
+                </button>
+              ) : null}
+              <div
+                ref={homeActionsRef}
+                className="absolute top-4 left-4 z-[2010] flex items-center gap-2 pointer-events-auto"
+                onMouseLeave={() => setHoveredHomeActionId(null)}
               >
-                <Palette size={22} strokeWidth={2} aria-hidden />
-              </button>
+                {renderSharedActionWindow(homeActionSelectionRect)}
+                <button
+                  ref={(element) => {
+                    if (element) homeActionRefs.current.set('settings', element);
+                    else homeActionRefs.current.delete('settings');
+                  }}
+                  type="button"
+                  onClick={() => {
+                    setShowAppearanceSettingsBlockInSettings(true);
+                    setShowHomeSettings(true);
+                  }}
+                  className={`${themeChromeInteractiveClass} shared-window-hover-item relative z-[1] flex h-10 w-10 items-center justify-center rounded-xl`}
+                  onMouseEnter={() => setHoveredHomeActionId('settings')}
+                  onFocus={() => setHoveredHomeActionId('settings')}
+                  onBlur={() => setHoveredHomeActionId(null)}
+                  title="设置"
+                  aria-expanded={showHomeSettings}
+                >
+                  <Palette size={22} strokeWidth={2} aria-hidden />
+                </button>
               {onToggleEasterEggMode && !activeProject ? (
                 <button
                   ref={(element) => {
@@ -1276,7 +1313,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <Code2 size={22} strokeWidth={2} aria-hidden />
                 </button>
               ) : null}
-            </div>
+              </div>
+            </>
           ) : null}
           <ChromeWindow
             open={showHomeSettings}
@@ -1325,6 +1363,24 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                         />
                       ) : null}
                     </div>
+          </ChromeWindow>
+          <ChromeWindow
+            open={showResourcePermissions}
+            onClose={() => setShowResourcePermissions(false)}
+            backdropLabel="关闭资源与权限"
+            placement="center"
+            compactBehavior="none"
+            presenceKind="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="resource-permissions-title"
+            className="flex w-[calc(100vw-1.5rem)] max-h-[min(85dvh,85vh)] min-w-0 max-w-md flex-col sm:w-[min(32rem,calc(100vw-2rem))] sm:max-w-lg"
+            style={mapChromeSurface}
+          >
+            <ChromeWindowHeader title="资源与权限" titleId="resource-permissions-title" onClose={() => setShowResourcePermissions(false)} />
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pt-2 pb-3 theme-surface-scrollbar">
+              <ResourcePermissionsPanel themeColor={themeColor} />
+            </div>
           </ChromeWindow>
         </>
       )}
@@ -1392,6 +1448,25 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <Palette size={22} strokeWidth={2} aria-hidden />
                 </button>
               )}
+            <button
+              ref={(element) => {
+                if (element) sidebarLeftActionRefs.current.set('resources', element);
+                else sidebarLeftActionRefs.current.delete('resources');
+              }}
+              type="button"
+              onClick={() => {
+                setShowHomeSettings(false);
+                setShowResourcePermissions(true);
+              }}
+              className={`${themeChromeInteractiveClass} shared-window-hover-item project-sidebar-action relative z-[1] p-2 rounded-xl`}
+              onMouseEnter={() => setHoveredSidebarLeftActionId('resources')}
+              onFocus={() => setHoveredSidebarLeftActionId('resources')}
+              onBlur={() => setHoveredSidebarLeftActionId(null)}
+              title="资源与权限"
+              aria-expanded={showResourcePermissions}
+            >
+              <PackageCheck size={22} strokeWidth={2} aria-hidden />
+            </button>
           </div>
           <div
             ref={sidebarRightActionsRef}

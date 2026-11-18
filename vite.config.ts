@@ -8,6 +8,10 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
+      build: {
+        // 资源与权限窗口用它核对“当前版本”的哈希模块是否真实存在于 Cache Storage。
+        manifest: true,
+      },
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -30,11 +34,12 @@ export default defineConfig(({ mode }) => {
             // 的视图仍会在后台被一次性下载，懒加载便失去网络层面的意义。
             // 已访问的脚本由下面的运行时缓存保存；CSS、图标与字体仍可预缓存。
             // index.html / 导航请求也不能放进 Workbox，否则发布后可能继续打开旧页面。
-            globPatterns: ['assets/**/*.{css,ico,png,svg,woff,woff2}'],
+            globPatterns: ['assets/**/*.{css,ico,png,svg,woff,woff2}', '.vite/manifest.json'],
             globDirectory: 'dist',
             // HTML 与 SPA 导航始终走网络，由部署层的 must-revalidate 头控制。
             navigateFallback: null,
-            skipWaiting: true,
+            // 新版本先进入 waiting，由 registerSW 的确认框决定何时接管，避免编辑中突然刷新。
+            skipWaiting: false,
             clientsClaim: true,
             cleanupOutdatedCaches: true,
             runtimeCaching: [
@@ -52,6 +57,32 @@ export default defineConfig(({ mode }) => {
                   cacheableResponse: {
                     statuses: [0, 200],
                   },
+                },
+              },
+              {
+                // AI 模型单独持久缓存；资源窗口可在刷新后准确识别已下载状态。
+                urlPattern: /\/models\/.*\.(?:onnx|json)$/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'ai-models',
+                  expiration: {
+                    maxEntries: 24,
+                    maxAgeSeconds: 60 * 60 * 24 * 90,
+                  },
+                  cacheableResponse: { statuses: [0, 200] },
+                },
+              },
+              {
+                // ONNX Runtime 的 WASM 较大，初始化过一次后保留，避免再次下载。
+                urlPattern: /\/assets\/.*\.wasm$/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'ai-runtime',
+                  expiration: {
+                    maxEntries: 12,
+                    maxAgeSeconds: 60 * 60 * 24 * 90,
+                  },
+                  cacheableResponse: { statuses: [0, 200] },
                 },
               },
               {

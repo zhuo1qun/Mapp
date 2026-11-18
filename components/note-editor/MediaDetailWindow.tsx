@@ -7,6 +7,7 @@ import { useChromeAppearance } from '../ui/chromeAppearanceContext';
 import { ChromePresence } from '../ui/ChromeSheetPresence';
 import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from '../ui/ChromeDialogSurface';
 import { ChromeToggle } from '../ui/ChromeToggle';
+import { CompactDrawerHandle, useCompactDrawerGesture } from '../ui/useCompactDrawerGesture';
 import { LassoStickerEditor } from './LassoStickerEditor';
 
 /** 已显示过缩略图的媒体通常会命中这里，详情窗可在首帧就采用正确比例。 */
@@ -95,6 +96,14 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
     width: typeof window === 'undefined' ? 1024 : window.innerWidth,
     height: typeof window === 'undefined' ? 768 : window.innerHeight
   }));
+  const isCompactMediaSheet = !isCanvasWindow && !isLassoMode && viewport.width <= 639;
+  const mediaSurfaceRef = useRef<HTMLElement>(null);
+  const compactDrawer = useCompactDrawerGesture(
+    mediaSurfaceRef,
+    isCompactMediaSheet && open,
+    undefined,
+    onClose
+  );
 
   useLayoutEffect(() => {
     if (!canShowImage || !previewImage) {
@@ -161,14 +170,27 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
             role="dialog"
             aria-modal={isCanvasWindow ? undefined : true}
             aria-label={isLassoMode ? '套索裁剪' : '媒体详情'}
+            ref={mediaSurfaceRef}
             className={`note-editor-media-detail ${isCanvasWindow ? 'note-editor-aux-panel relative z-20' : ''} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} flex min-h-0 flex-col overflow-hidden ${
               isCanvasWindow
                 ? `chrome-dialog-${phase} shrink-0 ${isLassoMode ? 'h-[min(42rem,calc(100dvh-8rem))] w-[min(36rem,calc(100vw-2rem))]' : 'transition-[width,height] duration-200 ease-out'}`
-                : `media-detail-window-surface--modal relative z-10 chrome-responsive-sheet-${phase} ${isLassoMode ? 'h-[min(42rem,calc(100dvh-8rem))] w-[min(36rem,calc(100vw-2rem))]' : 'transition-[width,height] duration-200 ease-out'}`
+                : `media-detail-window-surface--modal relative z-10 chrome-responsive-sheet-${phase} ${
+                    isCompactMediaSheet
+                      ? `chrome-compact-drawer${compactDrawer.dragging ? ' chrome-compact-drawer--dragging' : ''}${
+                          compactDrawer.expanded ? ' chrome-compact-drawer--expanded' : ''
+                        }${compactDrawer.dismissing ? ' chrome-compact-drawer--dismissing' : ''}`
+                      : ''
+                  } ${isLassoMode ? 'h-[min(42rem,calc(100dvh-8rem))] w-[min(36rem,calc(100vw-2rem))]' : 'transition-[width,height] duration-200 ease-out'}`
             }`}
             style={{
               ...panelChromeStyle,
               ...mediaDetailSize,
+              ...(compactDrawer.dragging
+                ? ({
+                    '--chrome-drawer-height': `${compactDrawer.dragStartHeight + compactDrawer.dragDistance}px`,
+                    '--chrome-drawer-opacity-factor': String(compactDrawer.opacityFactor)
+                  } as React.CSSProperties)
+                : null),
               // 等到首次解出媒体比例再露出详情窗，避免先出现空的大方框、随后才跳变。
               visibility: !isLassoMode && canShowImage && !isMediaAspectReady ? 'hidden' : undefined
             }}
@@ -178,9 +200,14 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
             onClick={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
           >
+            <CompactDrawerHandle enabled={isCompactMediaSheet && open} handleProps={compactDrawer.handleProps} />
             <header
               data-workspace-link-anchor={isCanvasWindow ? 'media-detail-title' : undefined}
-              className="flex min-h-10 shrink-0 items-center gap-2 px-4 pb-1 pt-2"
+              className={`flex shrink-0 items-center gap-2 ${
+                isCompactMediaSheet
+                  ? 'absolute right-2 top-2 z-20 min-h-0 p-0'
+                  : 'min-h-10 px-4 pb-1 pt-2'
+              }`}
             >
               {isLassoMode ? (
                 <button
@@ -195,7 +222,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
                 </button>
               ) : null}
 
-              <div className="min-w-0 flex-1">
+              <div className={`min-w-0 flex-1 ${isCompactMediaSheet ? 'hidden' : ''}`}>
                 <h3 className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-400">
                   {isLassoMode ? '套索裁剪' : '媒体详情'}
                 </h3>
@@ -214,15 +241,17 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
                 )}
               </div>
 
-              <button
-                type="button"
-                aria-label="关闭媒体详情"
-                title="关闭媒体详情"
-                onClick={onClose}
-                className="chrome-menu-item inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-gray-500"
-              >
-                <X size={18} />
-              </button>
+              {!isCompactMediaSheet ? (
+                <button
+                  type="button"
+                  aria-label="关闭媒体详情"
+                  title="关闭媒体详情"
+                  onClick={onClose}
+                  className="chrome-menu-item inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-gray-500"
+                >
+                  <X size={18} />
+                </button>
+              ) : null}
             </header>
 
             {!isLassoMode && showMaskControls ? (
@@ -399,7 +428,9 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
         if (isCanvasWindow) return surface;
         const layer = (
           <div
-            className="note-editor-transient-layer fixed top-0 ui-workspace-overlay flex h-[100dvh] items-center justify-center bg-transparent p-0 sm:p-4"
+            className={`note-editor-transient-layer media-detail-window-layer fixed top-0 ui-workspace-overlay flex h-[100dvh] items-center justify-center bg-transparent p-0 sm:p-4${
+              compactDrawer.expanded ? ' media-detail-window-layer--expanded' : ''
+            }`}
           >
             <button
               type="button"

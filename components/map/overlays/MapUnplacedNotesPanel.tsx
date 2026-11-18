@@ -5,6 +5,8 @@ import { noteRendersAsBoardSticker } from '../../../utils/persistence/mediaDispl
 import { BoardMultiSelectToolbar } from '../../board/BoardMultiSelectToolbar';
 import { BoardPaperNoteContent } from '../../note/BoardPaperNoteContent';
 import { BoardNoteObject, boardNoteMediaSource } from '../../note/BoardNoteObject';
+import { extractDroppedImageFiles } from '../../../utils/media/dataTransferImages';
+import { isFileDragTypes } from '../../../utils/ui/fileDrag';
 
 type Props = {
   open: boolean;
@@ -22,7 +24,7 @@ type Props = {
   /** Board 拖拽预览按当前画布倍率显示；地图不传，沿用待定箱本身尺寸。 */
   boardDragPreviewScale?: number;
   onDeleteSelected?: (noteIds: string[]) => void;
-  onDropFiles?: (files: FileList) => void;
+  onDropFiles?: (files: FileList | File[]) => void;
   isDark?: boolean;
 };
 
@@ -399,14 +401,14 @@ export function UnplacedNotesSidebar({
             : 'overflow-hidden'
         }`}
         onDragOver={(event) => {
-          if (!onDropFiles || !event.dataTransfer.files.length) return;
+          if (!onDropFiles || !isFileDragTypes(event.dataTransfer.types)) return;
           event.preventDefault();
           event.stopPropagation();
           event.dataTransfer.dropEffect = 'copy';
           setIsFileDropTarget(true);
         }}
         onDragEnter={(event) => {
-          if (!onDropFiles || !event.dataTransfer.files.length) return;
+          if (!onDropFiles || !isFileDragTypes(event.dataTransfer.types)) return;
           event.preventDefault();
           event.stopPropagation();
           setIsFileDropTarget(true);
@@ -416,13 +418,18 @@ export function UnplacedNotesSidebar({
           if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
           setIsFileDropTarget(false);
         }}
-        onDrop={(event) => {
-          const files = event.dataTransfer.files;
+        onDrop={async (event) => {
           setIsFileDropTarget(false);
-          if (!onDropFiles || !files.length) return;
+          if (!onDropFiles) return;
           event.preventDefault();
           event.stopPropagation();
-          onDropFiles(files);
+          const imageFiles = await extractDroppedImageFiles(event.dataTransfer);
+          if (imageFiles.length) {
+            onDropFiles(imageFiles);
+            return;
+          }
+          const files = event.dataTransfer.files;
+          if (files.length) onDropFiles(files);
         }}
       >
         <div

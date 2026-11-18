@@ -14,6 +14,7 @@ import { useStickyValue } from '../../utils/ui/useStickyValue';
 import { AnchoredWorkspaceWindow } from './AnchoredWorkspaceWindow';
 import { CompactWindowBackdrop } from './CompactWindowBackdrop';
 import { ChromePresence, type ChromePresenceKind } from './ChromeSheetPresence';
+import { CompactDrawerHandle, useCompactDrawerGesture } from './useCompactDrawerGesture';
 
 export type ChromeWindowSurface = 'menu' | 'window' | 'layer';
 export type ChromeWindowAlign = 'start' | 'end';
@@ -53,6 +54,10 @@ export type ChromeWindowProps = {
   dismissStopEvent?: boolean;
   /** 嵌套在 NoteEditor / 详情槽位内的二级窗口，必须浮在其壳之上。 */
   elevation?: 'default' | 'above-note-slot';
+  /** 窄屏抽屉完成上拉展开后调用；详情类窗口可借此切换到完整编辑状态。 */
+  onCompactSheetExpand?: () => void;
+  /** 某些详情抽屉仅通过自身的编辑按钮进入全屏，不显示或响应拖拽手柄。 */
+  showCompactDrawerHandle?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'style' | 'className'>;
 
 const NESTED_IGNORE_SELECTOR = [
@@ -107,6 +112,8 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
   motionAnchor = null,
   dismissStopEvent = false,
   elevation = 'default',
+  onCompactSheetExpand,
+  showCompactDrawerHandle = true,
   ...rootProps
 }) => {
   const appearance = useChromeAppearance(appearanceProp);
@@ -115,7 +122,16 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
   const surfaceRef = panelRef ?? ownPanelRef;
   const centered = placement === 'center';
   const noteMotion = motion === 'note-editor';
+  const isCompactDrawer = compact && compactBehavior === 'sheet' && !noteMotion;
+  // 关闭即复位：重新打开抽屉永远回到部分占屏的初始停靠位。
+  const compactDrawerGestureEnabled = isCompactDrawer && showCompactDrawerHandle && open;
   const stickyAnchor = useStickyValue(motionAnchor);
+  const compactDrawer = useCompactDrawerGesture(
+    surfaceRef,
+    compactDrawerGestureEnabled,
+    onCompactSheetExpand,
+    onClose
+  );
   const hasDesktopAnchor =
     top != null || left != null || bottom != null || centered || noteMotion;
 
@@ -197,6 +213,11 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
   const morphCls = centered && !noteMotion ? '' : 'chrome-window-morph';
   const noteMotionCls = noteMotion ? 'chrome-note-slot' : '';
   const elevationCls = elevation === 'above-note-slot' ? 'chrome-window-above-note-slot' : '';
+  const drawerCls = isCompactDrawer
+    ? `chrome-compact-drawer${compactDrawer.dragging ? ' chrome-compact-drawer--dragging' : ''}${
+        compactDrawer.expanded ? ' chrome-compact-drawer--expanded' : ''
+      }${compactDrawer.dismissing ? ' chrome-compact-drawer--dismissing' : ''}`
+    : '';
   const surfaceCls =
     surface === 'layer'
       ? 'map-layer-chrome-panel flex gap-2 items-start pointer-events-none'
@@ -223,14 +244,15 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
               panelRef={surfaceRef}
               data-chrome-window-surface=""
               data-map-layer-chrome-panel={surface === 'layer' ? '' : undefined}
-              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${elevationCls} ${phaseCls} workspace-transient-elevation ${className}`.trim()}
-              style={positionedStyle}
+              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${elevationCls} ${drawerCls} ${phaseCls} workspace-transient-elevation ${className}`.trim()}
+              style={{ ...positionedStyle, ...compactDrawer.windowGeometryStyle }}
             >
               {/*
                 * 窗口会通过 portal 脱离地图/主页原本的 DOM；把已解析的窗口主题继续提供给
                 * 内部字段，确保检索、新建项目等复用的 ChromeSearchField 同时采用这扇窗的槽位前景色。
                 */}
               <ChromeAppearanceContext.Provider value={appearance}>
+                <CompactDrawerHandle enabled={compactDrawerGestureEnabled} handleProps={compactDrawer.handleProps} />
                 {children}
               </ChromeAppearanceContext.Provider>
             </AnchoredWorkspaceWindow>

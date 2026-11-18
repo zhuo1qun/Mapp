@@ -36,17 +36,18 @@ import { ChromePresence } from './ui/ChromeSheetPresence';
 import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from './ui/ChromeDialogSurface';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { fitBoardMediaDimensions } from '../utils/board/boardPlacement';
+import { loadCameraResource, loadDrawingResource, loadMediaDetailResource } from '../utils/resources/featureResources';
 
 const LazyDrawingCanvas = lazy(async () => {
-  const module = await import('./DrawingCanvas');
+  const module = await loadDrawingResource();
   return { default: module.DrawingCanvas };
 });
 const LazyCameraCaptureDialog = lazy(async () => {
-  const module = await import('./map/overlays/CameraCaptureDialog');
+  const module = await loadCameraResource();
   return { default: module.CameraCaptureDialog };
 });
 const LazyMediaDetailWindow = lazy(async () => {
-  const module = await import('./note-editor/MediaDetailWindow');
+  const module = await loadMediaDetailResource();
   return { default: module.MediaDetailWindow };
 });
 const LazyEmojiPicker = lazy(async () => {
@@ -60,6 +61,8 @@ export interface NoteEditorProps {
   onClose: () => void;
   /** 保存成功后的关闭路径；可与取消草稿的关闭过渡不同。 */
   onSaveClose?: () => void;
+  /** 仅点击编辑器外部时触发；用于先询问是否保存。 */
+  onRequestOutsideClose?: () => void;
   /** 供记录切换等场景先提交当前草稿、但不关闭编辑器。 */
   saveDraftRef?: React.MutableRefObject<(() => Promise<NoteDraftOutcome>) | null>;
   onSave: (note: Partial<Note>) => void | Promise<void>;
@@ -96,6 +99,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   isOpen,
   onClose,
   onSaveClose,
+  onRequestOutsideClose,
   saveDraftRef,
   onSave,
   isNewNote = false,
@@ -1132,7 +1136,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       onDrop={(e) => e.stopPropagation()}
     >
       {!isCanvasWindow ? (
-        <div className="absolute inset-0" onClick={() => void handleSave()} style={{ zIndex: 1 }} />
+        <div className="absolute inset-0" onClick={() => onRequestOutsideClose ? onRequestOutsideClose() : void handleSave()} style={{ zIndex: 1 }} />
       ) : null}
 
       <div className={`note-editor-shell note-editor-canvas-main relative z-10 flex flex-col items-end ${isCanvasWindow ? 'w-[min(38rem,calc(100vw-2rem))] shrink-0' : ''}`}>

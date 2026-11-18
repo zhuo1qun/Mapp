@@ -111,15 +111,22 @@ export function MapNoteSlot({
           backdropLabel: '关闭预览',
           'aria-label': '便签预览',
           className: 'flex min-h-0 flex-col',
-          style: {
-            top: menuTop ?? 56,
-            left: previewLeft,
-            width: 'min(20rem, calc(100vw - 1rem))',
-            // 详情卡最多延伸到视口底部，并保留与页面边缘一致的外边距。
-            height: 'auto',
-            maxHeight: `calc(100dvh - ${menuTop ?? 56}px - ${pagePad})`,
-            ...contentSurfaceStyle
-          },
+          style: compactViewport
+            ? {
+                // 窄屏详情与其它工作抽屉保持相同的初始停靠高度；外壳会接管左右与底部安全区。
+                height: 'min(64dvh, calc(100dvh - 1rem))',
+                maxHeight: 'min(64dvh, calc(100dvh - 1rem))',
+                ...contentSurfaceStyle
+              }
+            : {
+                top: menuTop ?? 56,
+                left: previewLeft,
+                width: 'min(20rem, calc(100vw - 1rem))',
+                // 详情卡最多延伸到视口底部，并保留与页面边缘一致的外边距。
+                height: 'auto',
+                maxHeight: `calc(100dvh - ${menuTop ?? 56}px - ${pagePad})`,
+                ...contentSurfaceStyle
+              },
           children: selectedNote ? (
             <NotePreviewCard
               hosted

@@ -18,6 +18,8 @@ import { clientPoint, clientToBoardPoint } from '../../utils/board/boardCoordina
 import { isNoteBoardPlaced } from '../../utils/note/notePlacement';
 import { enrichLinkPreview, fallbackLinkPreview, isEditablePasteTarget, parseClipboardData } from '../../utils/clipboard/parseClipboard';
 import { generateNoteMediaItemId } from '../../utils/persistence/noteMediaSync';
+import { extractDroppedImageFiles } from '../../utils/media/dataTransferImages';
+import { isFileDragTypes } from '../../utils/ui/fileDrag';
 
 type BoardTransform = { x: number; y: number; scale: number };
 
@@ -270,11 +272,11 @@ export function useBoardImportController({
   }, [editingNote, onUpdateNote, setEditingNote]);
 
   const handleDrop = useCallback(async (event: DragEvent) => {
-    const files = Array.from(event.dataTransfer.files ?? []);
-    if (!files.length) return;
     event.preventDefault();
     event.stopPropagation();
-    const imageFiles = files.filter(isImageFile);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    const imageFiles = await extractDroppedImageFiles(event.dataTransfer);
+    if (!files.length && !imageFiles.length) return;
     const dataFile = files.find((file) => file.type === 'application/json' || file.name.toLowerCase().endsWith('.json'));
     const csvFile = files.find((file) => file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv'));
     if (imageFiles.length && !editingNote) {
@@ -294,7 +296,7 @@ export function useBoardImportController({
     if (csvFile) void onCsvImport(csvFile);
   }, [appendImagesToEditingNote, containerRef, createImageNote, editingNote, handleDataImport, onCsvImport, transform]);
 
-  const handleUnplacedBoardFiles = useCallback(async (files: FileList) => {
+  const handleUnplacedBoardFiles = useCallback(async (files: FileList | File[]) => {
     const items = Array.from(files);
     const imageFiles = items.filter(isImageFile);
     if (imageFiles.length) {
@@ -323,12 +325,12 @@ export function useBoardImportController({
   }, [createImageNote]);
 
   const handleDragEnter = useCallback((event: DragEvent) => {
-    if (!event.dataTransfer.types.includes('Files')) return;
+    if (!isFileDragTypes(event.dataTransfer.types)) return;
     event.preventDefault();
     event.stopPropagation();
   }, []);
   const handleDragOver = useCallback((event: DragEvent) => {
-    if (!event.dataTransfer.types.includes('Files')) return;
+    if (!isFileDragTypes(event.dataTransfer.types)) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'copy';
