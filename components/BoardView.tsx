@@ -99,6 +99,9 @@ import {
   selectionHasUntaggedNotes
 } from '../utils/board/boardSelectionFilters';
 
+/** 与选中便签的最长视觉过渡（rotate）一致，避免工具栏抢在对象落稳前出现。 */
+const BOARD_SELECTION_TOOLBAR_DELAY_MS = 220;
+
 /** Frame 叠在玻璃底上的主题色/分组色（hex → rgba） */
 function frameTintFromHex(hex: string, alpha: number): string {
   const rgb = parseHexToRgb(hex);
@@ -598,6 +601,25 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     () => notes.filter((note) => selectedNoteIds.has(note.id) && isNoteBoardPlaced(note)),
     [notes, selectedNoteIds]
   );
+  const selectedBoardNoteKey = useMemo(
+    () => selectedBoardNotes.map((note) => note.id).sort().join('|'),
+    [selectedBoardNotes]
+  );
+  const [isSelectionToolbarReady, setIsSelectionToolbarReady] = useState(false);
+
+  useEffect(() => {
+    if (!selectedBoardNoteKey) {
+      setIsSelectionToolbarReady(false);
+      return;
+    }
+    setIsSelectionToolbarReady(false);
+    const timer = window.setTimeout(
+      () => setIsSelectionToolbarReady(true),
+      BOARD_SELECTION_TOOLBAR_DELAY_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [selectedBoardNoteKey]);
+
   const selectedTextBoardNotes = useMemo(
     () => selectedBoardNotes.filter((note) => !noteRendersAsBoardSticker(note)),
     [selectedBoardNotes]
@@ -2157,7 +2179,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                 onScaleStart={handleSelectionChromeHandleStart}
                 onElementChange={setSelectionOverlayElement}
               >
-                <BoardMultiSelectToolbar
+                {isSelectionToolbarReady ? <BoardMultiSelectToolbar
                   themeColor={themeColor}
                   panelChromeStyle={panelChromeStyle}
                   isDark={chromeAppearance === 'dark'}
@@ -2277,7 +2299,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                       )}
                     </>
                   }
-                />
+                /> : null}
               </BoardSelectionOverlay>
             );
           })()}

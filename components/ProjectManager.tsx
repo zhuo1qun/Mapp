@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, Note } from '../types';
-import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, Code2, RefreshCw, PackageCheck } from 'lucide-react';
+import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, RefreshCw, PackageCheck } from 'lucide-react';
 import { generateId, formatDate, compressImageFromBase64 } from '../utils';
 import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
@@ -175,9 +175,6 @@ interface ProjectManagerProps {
   onEasterEggGravityYChange?: (v: number) => void;
   easterEggMouseConstraintStiffness?: number;
   onEasterEggMouseConstraintStiffnessChange?: (v: number) => void;
-  /** 开发者示例项目维护模式：允许增删示例项目（仅本地 dev 入口切换） */
-  exampleDevMaintenanceMode?: boolean;
-  onExampleDevMaintenanceModeToggle?: () => void;
 }
 
 export const ProjectManager: React.FC<ProjectManagerProps> = ({
@@ -222,12 +219,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   easterEggGravityY,
   onEasterEggGravityYChange,
   easterEggMouseConstraintStiffness,
-  onEasterEggMouseConstraintStiffnessChange,
-  exampleDevMaintenanceMode = false,
-  onExampleDevMaintenanceModeToggle
+  onEasterEggMouseConstraintStiffnessChange
 }) => {
-  const devImportInputRef = useRef<HTMLInputElement>(null);
-  const [devImportDragOver, setDevImportDragOver] = useState(false);
   const homeHeroMeasureRef = useRef<HTMLDivElement | null>(null);
   const [homeHeroMeasuredMaxH, setHomeHeroMeasuredMaxH] = useState<number>(520);
   const [renderHomeHeroShell, setRenderHomeHeroShell] = useState(false);
@@ -247,16 +240,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   }, [projects]);
 
   const displayProjects = useMemo(() => {
-    const list = exampleDevMaintenanceMode
-      ? projects.filter((p) => builtinExampleIds.has(p.id))
-      : projects;
-    return [...list].sort((a, b) => {
+    return [...projects].sort((a, b) => {
       const ax = builtinExampleIds.has(a.id) ? 0 : 1;
       const bx = builtinExampleIds.has(b.id) ? 0 : 1;
       if (ax !== bx) return ax - bx; // 示例项目置顶
       return (b.createdAt ?? 0) - (a.createdAt ?? 0);
     });
-  }, [projects, builtinExampleIds, exampleDevMaintenanceMode]);
+  }, [projects, builtinExampleIds]);
   const chromeAppearance = useChromeAppearance();
   const mapChromeSurface = mapChromeSurfaceStyle(
     mapUiChromeOpacity,
@@ -352,8 +342,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const selectedHomeActionId =
     hoveredHomeActionId ??
     (showHomeSettings ? 'settings' : null) ??
-    (easterEggMode ? 'easter-egg' : null) ??
-    (exampleDevMaintenanceMode ? 'dev' : null);
+    (easterEggMode ? 'easter-egg' : null);
 
   useLayoutEffect(() => {
     const group = homeActionsRef.current;
@@ -1293,26 +1282,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   <Sparkles size={22} strokeWidth={2} aria-hidden />
                 </button>
               ) : null}
-              {onExampleDevMaintenanceModeToggle &&
-              typeof window !== 'undefined' &&
-              (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? (
-                <button
-                  ref={(element) => {
-                    if (element) homeActionRefs.current.set('dev', element);
-                    else homeActionRefs.current.delete('dev');
-                  }}
-                  type="button"
-                  onClick={() => onExampleDevMaintenanceModeToggle()}
-                  className={`${themeChromeInteractiveClass} shared-window-hover-item relative z-[1] flex h-10 w-10 items-center justify-center rounded-xl`}
-                  onMouseEnter={() => setHoveredHomeActionId('dev')}
-                  onFocus={() => setHoveredHomeActionId('dev')}
-                  onBlur={() => setHoveredHomeActionId(null)}
-                  aria-pressed={exampleDevMaintenanceMode}
-                  title="dev"
-                >
-                  <Code2 size={22} strokeWidth={2} aria-hidden />
-                </button>
-              ) : null}
               </div>
             </>
           ) : null}
@@ -1582,71 +1551,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </h1>
             </MotionDiv>
 
-            <MotionDiv
-              className="relative z-[6] flex w-full shrink-0 flex-col items-center overflow-visible"
-              initial={false}
-              animate={
-                easterEggMode
-                  ? { y: '200vh', opacity: 0 }
-                  : !homeHeroShellExpanded || homeHeroAnimateOut
-                    ? { opacity: 0 }
-                    : { opacity: 1 }
-              }
-              transition={{
-                duration: PROJECT_OPEN_SLIDE_DURATION_S,
-                ease: PROJECT_OPEN_SLIDE_EASE
-              }}
-              style={{
-                willChange: 'transform, opacity',
-                pointerEvents: easterEggMode || homeHeroAnimateOut ? 'none' : 'auto'
-              }}
-            >
-              {/* 开发维护模式仍保留独立的项目导入口；常规入口与项目行一起渲染。 */}
-              <div className="mt-0 w-full max-w-md px-4">
-                {exampleDevMaintenanceMode ? (
-                  <div
-                    className={`${themeChromeInteractiveClass} flex h-16 w-full cursor-pointer items-center justify-center rounded-xl border`}
-                    data-chrome-selected={devImportDragOver || undefined}
-                    onClick={() => devImportInputRef.current?.click()}
-                    onDragEnter={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDevImportDragOver(true);
-                    }}
-                    onDragLeave={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDevImportDragOver(false);
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDevImportDragOver(false);
-                      const f = e.dataTransfer.files?.[0];
-                      if (f) void handleImportProject(f);
-                    }}
-                    title="拖拽 JSON 到此处导入为项目"
-                  >
-                    <Upload size={22} strokeWidth={2} aria-hidden />
-                    <input
-                      ref={devImportInputRef}
-                      type="file"
-                      accept=".json,application/json"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) void handleImportProject(f);
-                        e.target.value = '';
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </MotionDiv>
           </div>
         </MotionDiv>
       ) : null}
@@ -1774,7 +1678,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               </button>
             </MotionDiv>
           ) : null}
-          {homeLikeList && !transitionListOnly && !easterEggMode && !exampleDevMaintenanceMode ? (
+          {homeLikeList && !transitionListOnly && !easterEggMode ? (
             <MotionDiv
               ref={(element) => {
                 if (element) projectRowRefs.current.set('__home-create-project__', element);
@@ -2279,7 +2183,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   >
                     Compress Images
                   </ChromeMenuItem>
-                  {(!builtinExampleIds.has(pm.id) || exampleDevMaintenanceMode) ? (
+                  {!builtinExampleIds.has(pm.id) ? (
                     <ChromeMenuItem
                       icon={<Trash2 size={16} />}
                       destructive
@@ -2296,7 +2200,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               ) : projectMoreAnchor ? (
                 (() => {
                   const isBuiltinExample = builtinExampleIds.has(pm.id);
-                  const canDelete = !isBuiltinExample || exampleDevMaintenanceMode;
+                  const canDelete = !isBuiltinExample;
                   return (
                 <ProjectMoreMenu
                   project={pm}

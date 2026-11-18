@@ -44,6 +44,13 @@
   --z-blocking-dialog: 10050;
 }
 
+/* 注册可插值变量，让窄屏抽屉在不覆盖其固定定位变换的前提下，从退出位平滑进出。 */
+@property --chrome-drawer-entry-y {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 /** 相对工作区左缘：侧栏右缘 + 原 left-2 / sm:left-4 */
 .ui-workspace-left {
   left: calc(var(--workspace-ui-left-inset, 0px) + 0.5rem);
@@ -291,6 +298,7 @@
     align-items: flex-end;
     padding: 0.5rem;
     padding-bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+    transition: padding 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .media-detail-window-surface--modal {
@@ -304,25 +312,27 @@
   .media-detail-window-surface--modal.chrome-compact-drawer {
     max-height: none !important;
     padding-top: 1.5rem;
+    transform: translateY(var(--chrome-drawer-entry-y, 0px)) !important;
   }
 
   .media-detail-window-surface--modal.chrome-compact-drawer--dragging {
     height: var(--chrome-drawer-height) !important;
+    transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
   }
 
   .media-detail-window-layer--expanded {
-    align-items: stretch;
+    align-items: flex-end;
     padding: 0 !important;
+    padding-top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem)) !important;
   }
 
   .media-detail-window-layer--expanded .media-detail-window-surface--modal.chrome-compact-drawer--expanded {
-    --chrome-drawer-opacity-factor: 0.7;
+    --chrome-drawer-opacity-factor: 1;
     width: 100vw !important;
-    height: 100dvh !important;
-    max-height: 100dvh !important;
-    padding-top: max(1.75rem, env(safe-area-inset-top, 0px));
-    border-width: 0 !important;
-    border-radius: 0 !important;
+    height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
+    max-height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
+    padding-top: 1.75rem;
+    border-radius: 1rem 1rem 0 0 !important;
   }
 }
 
@@ -1228,8 +1238,8 @@ body {
   /* 所有窄屏底部抽屉共享同一套手柄与上拉展开几何。
    * 手势超过 42% 或快速上滑才会完成；未达阈值则回弹。 */
   .chrome-compact-drawer {
-    --map-ui-chrome-opacity-top: calc(var(--map-chrome-surface-opacity, 0.6) * var(--chrome-drawer-opacity-factor, 1));
-    --map-ui-chrome-opacity-bottom: calc(var(--map-chrome-surface-opacity, 0.6) * var(--chrome-drawer-opacity-factor, 1));
+    --map-ui-chrome-opacity-top: calc(var(--map-chrome-surface-opacity, 0.6) * var(--chrome-drawer-opacity-factor, 0.7));
+    --map-ui-chrome-opacity-bottom: calc(var(--map-chrome-surface-opacity, 0.6) * var(--chrome-drawer-opacity-factor, 0.7));
     transition:
       top 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
       right 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -1243,6 +1253,38 @@ body {
       border-width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
+  @keyframes chrome-compact-drawer-enter {
+    from {
+      opacity: 0;
+      --chrome-drawer-entry-y: 1.25rem;
+    }
+    to {
+      opacity: 1;
+      --chrome-drawer-entry-y: 0px;
+    }
+  }
+
+  @keyframes chrome-compact-drawer-exit {
+    from {
+      opacity: 1;
+      --chrome-drawer-entry-y: 0px;
+    }
+    to {
+      opacity: 0;
+      --chrome-drawer-entry-y: 1.25rem;
+    }
+  }
+
+  .chrome-compact-drawer.chrome-responsive-anchored-entering,
+  .chrome-compact-drawer.chrome-responsive-sheet-entering {
+    animation: chrome-compact-drawer-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .chrome-compact-drawer.chrome-responsive-anchored-exiting,
+  .chrome-compact-drawer.chrome-responsive-sheet-exiting {
+    animation: chrome-compact-drawer-exit 180ms ease-in both;
+  }
+
   .ui-compact-bottom-sheet.chrome-compact-drawer {
     top: var(--chrome-drawer-top, auto) !important;
     right: var(--chrome-drawer-right, 0.5rem) !important;
@@ -1251,11 +1293,22 @@ body {
     height: var(--chrome-drawer-height, auto) !important;
     max-height: var(--chrome-drawer-max-height, min(72dvh, calc(100dvh - 1rem))) !important;
     padding-top: 1.5rem;
+    transform: translateY(var(--chrome-drawer-entry-y, 0px)) !important;
   }
 
   .chrome-compact-drawer--dragging {
-    transform: translateY(var(--chrome-drawer-translate-y, 0px)) !important;
+    transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
     transition: none !important;
+  }
+
+  /* 基础 sheet 使用了带 !important 的 transform 来消除跨断点横向偏移；
+   * 拖拽态需用同等选择器权重接管它，才能逐帧跟手。 */
+  .ui-compact-bottom-sheet.chrome-compact-drawer--dragging {
+    transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
+  }
+
+  .media-detail-window-surface--modal.chrome-compact-drawer--expanded.chrome-compact-drawer--dragging {
+    transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
   }
 
   .chrome-compact-drawer--dismissing {
@@ -1265,17 +1318,16 @@ body {
   }
 
   .ui-compact-bottom-sheet.chrome-compact-drawer--expanded {
-    --chrome-drawer-opacity-factor: 0.7;
-    top: 0 !important;
+    --chrome-drawer-opacity-factor: 1;
+    top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem)) !important;
     right: 0 !important;
     bottom: 0 !important;
     left: 0 !important;
     width: 100vw !important;
-    height: 100dvh !important;
-    max-height: 100dvh !important;
-    padding-top: max(1.75rem, env(safe-area-inset-top, 0px)) !important;
-    border-width: 0 !important;
-    border-radius: 0 !important;
+    height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
+    max-height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
+    padding-top: 1.75rem !important;
+    border-radius: 1rem 1rem 0 0 !important;
   }
 
   .chrome-compact-drawer-handle {

@@ -176,7 +176,7 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
   const renderNotes = (tagKey: string) => {
     const panelNotes = notesForTag(tagKey);
     return (
-      <div className="chrome-content-shift-in space-y-px border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
+      <div className="chrome-content-shift-in space-y-0.5 border-t border-gray-100/90 pb-1 pl-1 pr-1 pt-0.5">
         {panelNotes.length === 0 ? (
           <div className="px-2 py-1 text-[10px] text-gray-400">无便签</div>
         ) : (

@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 
 const COMPLETE_PROGRESS = 0.42;
 const FLING_VELOCITY = 0.65;
 const DISMISS_PROGRESS = 0.24;
+const COLLAPSE_PROGRESS = 0.18;
+const DIRECT_DISMISS_PROGRESS = 0.56;
+const DIRECT_DISMISS_VELOCITY = 0.9;
+const EXPANDED_TOP_PX = 48;
 
 type DrawerDrag = {
   startY: number;
@@ -14,6 +18,8 @@ type DrawerDrag = {
   right: number;
   bottom: number;
 };
+
+type DrawerGeometry = Pick<DrawerDrag, 'top' | 'height' | 'left' | 'right' | 'bottom'>;
 
 /**
  * 窄屏抽屉统一的上拉展开 / 下拉关闭手势。
@@ -35,6 +41,8 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
   const [dragging, setDragging] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [dismissing, setDismissing] = useState(false);
+  const [collapsedGeometry, setCollapsedGeometry] = useState<DrawerGeometry | null>(null);
+  const wasEnabledRef = useRef(enabled);
 
   const resetDrag = useCallback(() => {
     dragRef.current = null;
@@ -65,11 +73,25 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     }, 180);
   }, [onDismiss, resetDrag]);
 
-  useEffect(() => {
-    if (enabled) return;
+  const collapseToInitial = useCallback(() => {
     resetDrag();
     setExpanded(false);
-    setDismissing(false);
+  }, [resetDrag]);
+
+  // 关闭时保留最终状态，供退出动画完整离场；仅在下次真正重新打开时才复位到半屏。
+  useLayoutEffect(() => {
+    const wasEnabled = wasEnabledRef.current;
+    wasEnabledRef.current = enabled;
+    if (!enabled) {
+      resetDrag();
+      return;
+    }
+    if (!wasEnabled) {
+      resetDrag();
+      setExpanded(false);
+      setDismissing(false);
+      setCollapsedGeometry(null);
+    }
   }, [enabled, resetDrag]);
 
   useEffect(() => {
@@ -89,7 +111,7 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     const now = performance.now();
-    dragRef.current = {
+    const nextDrag = {
       startY: event.clientY,
       lastY: event.clientY,
       lastTime: now,
@@ -99,6 +121,11 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
       right: Math.max(0, window.innerWidth - rect.right),
       bottom: Math.max(0, window.innerHeight - rect.bottom)
     };
+    dragRef.current = nextDrag;
+    if (!expanded) {
+      // 记录初始半屏几何：从最大展开回退时仍可与这组确定数值直接插值。
+      setCollapsedGeometry(nextDrag);
+    }
     setDragging(true);
   }, [dismissing, enabled, expanded, surfaceRef]);
 
@@ -109,7 +136,8 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     const now = performance.now();
     drag.lastY = event.clientY;
     drag.lastTime = now;
-    const upward = Math.min(drag.top, Math.max(0, drag.startY - event.clientY));
+    const expansionTravel = Math.max(1, drag.top - EXPANDED_TOP_PX);
+    const upward = Math.min(expansionTravel, Math.max(0, drag.startY - event.clientY));
     const downward = Math.min(drag.height, Math.max(0, event.clientY - drag.startY));
     setDragOffset(upward > 0 ? -upward : downward);
   }, []);
@@ -120,14 +148,20 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     const elapsed = Math.max(1, performance.now() - drag.lastTime);
     const upwardVelocity = Math.max(0, (drag.lastY - event.clientY) / elapsed);
     const downwardVelocity = Math.max(0, (event.clientY - drag.lastY) / elapsed);
-    const upwardProgress = Math.min(1, Math.max(0, drag.startY - event.clientY) / Math.max(1, drag.top));
+    const upwardProgress = Math.min(
+      1,
+      Math.max(0, drag.startY - event.clientY) / Math.max(1, drag.top - EXPANDED_TOP_PX)
+    );
     const downwardProgress = Math.min(1, Math.max(0, event.clientY - drag.startY) / Math.max(1, drag.height));
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     if (expanded) {
-      if (downwardProgress >= DISMISS_PROGRESS || downwardVelocity >= FLING_VELOCITY) {
+      // 全屏下拉分两级：有意识地拉下一段先回到半屏；拉过半屏或快速甩下才直接关闭。
+      if (downwardProgress >= DIRECT_DISMISS_PROGRESS || downwardVelocity >= DIRECT_DISMISS_VELOCITY) {
         completeDismiss();
+      } else if (downwardProgress >= COLLAPSE_PROGRESS || downwardVelocity >= FLING_VELOCITY) {
+        collapseToInitial();
       } else {
         resetDrag();
       }
@@ -138,15 +172,17 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     } else {
       resetDrag();
     }
-  }, [completeDismiss, completeExpand, expanded, resetDrag]);
+  }, [collapseToInitial, completeDismiss, completeExpand, expanded, resetDrag]);
 
   const cancel = useCallback(() => resetDrag(), [resetDrag]);
   const drag = dragRef.current;
   const upwardDistance = Math.max(0, -dragOffset);
   const downwardDistance = Math.max(0, dragOffset);
-  const progress = drag ? Math.min(1, upwardDistance / Math.max(1, drag.top)) : 0;
-  // 全屏过程中逐步降低 30% 材质不透明度；下拉关闭保持原材质，避免视觉闪变。
-  const opacityFactor = expanded ? 0.7 : 1 - progress * 0.3;
+  const progress = drag
+    ? Math.min(1, upwardDistance / Math.max(1, drag.top - EXPANDED_TOP_PX))
+    : 0;
+  // 部分占屏更透；随上拉全屏逐步恢复到完整材质。下拉关闭保持当前基准，避免视觉闪变。
+  const opacityFactor = expanded ? 1 : 0.7 + progress * 0.3;
 
   const windowGeometryStyle = drag && dragging
     ? ({
@@ -158,7 +194,16 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
         '--chrome-drawer-translate-y': `${downwardDistance}px`,
         '--chrome-drawer-opacity-factor': String(opacityFactor)
       } as CSSProperties)
-    : undefined;
+    : !expanded && collapsedGeometry
+      ? ({
+          '--chrome-drawer-top': `${collapsedGeometry.top}px`,
+          '--chrome-drawer-left': `${collapsedGeometry.left}px`,
+          '--chrome-drawer-right': `${collapsedGeometry.right}px`,
+          '--chrome-drawer-bottom': `${collapsedGeometry.bottom}px`,
+          '--chrome-drawer-height': `${collapsedGeometry.height}px`,
+          '--chrome-drawer-max-height': `${collapsedGeometry.height}px`
+        } as CSSProperties)
+      : undefined;
 
   return {
     dragging,

@@ -161,8 +161,6 @@ export default function App() {
   const [homeEasterEggMode, setHomeEasterEggMode] = useState(false);
   const [homeEasterEggGravityY, setHomeEasterEggGravityY] = useState(1.35);
   const [homeEasterEggMouseConstraintStiffness, setHomeEasterEggMouseConstraintStiffness] = useState(0.18);
-  /** 仅开发者维护内置示例项目（增删/列表显示等）；默认对普通用户隐藏 */
-  const [exampleDevMaintenanceMode, setExampleDevMaintenanceMode] = useState(false);
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(
     () =>
       isSupabaseEnabled() &&
@@ -1754,10 +1752,6 @@ export default function App() {
                     setMapStyle(styleId);
                     set('mapp-map-style', styleId);
                   }}
-                  exampleDevMaintenanceMode={exampleDevMaintenanceMode}
-                  onExampleDevMaintenanceModeToggle={() =>
-                    setExampleDevMaintenanceMode((v) => !v)
-                  }
                   />
                 </Suspense>
               </MotionDiv>
