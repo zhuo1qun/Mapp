@@ -1204,7 +1204,8 @@ body {
   }
 }
 
-/* 紧凑工作区的即时操作采用底部 sheet；统一避开 iPhone Home Indicator。 */
+/* 紧凑工作区的即时操作采用底部 sheet。面板外壳贴到物理屏幕底部，
+ * 安全区只留给内部内容，避免 iPhone 上既露底色缝隙、又遮住末端按钮。 */
 @media (max-width: 639px) {
   /* 工具栏本身原本是独立 stacking context。操作 sheet 打开时抬高整组，
    * 才能让其遮罩可靠盖住 portal 面板及右下页签。 */
@@ -1221,13 +1222,14 @@ body {
   .ui-compact-bottom-sheet {
     top: auto !important;
     right: 0.5rem !important;
-    bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem)) !important;
+    bottom: 0 !important;
     left: 0.5rem !important;
     width: auto !important;
     max-width: none !important;
     max-height: min(72dvh, calc(100dvh - 1rem)) !important;
     overflow-x: hidden;
-    border-radius: 1rem !important;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    border-radius: 1rem 1rem 0 0 !important;
     z-index: var(--z-map-sheet) !important;
     /* ChromeWindow 在跨越断点的首帧可能仍带着宽屏居中的 inline transform。
      * sheet 的左右锚点已完整定义几何，必须由它自身接管 transform，避免横向平移半屏。 */
@@ -1288,7 +1290,7 @@ body {
   .ui-compact-bottom-sheet.chrome-compact-drawer {
     top: var(--chrome-drawer-top, auto) !important;
     right: var(--chrome-drawer-right, 0.5rem) !important;
-    bottom: var(--chrome-drawer-bottom, max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))) !important;
+    bottom: var(--chrome-drawer-bottom, 0px) !important;
     left: var(--chrome-drawer-left, 0.5rem) !important;
     height: var(--chrome-drawer-height, auto) !important;
     max-height: var(--chrome-drawer-max-height, min(72dvh, calc(100dvh - 1rem))) !important;
@@ -1993,6 +1995,11 @@ body {
 
 .board-note-interaction[data-board-selected='true'] {
   rotate: 6deg;
+}
+
+/* 图片的选中边界与缩放锚点保持原始方向；旋转只保留给纸质便签的“被拿起”姿态。 */
+.board-note-interaction--sticker[data-board-selected='true'] {
+  rotate: 0deg;
 }
 
 .board-note-interaction--static {

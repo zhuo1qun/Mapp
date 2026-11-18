@@ -59,6 +59,7 @@ export const BoardNoteObject = forwardRef<HTMLElement, Props>(function BoardNote
   const expandedLayout = usesExpandedContent ? getExpandedNoteLayout(note) : null;
   const interactionClass = [
     'board-note-interaction workspace-object-elevation workspace-object-elevation--interactive group',
+    isSticker ? 'board-note-interaction--sticker' : '',
     active ? 'workspace-object-elevation--active' : '',
     staticInteraction ? 'board-note-interaction--static' : '',
     className
