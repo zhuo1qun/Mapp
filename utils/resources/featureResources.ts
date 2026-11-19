@@ -10,6 +10,9 @@ const listeners = new Set<() => void>();
 const pending = new Map<FeatureResourceId, Promise<unknown>>();
 const progressTimers = new Map<FeatureResourceId, ReturnType<typeof setInterval>>();
 const RESOURCE_INTENT_KEY = 'mapp-resource-download-intents-v1';
+const CUTOUT_MODEL_URL = '/models/BritishWerewolf/U-2-Netp/onnx/model.onnx';
+// 本地随构建发布的模型字节数；部分 iOS/PWA 响应不会暴露 Content-Length。
+const CUTOUT_MODEL_EXPECTED_BYTES = 4_574_861;
 
 type ViteManifestEntry = { file: string; imports?: string[]; dynamicImports?: string[] };
 type ViteManifest = Record<string, ViteManifestEntry>;
@@ -90,24 +93,46 @@ export function loadCutoutResource(): Promise<void> {
   setDownloadIntent('cutout', true);
   publish('cutout', { state: 'loading', stage: 'downloading', progress: 0 });
   const request = (async () => {
-    const response = await fetch('/models/BritishWerewolf/U-2-Netp/onnx/model.onnx', { cache: 'force-cache' });
+    const response = await fetch(CUTOUT_MODEL_URL, { cache: 'force-cache' });
     if (!response.ok) throw new Error('模型下载失败');
-    if ('caches' in window) {
-      const cache = await caches.open('ai-models');
-      await cache.put('/models/BritishWerewolf/U-2-Netp/onnx/model.onnx', response.clone());
-    }
-    const total = Number(response.headers.get('content-length')) || 0;
-    if (!response.body || !total) {
-      await response.arrayBuffer();
+    const declaredTotal = Number(response.headers.get('content-length')) || 0;
+    const total = declaredTotal || CUTOUT_MODEL_EXPECTED_BYTES;
+    let modelBytes: ArrayBuffer;
+    if (!response.body) {
+      modelBytes = await response.arrayBuffer();
+      publish('cutout', { progress: 99 });
     } else {
       const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
       let loaded = 0;
       while (true) {
         const chunk = await reader.read();
         if (chunk.done) break;
+        chunks.push(chunk.value);
         loaded += chunk.value.byteLength;
         publish('cutout', { progress: Math.min(99, Math.round((loaded / total) * 100)) });
       }
+      const joined = new Uint8Array(loaded);
+      let offset = 0;
+      for (const chunk of chunks) {
+        joined.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      modelBytes = joined.buffer;
+    }
+    // iPhone 的 Cache Storage 写入可能要等完整响应落盘。必须在流读取和进度
+    // 上报完成后再 await，不能让缓存阶段把下载 UI 长时间锁在 0%。
+    if ('caches' in window) {
+      const cache = await caches.open('ai-models');
+      await cache.put(
+        CUTOUT_MODEL_URL,
+        new Response(modelBytes.slice(0), {
+          headers: {
+            'content-type': response.headers.get('content-type') || 'application/octet-stream',
+            'content-length': String(modelBytes.byteLength)
+          }
+        })
+      );
     }
     publish('cutout', { state: 'downloaded', stage: 'waiting', progress: 100 });
     setDownloadIntent('cutout', false);
@@ -211,7 +236,7 @@ async function hydratePersistedResourceState() {
 
     if (tasks.cutout.state === 'idle') {
       const modelCache = await caches.open('ai-models');
-      if (await cacheContains(modelCache, '/models/BritishWerewolf/U-2-Netp/onnx/model.onnx')) {
+      if (await cacheContains(modelCache, CUTOUT_MODEL_URL)) {
         publish('cutout', { state: 'downloaded', stage: 'waiting', progress: 100 });
       }
     }

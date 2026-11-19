@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { ChromePresence } from './ChromeSheetPresence';
 import { ChromeDialogSurface } from './ChromeDialogSurface';
 import { DEFAULT_MAP_UI_CHROME_BLUR_PX, DEFAULT_MAP_UI_CHROME_OPACITY, mapChromeSurfaceStyle } from '../../utils/map/mapChromeStyle';
@@ -16,7 +17,8 @@ type Props = {
 /** 点击编辑器外部时统一询问，明确区分保存、不保存和继续编辑。 */
 export function SaveBeforeCloseDialog({ open, saving = false, themeColor, panelChromeStyle, onSave, onDiscard, onCancel }: Props) {
   const surface = panelChromeStyle ?? mapChromeSurfaceStyle(DEFAULT_MAP_UI_CHROME_OPACITY, DEFAULT_MAP_UI_CHROME_BLUR_PX);
-  return <ChromePresence open={open} kind="dialog">
+  if (typeof document === 'undefined') return null;
+  return createPortal(<ChromePresence open={open} kind="dialog">
     {(phase) => <div className={`fixed inset-0 z-[var(--z-blocking-dialog)] flex items-center justify-center p-4 chrome-dialog-backdrop-${phase}`} role="dialog" aria-modal="true" aria-labelledby="save-before-close-title">
       <button type="button" className="absolute inset-0 bg-black/40" aria-label="继续编辑" onClick={() => !saving && onCancel()} />
       <ChromeDialogSurface className={`max-w-sm p-5 text-sm chrome-dialog-${phase}`} style={surface}>
@@ -29,5 +31,5 @@ export function SaveBeforeCloseDialog({ open, saving = false, themeColor, panelC
         </div>
       </ChromeDialogSurface>
     </div>}
-  </ChromePresence>;
+  </ChromePresence>, document.body);
 }

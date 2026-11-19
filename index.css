@@ -248,7 +248,7 @@
   }
 }
 
-/** 窄屏 NoteEditor 沿用桌面工作窗口的外边距和圆角，不再强制全屏。 */
+/** 窄屏 NoteEditor 与设置抽屉上拉展开态使用同一几何。 */
 @media (max-width: 639px) {
   .note-editor-overlay {
     inset: 0;
@@ -256,6 +256,7 @@
     height: 100dvh;
     max-height: 100dvh;
     padding: 0;
+    padding-top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem));
     align-items: stretch;
     justify-content: stretch;
     transition: none;
@@ -275,10 +276,10 @@
     height: 100%;
     max-height: none;
     min-height: 0 !important;
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-top: 0;
+    padding-bottom: 0;
     border: 0 !important;
-    border-radius: 0 !important;
+    border-radius: 1rem 1rem 0 0 !important;
     box-shadow: none !important;
   }
 
@@ -548,6 +549,10 @@ body {
   padding-top: calc(10rem + env(safe-area-inset-top, 0px)) !important;
 }
 
+.ui-sidebar-list-safe-top {
+  padding-top: calc(7rem + env(safe-area-inset-top, 0px)) !important;
+}
+
 .ui-map-long-press-safe-top {
   top: calc(6rem + env(safe-area-inset-top, 0px)) !important;
 }
@@ -559,6 +564,10 @@ body {
 
   .ui-home-landing-top {
     padding-top: 10rem !important;
+  }
+
+  .ui-sidebar-list-safe-top {
+    padding-top: 7rem !important;
   }
 
   .ui-map-long-press-safe-top {

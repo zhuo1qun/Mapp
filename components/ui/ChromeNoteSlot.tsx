@@ -20,22 +20,26 @@ export type ChromeNoteSlotSpec = {
   'aria-label'?: string;
 };
 
-/** Map、Board 共用的编辑器几何：桌面居中；窄屏保留为有外边距的工作窗口。 */
+/** Map、Board 共用的编辑器几何：桌面居中；窄屏与上拉展开后的设置窗口一致。 */
 export function chromeNoteEditorSlotLayout(
   compact: boolean,
   surfaceStyle: CSSProperties
 ): Pick<ChromeNoteSlotSpec, 'className' | 'style'> {
   if (compact) {
+    const expandedTop = 'max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))';
     return {
       className: 'chrome-note-slot--editor flex min-h-0 flex-col',
       style: {
-        top: 'max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))',
-        left: '50%',
-        translate: '-50% 0',
-        width: 'min(500px, calc(100vw - 1.5rem))',
-        height: 'min(42rem, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1.5rem))',
-        maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1.5rem)',
-        borderRadius: '1rem',
+        top: expandedTop,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        translate: 'none',
+        width: '100vw',
+        height: `calc(100dvh - ${expandedTop})`,
+        maxHeight: `calc(100dvh - ${expandedTop})`,
+        paddingBottom: 0,
+        borderRadius: '1rem 1rem 0 0',
         ...surfaceStyle
       }
     };

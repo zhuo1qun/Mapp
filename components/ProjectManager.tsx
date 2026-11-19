@@ -1120,18 +1120,51 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   }, [showHomeHeroShell, renderHomeHeroShell]);
 
   useLayoutEffect(() => {
-    if (!renderHomeHeroShell || collapseHomeHeroShell || homeHeroCollapsedDone) return;
+    if (!renderHomeHeroShell || collapseHomeHeroShell || !showHomeHeroShell) return;
     const el = homeHeroMeasureRef.current;
     if (!el) return;
-    // 读一次实际高度，作为 maxHeight 动画目标值（避免从/到 auto）
-    const next = Math.max(0, Math.round(el.scrollHeight));
-    if (next > 0 && Math.abs(next - homeHeroMeasuredMaxH) > 2) {
-      setHomeHeroMeasuredMaxH(next);
-    }
+
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const rootRect = el.getBoundingClientRect();
+      // scrollHeight 不包含字符 rotate / translate 后伸出的视觉边界；标题底部正是因此
+      // 在某些重载和字体稳定较晚的场景被 max-height 裁掉。
+      let visualBottom = 0;
+      el.querySelectorAll<HTMLElement>('[data-home-hero-character]').forEach((character) => {
+        const rect = character.getBoundingClientRect();
+        visualBottom = Math.max(visualBottom, rect.bottom - rootRect.top);
+      });
+      const next = Math.max(0, Math.ceil(el.scrollHeight), Math.ceil(visualBottom));
+      if (next > 0) {
+        setHomeHeroMeasuredMaxH((current) =>
+          Math.abs(next - current) > 2 ? next : current
+        );
+      }
+    };
+    const scheduleMeasure = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+
+    measure();
+    const observer = new ResizeObserver(scheduleMeasure);
+    observer.observe(el);
+    el.querySelectorAll<HTMLElement>('[data-home-hero-character]').forEach((character) => {
+      observer.observe(character);
+    });
+    window.addEventListener('resize', scheduleMeasure);
+    void document.fonts?.ready.then(scheduleMeasure);
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', scheduleMeasure);
+    };
   }, [
     renderHomeHeroShell,
     collapseHomeHeroShell,
-    homeHeroCollapsedDone,
+    showHomeHeroShell,
     homeLikeList,
     compactProjectList,
     transitionListOnly,
@@ -1491,7 +1524,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
               : PROJECT_OPEN_SLIDE_EASE
           }}
           onAnimationComplete={() => {
-            if (collapseHomeHeroShell) {
+            // 动画途中若加载失败并返回主页，旧的收缩完成回调不能再把新 Hero
+            // 标成“已收完”，否则列表会立即切回紧凑布局并向上跳。
+            if (!showHomeHeroShell || collapseHomeHeroShell) {
               setHomeHeroCollapsedDone(true);
             } else {
               // 只在“展开到位”时允许标题/CTA入场，避免高度没到位就开始出现造成卡顿/抖动
@@ -1589,7 +1624,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           isSidebar
           ? `min-h-0 flex-1 w-full max-w-md mx-auto overflow-y-auto overscroll-contain ${
               transitionListOnly ? 'scrollbar-hide' : 'theme-surface-scrollbar'
-            } px-4 ${listCompactTopToolbarPadding ? 'pt-28 pb-4' : 'mt-8 pb-8'}`
+            } px-4 ${listCompactTopToolbarPadding ? 'ui-sidebar-list-safe-top pb-4' : 'mt-8 pb-8'}`
             : compactProjectList
             ? `flex-1 overflow-y-auto overscroll-contain ${
                 transitionListOnly ? 'scrollbar-hide' : 'theme-surface-scrollbar'
