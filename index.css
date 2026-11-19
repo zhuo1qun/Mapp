@@ -521,11 +521,11 @@ body {
 
 /* 页面延伸到 iPhone 状态栏下方时，所有工作区顶栏控件共享同一个安全起点。 */
 .ui-workspace-safe-top {
-  top: max(0.5rem, calc(env(safe-area-inset-top, 0px) + 0.5rem)) !important;
+  top: max(1.5rem, calc(env(safe-area-inset-top, 0px) + 1.5rem)) !important;
 }
 
 .ui-home-safe-top {
-  top: max(1rem, calc(env(safe-area-inset-top, 0px) + 0.5rem)) !important;
+  top: max(1.5rem, calc(env(safe-area-inset-top, 0px) + 1.5rem)) !important;
 }
 
 @media (min-width: 640px) {
