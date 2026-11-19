@@ -2155,7 +2155,7 @@ export const MapView: React.FC<MapViewProps> = ({
         )}
 
         <div
-          className="pointer-events-none absolute left-0 right-0 top-24 z-[400] flex justify-center"
+          className="ui-map-long-press-safe-top pointer-events-none absolute left-0 right-0 z-[400] flex justify-center"
           data-mapp-export-ui=""
         >
           <div className="relative">

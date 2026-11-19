@@ -248,10 +248,7 @@
   }
 }
 
-/**
- * NoteEditor 在窄屏直接占满动态视口：不沿用桌面卡片的工作区 inset、外边距、
- * 最大高度和最小高度，避免软键盘 / 安全区变化时把卡片挤出页面。
- */
+/** 窄屏 NoteEditor 沿用桌面工作窗口的外边距和圆角，不再强制全屏。 */
 @media (max-width: 639px) {
   .note-editor-overlay {
     inset: 0;
@@ -286,11 +283,7 @@
   }
 
   .chrome-note-slot.chrome-note-slot--editor {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    padding: 0;
   }
 
   /* 媒体详情与其它工作区二级窗口一样作为底部抽屉出现，而非全屏查看器。 */
@@ -526,23 +519,6 @@ body {
   touch-action: manipulation;
 }
 
-/* iOS 独立 PWA 会按状态栏下方的页面内容自动叠加可读性渐变；浮层打开后
- * 因为出现新的全屏合成层，这个渐变又会改变。用稳定的纯色安全区承接状态栏，
- * 让主页与开窗状态一致。仅在安装后的窄屏应用中启用。 */
-@media (display-mode: standalone) and (max-width: 639px) {
-  body::before {
-    content: '';
-    position: fixed;
-    z-index: 11000;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: env(safe-area-inset-top, 0px);
-    pointer-events: none;
-    background: var(--theme-color);
-  }
-}
-
 /* 页面延伸到 iPhone 状态栏下方时，所有工作区顶栏控件共享同一个安全起点。 */
 .ui-workspace-safe-top {
   top: max(0.5rem, calc(env(safe-area-inset-top, 0px) + 0.5rem)) !important;
@@ -559,6 +535,34 @@ body {
 
   .ui-home-safe-top {
     top: 1rem !important;
+  }
+}
+
+/* 主页内容是一个整体布局：标题、项目列表和空状态统一在原有顶部节奏之上
+ * 增加 iPhone 安全区，避免只移动按钮后正文仍被状态栏压住。 */
+.ui-home-layout-top {
+  padding-top: calc(6rem + env(safe-area-inset-top, 0px)) !important;
+}
+
+.ui-home-landing-top {
+  padding-top: calc(10rem + env(safe-area-inset-top, 0px)) !important;
+}
+
+.ui-map-long-press-safe-top {
+  top: calc(6rem + env(safe-area-inset-top, 0px)) !important;
+}
+
+@media (min-width: 640px) {
+  .ui-home-layout-top {
+    padding-top: 6rem !important;
+  }
+
+  .ui-home-landing-top {
+    padding-top: 10rem !important;
+  }
+
+  .ui-map-long-press-safe-top {
+    top: 6rem !important;
   }
 }
 
@@ -1328,6 +1332,7 @@ body {
     right: var(--chrome-drawer-right, 0.5rem) !important;
     bottom: var(--chrome-drawer-bottom, 0px) !important;
     left: var(--chrome-drawer-left, 0.5rem) !important;
+    width: var(--chrome-drawer-width, auto) !important;
     height: var(--chrome-drawer-height, auto) !important;
     max-height: var(--chrome-drawer-max-height, min(72dvh, calc(100dvh - 1rem))) !important;
     padding-top: 1.5rem;
@@ -1345,6 +1350,25 @@ body {
     transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
   }
 
+  /* 最大展开态下拉时也沿用半屏↔大屏的同一组几何变量，而不是整块窗口下移。 */
+  .ui-compact-bottom-sheet.chrome-compact-drawer--expanded.chrome-compact-drawer--dragging {
+    top: var(--chrome-drawer-top) !important;
+    right: var(--chrome-drawer-right) !important;
+    bottom: var(--chrome-drawer-bottom) !important;
+    left: var(--chrome-drawer-left) !important;
+    width: var(--chrome-drawer-width) !important;
+    height: var(--chrome-drawer-height) !important;
+    max-height: var(--chrome-drawer-max-height) !important;
+  }
+
+  .ui-compact-bottom-sheet.chrome-compact-drawer--settling {
+    transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
+  }
+
+  .media-detail-window-surface--modal.chrome-compact-drawer--settling {
+    transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
+  }
+
   .media-detail-window-surface--modal.chrome-compact-drawer--expanded.chrome-compact-drawer--dragging {
     transform: translateY(calc(var(--chrome-drawer-entry-y, 0px) + var(--chrome-drawer-translate-y, 0px))) !important;
   }
@@ -1353,6 +1377,19 @@ body {
     transform: translateY(calc(100% + 1rem)) !important;
     pointer-events: none;
     opacity: 0;
+  }
+
+  /* 关闭态与基础 sheet 的 transform 使用同等权重；否则只会在原位淡出。 */
+  .ui-compact-bottom-sheet.chrome-compact-drawer--dismissing {
+    transform: translateY(calc(100% + 1rem)) !important;
+  }
+
+  .media-detail-window-surface--modal.chrome-compact-drawer--dismissing {
+    transform: translateY(calc(100% + 1rem)) !important;
+  }
+
+  .media-detail-window-surface--modal.chrome-compact-drawer--expanded.chrome-compact-drawer--dismissing {
+    transform: translateY(calc(100% + 1rem)) !important;
   }
 
   .ui-compact-bottom-sheet.chrome-compact-drawer--expanded {

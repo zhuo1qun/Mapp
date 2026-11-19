@@ -153,6 +153,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
     let startPoint: { x: number; y: number } | null = null;
     let promoted = false;
     let lastLatLng: L.LatLng | null = null;
+    let lastPointer: { clientX: number; clientY: number } | null = null;
     let restoreMapDragging = false;
 
     const clearTimer = () => {
@@ -174,6 +175,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       startPoint = null;
       promoted = false;
       lastLatLng = null;
+      lastPointer = null;
     };
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -183,6 +185,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       startPoint = { x: event.clientX, y: event.clientY };
       promoted = false;
       lastLatLng = null;
+      lastPointer = { clientX: event.clientX, clientY: event.clientY };
       timer = setTimeout(() => {
         timer = null;
         if (activePointerId !== event.pointerId || !startPoint) return;
@@ -210,6 +213,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       }
       event.preventDefault();
       event.stopPropagation();
+      lastPointer = { clientX: event.clientX, clientY: event.clientY };
       lastLatLng = latLngAt(event.clientX, event.clientY);
       // 先直接移动 Leaflet 实例，再让 React 的乐观坐标接管，避免手指下落后一帧。
       marker.setLatLng(lastLatLng);
@@ -224,7 +228,10 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
         event.stopPropagation();
         // 只长按、未移动时保持原坐标；不能把手指按在图钉图形内的位置误当成新锚点。
         const finalLatLng = lastLatLng ?? marker.getLatLng();
-        longPressDragRef.current.onEnd?.(finalLatLng, { clientX: event.clientX, clientY: event.clientY });
+        // iOS 在 setPointerCapture 后偶尔以 pointercancel 结束手势，此时事件坐标可能
+        // 回到 (0, 0) 或脱离最后触点。沿用最后一次有效 pointermove，才能稳定命中暂存箱。
+        const finalPointer = lastPointer ?? { clientX: event.clientX, clientY: event.clientY };
+        longPressDragRef.current.onEnd?.(finalLatLng, finalPointer);
         try {
           element.releasePointerCapture(event.pointerId);
         } catch {

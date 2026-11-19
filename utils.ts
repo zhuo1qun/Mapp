@@ -24,6 +24,28 @@ export const createTag = (label: string): Tag => {
   };
 };
 
+/**
+ * Do not infer transparency from the filename/MIME type. macOS lifted-subject
+ * drags are commonly delivered as TIFF (and can also be AVIF), both of which
+ * may carry alpha even though they are not one of the usual web alpha formats.
+ */
+const canvasHasTransparency = (
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number
+): boolean => {
+  try {
+    const pixels = context.getImageData(0, 0, width, height).data;
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] < 255) return true;
+    }
+  } catch {
+    // Local file/data URL canvases should be readable. If a browser refuses,
+    // the caller can still fall back to the source format hint.
+  }
+  return false;
+};
+
 // Compress image from base64 string
 export const compressImageFromBase64 = (base64: string, maxWidth: number = 1920, maxHeight: number = 1920, quality: number = 0.8): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -50,10 +72,9 @@ export const compressImageFromBase64 = (base64: string, maxWidth: number = 1920,
         return;
       }
 
-      // PNG / WebP 可能包含 alpha；输出 JPEG 会把透明像素合成为黑色。
-      // 此处统一输出 PNG，以保留透明通道。
       ctx.drawImage(img, 0, 0, width, height);
-      const preservesAlpha = /^data:image\/(png|webp|gif);/i.test(base64);
+      const alphaCapableSource = /^data:image\/(png|webp|gif|avif|tiff);/i.test(base64);
+      const preservesAlpha = alphaCapableSource || canvasHasTransparency(ctx, canvas.width, canvas.height);
       const compressedDataUrl = preservesAlpha
         ? canvas.toDataURL('image/png')
         : canvas.toDataURL('image/jpeg', quality);
@@ -95,9 +116,9 @@ export const compressImage = (file: File, maxWidth: number = 1920, maxHeight: nu
             return;
           }
 
-          // PNG / WebP / GIF 均可能有透明通道，不能编码成 JPEG。
           ctx.drawImage(img, 0, 0, width, height);
-          const preservesAlpha = /image\/(png|webp|gif)/i.test(processedFile.type);
+          const alphaCapableSource = /image\/(png|webp|gif|avif|tiff)/i.test(processedFile.type);
+          const preservesAlpha = alphaCapableSource || canvasHasTransparency(ctx, canvas.width, canvas.height);
           const compressedDataUrl = preservesAlpha
             ? canvas.toDataURL('image/png')
             : canvas.toDataURL('image/jpeg', quality);

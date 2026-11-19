@@ -58,11 +58,12 @@ function tracked<T>(id: FeatureResourceId, loader: () => Promise<T>): Promise<T>
   if (existing) return existing;
   setDownloadIntent(id, true);
   startModuleProgress(id);
-  const request = loader().then((value) => {
+  const request = loader().then(async (value) => {
     stopProgress(id);
+    // Explicit downloads should reach Cache Storage before the UI clears the intent.
+    await persistModuleResource(id).catch(() => {});
     publish(id, { state: 'ready', stage: 'ready', progress: 100 });
     setDownloadIntent(id, false);
-    void persistModuleResource(id).catch(() => {});
     return value;
   }).catch((error) => {
     pending.delete(id);
@@ -238,5 +239,11 @@ async function hydratePersistedResourceState() {
 
 export const featureResourceSnapshot = () => snapshot;
 export function subscribeFeatureResources(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }
+
+/** Re-check actual Cache Storage whenever the resource window is opened or restored. */
+export async function refreshFeatureResourceState() {
+  manifestRequest = null;
+  await hydratePersistedResourceState();
+}
 
 void hydratePersistedResourceState();

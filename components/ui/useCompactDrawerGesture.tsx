@@ -17,9 +17,10 @@ type DrawerDrag = {
   left: number;
   right: number;
   bottom: number;
+  width: number;
 };
 
-type DrawerGeometry = Pick<DrawerDrag, 'top' | 'height' | 'left' | 'right' | 'bottom'>;
+type DrawerGeometry = Pick<DrawerDrag, 'top' | 'height' | 'left' | 'right' | 'bottom' | 'width'>;
 
 /**
  * 窄屏抽屉统一的上拉展开 / 下拉关闭手势。
@@ -41,8 +42,11 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
   const [dragging, setDragging] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [dismissing, setDismissing] = useState(false);
+  const [settlingOffset, setSettlingOffset] = useState<number | null>(null);
   const [collapsedGeometry, setCollapsedGeometry] = useState<DrawerGeometry | null>(null);
   const wasEnabledRef = useRef(enabled);
+  const settleFrameRef = useRef<number | null>(null);
+  const settleTargetFrameRef = useRef<number | null>(null);
 
   const resetDrag = useCallback(() => {
     dragRef.current = null;
@@ -62,21 +66,38 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     }, 180);
   }, [onExpand, resetDrag]);
 
-  const completeDismiss = useCallback(() => {
+  const queueSettle = useCallback((target: 'collapsed' | 'dismiss' | 'restore') => {
+    const releaseOffset = Math.max(0, dragOffset);
     resetDrag();
-    if (!onDismiss) return;
-    setDismissing(true);
-    if (dismissTimerRef.current != null) window.clearTimeout(dismissTimerRef.current);
-    dismissTimerRef.current = window.setTimeout(() => {
-      dismissTimerRef.current = null;
-      onDismiss();
-    }, 180);
-  }, [onDismiss, resetDrag]);
+    setSettlingOffset(releaseOffset);
+    if (settleFrameRef.current != null) window.cancelAnimationFrame(settleFrameRef.current);
+    if (settleTargetFrameRef.current != null) window.cancelAnimationFrame(settleTargetFrameRef.current);
+    // 先让「transition: none」的跟手态卸下并绘制一帧，再改变目标几何。
+    settleFrameRef.current = window.requestAnimationFrame(() => {
+      settleTargetFrameRef.current = window.requestAnimationFrame(() => {
+        settleFrameRef.current = null;
+        settleTargetFrameRef.current = null;
+        setSettlingOffset(null);
+        if (target === 'collapsed') {
+          setExpanded(false);
+          return;
+        }
+        if (target === 'dismiss') {
+          if (!onDismiss) return;
+          setDismissing(true);
+          if (dismissTimerRef.current != null) window.clearTimeout(dismissTimerRef.current);
+          dismissTimerRef.current = window.setTimeout(() => {
+            dismissTimerRef.current = null;
+            onDismiss();
+          }, 180);
+        }
+      });
+    });
+  }, [dragOffset, onDismiss, resetDrag]);
 
-  const collapseToInitial = useCallback(() => {
-    resetDrag();
-    setExpanded(false);
-  }, [resetDrag]);
+  const completeDismiss = useCallback(() => queueSettle('dismiss'), [queueSettle]);
+
+  const collapseToInitial = useCallback(() => queueSettle('collapsed'), [queueSettle]);
 
   // 关闭时保留最终状态，供退出动画完整离场；仅在下次真正重新打开时才复位到半屏。
   useLayoutEffect(() => {
@@ -90,6 +111,7 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
       resetDrag();
       setExpanded(false);
       setDismissing(false);
+      setSettlingOffset(null);
       setCollapsedGeometry(null);
     }
   }, [enabled, resetDrag]);
@@ -98,6 +120,8 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     return () => {
       if (expandTimerRef.current != null) window.clearTimeout(expandTimerRef.current);
       if (dismissTimerRef.current != null) window.clearTimeout(dismissTimerRef.current);
+      if (settleFrameRef.current != null) window.cancelAnimationFrame(settleFrameRef.current);
+      if (settleTargetFrameRef.current != null) window.cancelAnimationFrame(settleTargetFrameRef.current);
     };
   }, []);
 
@@ -119,7 +143,8 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
       height: rect.height,
       left: rect.left,
       right: Math.max(0, window.innerWidth - rect.right),
-      bottom: Math.max(0, window.innerHeight - rect.bottom)
+      bottom: Math.max(0, window.innerHeight - rect.bottom),
+      width: rect.width
     };
     dragRef.current = nextDrag;
     if (!expanded) {
@@ -163,43 +188,67 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
       } else if (downwardProgress >= COLLAPSE_PROGRESS || downwardVelocity >= FLING_VELOCITY) {
         collapseToInitial();
       } else {
-        resetDrag();
+        queueSettle('restore');
       }
     } else if (upwardProgress >= COMPLETE_PROGRESS || upwardVelocity >= FLING_VELOCITY) {
       completeExpand();
     } else if (downwardProgress >= DISMISS_PROGRESS || downwardVelocity >= FLING_VELOCITY) {
       completeDismiss();
     } else {
-      resetDrag();
+      queueSettle('restore');
     }
-  }, [collapseToInitial, completeDismiss, completeExpand, expanded, resetDrag]);
+  }, [collapseToInitial, completeDismiss, completeExpand, expanded, queueSettle]);
 
-  const cancel = useCallback(() => resetDrag(), [resetDrag]);
+  const cancel = useCallback(() => queueSettle('restore'), [queueSettle]);
   const drag = dragRef.current;
   const upwardDistance = Math.max(0, -dragOffset);
   const downwardDistance = Math.max(0, dragOffset);
   const progress = drag
     ? Math.min(1, upwardDistance / Math.max(1, drag.top - EXPANDED_TOP_PX))
     : 0;
+  const collapseDistance =
+    drag && collapsedGeometry ? Math.max(1, collapsedGeometry.top - drag.top) : 1;
+  const collapseProgress =
+    expanded && drag && collapsedGeometry
+      ? Math.min(1, downwardDistance / collapseDistance)
+      : 0;
+  const draggingBackToCollapsed = expanded && drag && collapsedGeometry && downwardDistance > 0;
   // 部分占屏更透；随上拉全屏逐步恢复到完整材质。下拉关闭保持当前基准，避免视觉闪变。
-  const opacityFactor = expanded ? 1 : 0.7 + progress * 0.3;
+  const opacityFactor = expanded ? 1 - collapseProgress * 0.3 : 0.7 + progress * 0.3;
 
   const windowGeometryStyle = drag && dragging
-    ? ({
-        '--chrome-drawer-top': `${Math.max(0, drag.top - upwardDistance)}px`,
-        '--chrome-drawer-left': `${Math.max(0, drag.left * (1 - progress))}px`,
-        '--chrome-drawer-right': `${Math.max(0, drag.right * (1 - progress))}px`,
-        '--chrome-drawer-bottom': `${Math.max(0, drag.bottom * (1 - progress))}px`,
-        '--chrome-drawer-max-height': 'none',
-        '--chrome-drawer-translate-y': `${downwardDistance}px`,
-        '--chrome-drawer-opacity-factor': String(opacityFactor)
-      } as CSSProperties)
+    ? (draggingBackToCollapsed
+        ? ({
+            '--chrome-drawer-top': `${drag.top + (collapsedGeometry.top - drag.top) * collapseProgress}px`,
+            '--chrome-drawer-left': `${drag.left + (collapsedGeometry.left - drag.left) * collapseProgress}px`,
+            '--chrome-drawer-right': `${drag.right + (collapsedGeometry.right - drag.right) * collapseProgress}px`,
+            '--chrome-drawer-bottom': '0px',
+            '--chrome-drawer-width': `${drag.width + (collapsedGeometry.width - drag.width) * collapseProgress}px`,
+            '--chrome-drawer-height': `${drag.height + (collapsedGeometry.height - drag.height) * collapseProgress}px`,
+            '--chrome-drawer-max-height': 'none',
+            '--chrome-drawer-translate-y': `${Math.max(0, downwardDistance - collapseDistance)}px`,
+            '--chrome-drawer-opacity-factor': String(opacityFactor)
+          } as CSSProperties)
+        : ({
+            '--chrome-drawer-top': `${Math.max(0, drag.top - upwardDistance)}px`,
+            '--chrome-drawer-left': `${Math.max(0, drag.left * (1 - progress))}px`,
+            '--chrome-drawer-right': `${Math.max(0, drag.right * (1 - progress))}px`,
+            '--chrome-drawer-bottom': `${Math.max(0, drag.bottom * (1 - progress))}px`,
+            '--chrome-drawer-max-height': 'none',
+            '--chrome-drawer-translate-y': `${downwardDistance}px`,
+            '--chrome-drawer-opacity-factor': String(opacityFactor)
+          } as CSSProperties))
+    : settlingOffset != null
+      ? ({
+          '--chrome-drawer-translate-y': `${settlingOffset}px`
+        } as CSSProperties)
     : !expanded && collapsedGeometry
       ? ({
           '--chrome-drawer-top': `${collapsedGeometry.top}px`,
           '--chrome-drawer-left': `${collapsedGeometry.left}px`,
           '--chrome-drawer-right': `${collapsedGeometry.right}px`,
           '--chrome-drawer-bottom': `${collapsedGeometry.bottom}px`,
+          '--chrome-drawer-width': `${collapsedGeometry.width}px`,
           '--chrome-drawer-height': `${collapsedGeometry.height}px`,
           '--chrome-drawer-max-height': `${collapsedGeometry.height}px`
         } as CSSProperties)
@@ -209,7 +258,10 @@ export function useCompactDrawerGesture<T extends HTMLElement>(
     dragging,
     expanded,
     dismissing,
+    settling: settlingOffset != null,
+    settlingOffset: settlingOffset ?? 0,
     dragDistance: upwardDistance,
+    dragTranslateY: dragging ? downwardDistance : settlingOffset ?? 0,
     dragStartHeight: drag?.height ?? 0,
     opacityFactor,
     windowGeometryStyle,

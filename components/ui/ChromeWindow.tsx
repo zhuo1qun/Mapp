@@ -216,7 +216,9 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
   const drawerCls = isCompactDrawer
     ? `chrome-compact-drawer${compactDrawer.dragging ? ' chrome-compact-drawer--dragging' : ''}${
         compactDrawer.expanded ? ' chrome-compact-drawer--expanded' : ''
-      }${compactDrawer.dismissing ? ' chrome-compact-drawer--dismissing' : ''}`
+      }${compactDrawer.dismissing ? ' chrome-compact-drawer--dismissing' : ''}${
+        compactDrawer.settling ? ' chrome-compact-drawer--settling' : ''
+      }`
     : '';
   const surfaceCls =
     surface === 'layer'
@@ -229,6 +231,9 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
     <ChromePresence open={open} kind={resolvedPresence} exitDurationMs={exitDurationMs ?? (noteMotion ? 280 : undefined)}>
       {(phase) => {
         const phaseCls = `${phaseClsPrefix}-${phase}`;
+        // 手势关闭已有“释放位置 → 画面外”的连续路径；不能再叠加 Presence 的旧退出动画，
+        // 否则旧动画会从原停靠位重新起跑，造成先回弹、再消失。
+        const resolvedPhaseCls = compactDrawer.dismissing ? '' : phaseCls;
         return (
           <>
             {showBackdrop && !noteMotion ? (
@@ -244,7 +249,7 @@ export const ChromeWindow: React.FC<ChromeWindowProps> = ({
               panelRef={surfaceRef}
               data-chrome-window-surface=""
               data-map-layer-chrome-panel={surface === 'layer' ? '' : undefined}
-              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${elevationCls} ${drawerCls} ${phaseCls} workspace-transient-elevation ${className}`.trim()}
+              className={`${toneCls} ${sheetCls} ${edgeCls} ${centerCls} ${surfaceCls} ${morphCls} ${noteMotionCls} ${elevationCls} ${drawerCls} ${resolvedPhaseCls} workspace-transient-elevation ${className}`.trim()}
               style={{ ...positionedStyle, ...compactDrawer.windowGeometryStyle }}
             >
               {/*

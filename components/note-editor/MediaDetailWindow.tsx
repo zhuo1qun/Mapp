@@ -163,6 +163,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
   return (
     <ChromePresence open={open} kind="dialog">
       {(phase) => {
+        const mediaPhaseClass = compactDrawer.dismissing ? '' : `chrome-responsive-sheet-${phase}`;
         const surface = (
           <section
             data-table-canvas-window={isCanvasWindow ? 'media-detail' : undefined}
@@ -174,20 +175,25 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
             className={`note-editor-media-detail ${isCanvasWindow ? 'note-editor-aux-panel relative z-20' : ''} map-chrome-content-${chromeAppearance} ${CHROME_DIALOG_SURFACE_SHELL_CLASS} flex min-h-0 flex-col overflow-hidden ${
               isCanvasWindow
                 ? `chrome-dialog-${phase} shrink-0 ${isLassoMode ? 'h-[min(42rem,calc(100dvh-8rem))] w-[min(36rem,calc(100vw-2rem))]' : 'transition-[width,height] duration-200 ease-out'}`
-                : `media-detail-window-surface--modal relative z-10 chrome-responsive-sheet-${phase} ${
+                : `media-detail-window-surface--modal relative z-10 ${mediaPhaseClass} ${
                     isCompactMediaSheet
                       ? `chrome-compact-drawer${compactDrawer.dragging ? ' chrome-compact-drawer--dragging' : ''}${
                           compactDrawer.expanded ? ' chrome-compact-drawer--expanded' : ''
-                        }${compactDrawer.dismissing ? ' chrome-compact-drawer--dismissing' : ''}`
+                        }${compactDrawer.dismissing ? ' chrome-compact-drawer--dismissing' : ''}${
+                          compactDrawer.settling ? ' chrome-compact-drawer--settling' : ''
+                        }`
                       : ''
                   } ${isLassoMode ? 'h-[min(42rem,calc(100dvh-8rem))] w-[min(36rem,calc(100vw-2rem))]' : 'transition-[width,height] duration-200 ease-out'}`
             }`}
             style={{
               ...panelChromeStyle,
               ...mediaDetailSize,
-              ...(compactDrawer.dragging
+              ...(compactDrawer.dragging || compactDrawer.settling
                 ? ({
-                    '--chrome-drawer-height': `${compactDrawer.dragStartHeight + compactDrawer.dragDistance}px`,
+                    ...(compactDrawer.dragging
+                      ? { '--chrome-drawer-height': `${compactDrawer.dragStartHeight + compactDrawer.dragDistance}px` }
+                      : null),
+                    '--chrome-drawer-translate-y': `${compactDrawer.dragTranslateY}px`,
                     '--chrome-drawer-opacity-factor': String(compactDrawer.opacityFactor)
                   } as React.CSSProperties)
                 : null),

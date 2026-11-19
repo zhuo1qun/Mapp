@@ -1143,11 +1143,11 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     : expandToHomeLayoutVisual
       ? isSidebar
         ? // 全宽中间态：不要 border-r / shadow-2xl，否则会闪默认黑边
-          'h-full w-full min-h-0 flex flex-col items-center justify-start pt-24 pb-0 relative'
-        : 'h-full w-full min-h-0 flex flex-col items-center justify-start pt-24 pb-0 p-4 relative'
+          'ui-home-layout-top h-full w-full min-h-0 flex flex-col items-center justify-start pb-0 relative'
+        : 'ui-home-layout-top h-full w-full min-h-0 flex flex-col items-center justify-start pb-0 p-4 relative'
       : isSidebar
         ? 'h-full w-full flex flex-col border-r overflow-hidden'
-        : 'w-full h-[100dvh] min-h-0 overflow-y-auto theme-surface-scrollbar flex flex-col items-center justify-start pt-40 pb-0 p-4 relative';
+        : 'ui-home-landing-top w-full h-[100dvh] min-h-0 overflow-y-auto theme-surface-scrollbar flex flex-col items-center justify-start pb-0 p-4 relative';
 
   const titleClass =
     'text-[clamp(4rem,21vw,6rem)] md:text-8xl font-thin text-theme-chrome-fg tracking-tighter mb-4 text-center drop-shadow-sm leading-[0.9] flex flex-col';

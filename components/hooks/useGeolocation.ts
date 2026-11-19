@@ -1,4 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  readDeviceOrientationPermission,
+  requestDeviceOrientationPermission,
+  subscribeDeviceOrientationPermission
+} from '../../utils/permissions/deviceOrientation';
 
 export interface LocationData {
   lat: number;
@@ -6,12 +11,6 @@ export interface LocationData {
 }
 
 export type LocationPermissionStatus = 'unknown' | 'prompt' | 'granted' | 'denied';
-
-type DeviceOrientationConstructor = {
-  new (): DeviceOrientationEvent;
-  prototype: DeviceOrientationEvent;
-  requestPermission?: () => Promise<'granted' | 'denied' | 'default'>;
-};
 
 const normalizeHeading = (deg: number): number => {
   const n = deg % 360;
@@ -194,17 +193,8 @@ export const useGeolocation = (isMapMode: boolean) => {
   }, [applyHeadingSample]);
 
   const requestOrientationPermission = useCallback(async (): Promise<boolean> => {
-    const DOE = window.DeviceOrientationEvent as DeviceOrientationConstructor | undefined;
-    if (!DOE) return false;
-    if (typeof DOE.requestPermission === 'function') {
-      try {
-        const state = await DOE.requestPermission();
-        if (state !== 'granted') return false;
-      } catch (err) {
-        console.warn('Device orientation permission request failed:', err);
-        return false;
-      }
-    }
+    const state = await requestDeviceOrientationPermission();
+    if (state !== 'granted') return false;
     attachOrientationListeners();
     return true;
   }, [attachOrientationListeners]);
@@ -397,13 +387,16 @@ export const useGeolocation = (isMapMode: boolean) => {
       }
     })();
 
-    const DOE = window.DeviceOrientationEvent as DeviceOrientationConstructor | undefined;
-    if (!DOE || typeof DOE.requestPermission !== 'function') {
-      attachOrientationListeners();
-    }
+    const syncOrientation = (state = readDeviceOrientationPermission()) => {
+      if (state === 'granted') attachOrientationListeners();
+      else detachOrientationListeners();
+    };
+    syncOrientation();
+    const unsubscribeOrientation = subscribeDeviceOrientationPermission(syncOrientation);
 
     return () => {
       if (permissionListener) permissionListener.onchange = null;
+      unsubscribeOrientation();
       stopWatching();
       detachOrientationListeners();
     };
