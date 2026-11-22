@@ -163,7 +163,7 @@ export const LassoStickerEditor: React.FC<Props> = ({ imageSrc, themeColor, onCo
         </div>
       </div>
 
-      <footer className="flex shrink-0 items-center justify-center gap-2 border-t border-gray-100/80 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3">
+      <footer className="flex shrink-0 items-center justify-center gap-2 border-t border-gray-100/80 px-4 py-3 pb-[max(0.75rem,var(--app-safe-bottom))] sm:pb-3">
         <button
           type="button"
           className="chrome-menu-item inline-flex cursor-pointer items-center gap-1.5 rounded-xl border-0 bg-transparent px-3 py-2 text-sm text-gray-600 disabled:opacity-40"

@@ -257,6 +257,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     loadOriginalImageSrc,
     persistMediaForSave,
     materializeRemoteAt,
+    rotateMediaCounterClockwise,
     replaceMediaWithLocalBlob,
     isVariantAppliedAt,
     previewImage,
@@ -669,6 +670,18 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     },
     [previewImageIndex, mediaItems, setImageVariantEnabled]
   );
+
+  const handleRotateCounterClockwise = useCallback(async () => {
+    setAutoRemoveStatus(null);
+    setCropBusy(true);
+    try {
+      await rotateMediaCounterClockwise(previewImageIndex);
+      setStickerSize(null);
+      setAutoRemoveStatus('已逆时针旋转 90°');
+    } finally {
+      setCropBusy(false);
+    }
+  }, [previewImageIndex, rotateMediaCounterClockwise]);
 
   const handleAutoRemoveBackground = useCallback(async (
     index = previewImageIndex,
@@ -1128,6 +1141,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         onStartLasso={() => {
           void startLassoForIndex(previewImageIndex);
         }}
+        onRotateCounterClockwise={() => void handleRotateCounterClockwise()}
         cropBusy={cropBusy}
         lassoImageSrc={lassoIndex != null ? lassoSourceSrc : null}
         onBackFromLasso={() => {

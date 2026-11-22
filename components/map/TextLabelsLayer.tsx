@@ -53,6 +53,14 @@ function getLabelText(rawText: string): string {
   return firstChunk.replace(/^#{1,6}\s+/, '').trim();
 }
 
+/**
+ * 标签属于便签内容，而不是图钉外观。照片型点位补充文字后也应与普通点位
+ * 一样参与选中、悬停与「显示标签」模式；否则导入路径会产生不可见的标题。
+ */
+function hasMapTextLabel(note: Note): boolean {
+  return Boolean(getLabelText(note.text || ''));
+}
+
 function getTimeText(note: Note): string {
   if (note.startYear == null) return '';
   if (note.endYear != null && note.endYear !== note.startYear) {
@@ -245,7 +253,7 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
       visibleIndividualNoteIds.add(cluster.notes[0].id);
     } else if (cluster.notes.length > 1) {
       const representativeNote = cluster.notes.find(
-        (note) => note.variant === 'standard' && (getLabelText(note.text || '') || note.text?.trim())
+        hasMapTextLabel
       );
       if (representativeNote) {
         const text =
@@ -462,17 +470,16 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
           .filter((note) => {
             if (isPreviewMode) {
               if (preSelectedNotes) return false;
-              if (selectedNoteId && note.id === selectedNoteId && note.text?.trim()) return true;
-              if (hoveredNoteId && note.id === hoveredNoteId && note.text?.trim()) return true;
+              if (selectedNoteId && note.id === selectedNoteId && hasMapTextLabel(note)) return true;
+              if (hoveredNoteId && note.id === hoveredNoteId && hasMapTextLabel(note)) return true;
               return (
                 showTextLabels &&
-                note.variant === 'standard' &&
-                note.text?.trim() &&
+                hasMapTextLabel(note) &&
                 visibleIndividualNoteIds.has(note.id)
               );
             }
             if (preSelectedNotes) return false;
-            const baseOk = note.variant === 'standard' && note.text?.trim();
+            const baseOk = hasMapTextLabel(note);
             const isHovered = hoveredNoteId != null && note.id === hoveredNoteId;
             if (isHovered) return baseOk && visibleIndividualNoteIds.has(note.id);
             const isSelected = isNoteShownAsSelectedLabel(

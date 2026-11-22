@@ -327,6 +327,53 @@ export function useMediaHandler({
     }
   }, [mediaItems, replaceMediaWithLocalBlob]);
 
+  const rotateMediaCounterClockwise = useCallback(async (index: number) => {
+    const item = mediaItems[index];
+    if (!item) throw new Error('Media missing');
+
+    let source = displaySrcs[index] || '';
+    if (item.source?.kind === 'remote') {
+      const local = await materializeRemoteAt(index);
+      if (!local) throw new Error('REMOTE_IMAGE_ACCESS_BLOCKED');
+      source = local.dataUrl;
+    } else if (isMediaRefId(item.assetId)) {
+      source = (await loadAssetOriginal(item.assetId, item.kind)) || source;
+    }
+    if (!source) throw new Error('Image source missing');
+
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const next = new Image();
+      next.onload = () => resolve(next);
+      next.onerror = () => reject(new Error('Image decode failed'));
+      next.src = source;
+    });
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = sourceHeight;
+    canvas.height = sourceWidth;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Canvas unavailable');
+    context.translate(0, sourceWidth);
+    context.rotate(-Math.PI / 2);
+    context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+    const dataUrl = canvas.toDataURL('image/png');
+    const assetId = await saveImage(dataUrl);
+
+    setMediaItems((prev) => prev.map((entry, i) => i === index ? {
+      ...entry,
+      assetId,
+      source: { kind: 'local' as const },
+      // 旋转后旧蒙版坐标不再对应新像素。
+      variantId: undefined,
+      variantEnabled: undefined
+    } : entry));
+    setDisplaySrcs((prev) => prev.map((src, i) => i === index ? dataUrl : src));
+    setPreviewImageIndex(index);
+    setPreviewImage(dataUrl);
+    return { width: canvas.width, height: canvas.height };
+  }, [displaySrcs, materializeRemoteAt, mediaItems]);
+
   const removeMediaAt = useCallback((index: number) => {
     setMediaItems((prev) => prev.filter((_, i) => i !== index));
     setDisplaySrcs((prev) => {
@@ -674,6 +721,7 @@ export function useMediaHandler({
     loadOriginalImageSrc,
     persistMediaForSave,
     materializeRemoteAt,
+    rotateMediaCounterClockwise,
     replaceMediaWithLocalBlob,
     isVariantAppliedAt: (index: number) => isMediaItemCropActive(mediaItems[index]),
     previewImage,

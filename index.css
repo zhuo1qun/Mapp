@@ -9,6 +9,10 @@
 
 /* 铺在主题色上的图标/文字颜色；Lab L* 与阈值由 applyThemeChromeCssVars 更新 */
 :root {
+  --app-browser-top-inset: 0px;
+  --app-browser-bottom-inset: 0px;
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   --theme-chrome-fg: #ffffff;
   --theme-chrome-lab-l: 0;
   /* 与 useAppState / App 中主题默认值一致，首屏未跑 JS 前作回退 */
@@ -44,6 +48,13 @@
   --z-blocking-dialog: 10050;
 }
 
+/* 普通浏览器的浮动工具栏与 PWA 状态栏不是同一种 inset。
+ * 背景继续铺满；只有交互控件读取这两个合并后的安全距离。 */
+html[data-display-mode='browser'] {
+  --app-safe-top: max(env(safe-area-inset-top, 0px), var(--app-browser-top-inset, 0px));
+  --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-browser-bottom-inset, 0px));
+}
+
 /* 注册可插值变量，让窄屏抽屉在不覆盖其固定定位变换的前提下，从退出位平滑进出。 */
 @property --chrome-drawer-entry-y {
   syntax: '<length>';
@@ -64,16 +75,16 @@
 
 /* 窄屏地图的主新建按钮固定在左下角，避开系统 Home Indicator。 */
 .ui-map-compact-create-control {
-  bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
+  bottom: max(1rem, calc(var(--app-safe-bottom, 0px) + 1rem));
 }
 
 /* 待定位箱在窄屏停靠左下时，新建按钮始终在它上方留出一段触控间距。 */
 .ui-map-compact-create-control--tray-open {
-  bottom: calc(max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem)) + 13.75rem);
+  bottom: calc(max(1rem, calc(var(--app-safe-bottom, 0px) + 1rem)) + 13.75rem);
 }
 
 .ui-board-compact-edit-control {
-  top: max(0.5rem, calc(env(safe-area-inset-top, 0px) + 0.5rem));
+  top: max(0.5rem, calc(var(--app-safe-top, 0px) + 0.5rem));
   right: 0.5rem;
 }
 
@@ -190,7 +201,7 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  padding: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px)) max(1rem, env(safe-area-inset-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px));
+  padding: max(1rem, var(--app-safe-top, 0px)) max(1rem, env(safe-area-inset-right, 0px)) max(1rem, var(--app-safe-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px));
   pointer-events: none;
 }
 
@@ -235,7 +246,7 @@
 @media (max-width: 639px) {
   .chrome-drop-overlay {
     align-items: flex-end;
-    padding-bottom: max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+    padding-bottom: max(1.5rem, calc(var(--app-safe-bottom, 0px) + 0.75rem));
   }
 
   .chrome-drop-overlay-card {
@@ -256,7 +267,7 @@
     height: 100dvh;
     max-height: 100dvh;
     padding: 0;
-    padding-top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem));
+    padding-top: max(3rem, calc(var(--app-safe-top, 0px) + 1rem));
     align-items: stretch;
     justify-content: stretch;
     transition: none;
@@ -291,7 +302,7 @@
   .media-detail-window-layer {
     align-items: flex-end;
     padding: 0.5rem;
-    padding-bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+    padding-bottom: max(0.5rem, calc(var(--app-safe-bottom, 0px) + 0.5rem));
     transition: padding 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
@@ -317,14 +328,14 @@
   .media-detail-window-layer--expanded {
     align-items: flex-end;
     padding: 0 !important;
-    padding-top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem)) !important;
+    padding-top: max(3rem, calc(var(--app-safe-top, 0px) + 1rem)) !important;
   }
 
   .media-detail-window-layer--expanded .media-detail-window-surface--modal.chrome-compact-drawer--expanded {
     --chrome-drawer-opacity-factor: 1;
     width: 100vw !important;
-    height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
-    max-height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
+    height: calc(100dvh - max(3rem, calc(var(--app-safe-top, 0px) + 1rem))) !important;
+    max-height: calc(100dvh - max(3rem, calc(var(--app-safe-top, 0px) + 1rem))) !important;
     padding-top: 1.75rem;
     border-radius: 1rem 1rem 0 0 !important;
   }
@@ -421,7 +432,7 @@
   .ui-workspace-view-switcher.ui-workspace-center-x {
     left: auto;
     right: max(0.5rem, env(safe-area-inset-right, 0px));
-    bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+    bottom: max(1rem, calc(var(--app-safe-bottom, 0px) + 0.5rem));
     /* Tailwind 的 -translate-x-1/2 使用独立的 translate 属性，
      * 仅重置 transform 不会取消这段半宽度左移。 */
     translate: none;
@@ -522,11 +533,11 @@ body {
 
 /* 页面延伸到 iPhone 状态栏下方时，所有工作区顶栏控件共享同一个安全起点。 */
 .ui-workspace-safe-top {
-  top: max(1.5rem, calc(env(safe-area-inset-top, 0px) + 1.5rem)) !important;
+  top: max(1.5rem, calc(var(--app-safe-top, 0px) + 1.5rem)) !important;
 }
 
 .ui-home-safe-top {
-  top: max(1.5rem, calc(env(safe-area-inset-top, 0px) + 1.5rem)) !important;
+  top: max(1.5rem, calc(var(--app-safe-top, 0px) + 1.5rem)) !important;
 }
 
 @media (min-width: 640px) {
@@ -542,19 +553,19 @@ body {
 /* 主页内容是一个整体布局：标题、项目列表和空状态统一在原有顶部节奏之上
  * 增加 iPhone 安全区，避免只移动按钮后正文仍被状态栏压住。 */
 .ui-home-layout-top {
-  padding-top: calc(6rem + env(safe-area-inset-top, 0px)) !important;
+  padding-top: calc(6rem + var(--app-safe-top, 0px)) !important;
 }
 
 .ui-home-landing-top {
-  padding-top: calc(10rem + env(safe-area-inset-top, 0px)) !important;
+  padding-top: calc(10rem + var(--app-safe-top, 0px)) !important;
 }
 
 .ui-sidebar-list-safe-top {
-  padding-top: calc(7rem + env(safe-area-inset-top, 0px)) !important;
+  padding-top: calc(7rem + var(--app-safe-top, 0px)) !important;
 }
 
 .ui-map-long-press-safe-top {
-  top: calc(6rem + env(safe-area-inset-top, 0px)) !important;
+  top: calc(6rem + var(--app-safe-top, 0px)) !important;
 }
 
 @media (min-width: 640px) {
@@ -1263,7 +1274,7 @@ body {
   }
 
   .map-compact-action-sheet {
-    bottom: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+    bottom: max(0.5rem, calc(var(--app-safe-bottom, 0px) + 0.5rem));
   }
 
   /* 需要持续查看/调整的设置和图层，以工作 sheet 覆盖地图并压过页签，
@@ -1277,7 +1288,7 @@ body {
     max-width: none !important;
     max-height: min(72dvh, calc(100dvh - 1rem)) !important;
     overflow-x: hidden;
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(0.75rem, var(--app-safe-bottom, 0px));
     border-radius: 1rem 1rem 0 0 !important;
     z-index: var(--z-map-sheet) !important;
     /* ChromeWindow 在跨越断点的首帧可能仍带着宽屏居中的 inline transform。
@@ -1403,13 +1414,13 @@ body {
 
   .ui-compact-bottom-sheet.chrome-compact-drawer--expanded {
     --chrome-drawer-opacity-factor: 1;
-    top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem)) !important;
+    top: max(3rem, calc(var(--app-safe-top, 0px) + 1rem)) !important;
     right: 0 !important;
     bottom: 0 !important;
     left: 0 !important;
     width: 100vw !important;
-    height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
-    max-height: calc(100dvh - max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))) !important;
+    height: calc(100dvh - max(3rem, calc(var(--app-safe-top, 0px) + 1rem))) !important;
+    max-height: calc(100dvh - max(3rem, calc(var(--app-safe-top, 0px) + 1rem))) !important;
     padding-top: 1.75rem !important;
     border-radius: 1rem 1rem 0 0 !important;
   }
@@ -1481,7 +1492,7 @@ body {
   }
 
   .ui-workspace-secondary-bottom-bar {
-    bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+    bottom: max(1rem, calc(var(--app-safe-bottom, 0px) + 0.5rem));
     transform: none;
     max-width: calc(100vw - 5.75rem);
     flex-wrap: nowrap;
@@ -1563,6 +1574,23 @@ body {
 .map-chrome-content-dark .mapping-preview-markdown pre {
   background-color: rgb(0 0 0 / 0.18);
   border-color: rgb(255 255 255 / 0.12);
+}
+
+/* Mapping 详情与 NoteEditor 共用一条低对比标题分割线。
+ * 单独的伪元素避免边框与玻璃外壳/相邻区块叠成双线。 */
+.note-window-title-divider::after {
+  content: '';
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0;
+  left: 0.75rem;
+  height: 1px;
+  pointer-events: none;
+  background: rgb(156 163 175 / 0.22);
+}
+
+.map-chrome-content-dark .note-window-title-divider::after {
+  background: rgb(255 255 255 / 0.14);
 }
 
 /**

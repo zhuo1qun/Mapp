@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Navigation, Pencil, Search, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Note } from '../../../types';
@@ -12,6 +12,12 @@ import { NoteIconButton } from '../../note-editor/NoteIconButton';
 import { ExternalNavigationSheet } from './ExternalNavigationSheet';
 import type { MapChromeAppearance } from '../../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../../ui/chromeAppearanceContext';
+import { loadMediaDetailResource } from '../../../utils/resources/featureResources';
+
+const LazyMediaDetailWindow = lazy(async () => {
+  const module = await loadMediaDetailResource();
+  return { default: module.MediaDetailWindow };
+});
 
 interface NotePreviewCardProps {
   note: Note;
@@ -54,6 +60,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const [navSheetOpen, setNavSheetOpen] = useState(false);
+  const [mediaDetailOpen, setMediaDetailOpen] = useState(false);
   const [displayNote, setDisplayNote] = useState<Note>(note);
   const [mediaLoading, setMediaLoading] = useState(() => noteNeedsMediaResolve(note));
   const loadGenRef = useRef(0);
@@ -135,6 +142,10 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   const currentSrc = allImages[currentImageIndex];
   const currentOk = isDisplayableImageSrc(currentSrc);
 
+  useEffect(() => {
+    setMediaDetailOpen(false);
+  }, [note.id]);
+
   const topPx = offsetTopPx ?? 16;
   const showEdit = Boolean(onOpenEditor) && !passThrough;
   const showDelete = Boolean(onDelete) && !passThrough;
@@ -177,7 +188,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
       onPointerDown={(e) => e.stopPropagation()}
     >
       {/* 预览卡保持比完整编辑器更轻一档的标题与操作密度。 */}
-      <div className="relative flex shrink-0 items-start gap-2 px-3.5 py-3 pb-2 before:absolute before:bottom-0 before:left-3 before:right-3 before:border-b before:border-gray-400/50">
+      <div className="note-window-title-divider relative flex shrink-0 items-start gap-2 px-3.5 py-3 pb-2">
         <div className="flex min-w-0 flex-1 items-start gap-2">
           {note.emoji && (
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-xl">{note.emoji}</span>
@@ -280,12 +291,23 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
         {(hasMediaSlots || allImages.length > 0) && (
           <div className="relative group flex items-center justify-center shrink-0 px-4 py-3 bg-transparent">
             {currentOk ? (
-              <img
-                src={currentSrc}
-                alt="Preview"
-                className="w-full max-h-64 object-contain drop-shadow-[0_8px_18px_rgba(15,23,42,0.28)]"
-                draggable={false}
-              />
+              <button
+                type="button"
+                aria-label="打开媒体详情"
+                title="打开媒体详情"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMediaDetailOpen(true);
+                }}
+                className="flex w-full cursor-zoom-in items-center justify-center border-0 bg-transparent p-0"
+              >
+                <img
+                  src={currentSrc}
+                  alt="Preview"
+                  className="w-full max-h-64 object-contain drop-shadow-[0_8px_18px_rgba(15,23,42,0.28)]"
+                  draggable={false}
+                />
+              </button>
             ) : (
               <div className="text-xs text-gray-400 py-8">
                 {mediaLoading ? '加载中' : '暂无图片'}
@@ -378,6 +400,19 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
         panelChromeStyle={chromeSurfaceStyle}
         chromeAppearance={chromeAppearance}
       />
+    ) : null}
+    {mediaDetailOpen && allImages.length > 0 ? (
+      <Suspense fallback={null}>
+        <LazyMediaDetailWindow
+          images={allImages}
+          previewIndex={Math.min(currentImageIndex, allImages.length - 1)}
+          open
+          onClose={() => setMediaDetailOpen(false)}
+          onChangeIndex={onImageIndexChange}
+          panelChromeStyle={chromeSurfaceStyle}
+          chromeAppearance={chromeAppearance}
+        />
+      </Suspense>
     ) : null}
     </>
   );

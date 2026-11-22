@@ -369,8 +369,8 @@ export function UnplacedNotesSidebar({
       data-unplaced-notes-sidebar
       className={`fixed z-[450] overflow-hidden border border-gray-200/90 backdrop-blur-md transition-[width,height,transform,opacity,box-shadow,background-color] duration-[220ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
         isExpanded
-          ? 'bottom-[max(1rem,calc(env(safe-area-inset-bottom,0px)+1rem))] left-4 right-4 h-[min(12rem,38dvh)] max-h-none rounded-2xl shadow-[0_-4px_24px_rgba(0,0,0,0.06)] lg:inset-auto lg:bottom-4 lg:right-4 lg:top-20 lg:h-auto lg:w-52 lg:rounded-2xl lg:shadow-[-4px_4px_24px_rgba(0,0,0,0.08)]'
-          : 'bottom-[max(1rem,calc(env(safe-area-inset-bottom,0px)+1rem))] left-4 h-[var(--unplaced-collapsed-height)] w-[min(var(--unplaced-collapsed-width),calc(100vw-2rem))] rounded-2xl shadow-[-4px_4px_24px_rgba(0,0,0,0.08)] lg:bottom-4 lg:left-auto lg:right-4 lg:h-[13rem] lg:w-52'
+          ? 'bottom-[max(1rem,calc(var(--app-safe-bottom, 0px)+1rem))] left-4 right-4 h-[min(12rem,38dvh)] max-h-none rounded-2xl shadow-[0_-4px_24px_rgba(0,0,0,0.06)] lg:inset-auto lg:bottom-4 lg:right-4 lg:top-20 lg:h-auto lg:w-52 lg:rounded-2xl lg:shadow-[-4px_4px_24px_rgba(0,0,0,0.08)]'
+          : 'bottom-[max(1rem,calc(var(--app-safe-bottom, 0px)+1rem))] left-4 h-[var(--unplaced-collapsed-height)] w-[min(var(--unplaced-collapsed-width),calc(100vw-2rem))] rounded-2xl shadow-[-4px_4px_24px_rgba(0,0,0,0.08)] lg:bottom-4 lg:left-auto lg:right-4 lg:h-[13rem] lg:w-52'
       } ${
         isVisible
           ? 'pointer-events-auto translate-y-0 opacity-100 lg:translate-x-0'

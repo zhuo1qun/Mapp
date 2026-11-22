@@ -26,7 +26,7 @@ export function chromeNoteEditorSlotLayout(
   surfaceStyle: CSSProperties
 ): Pick<ChromeNoteSlotSpec, 'className' | 'style'> {
   if (compact) {
-    const expandedTop = 'max(3rem, calc(env(safe-area-inset-top, 0px) + 1rem))';
+    const expandedTop = 'max(3rem, calc(var(--app-safe-top, 0px) + 1rem))';
     return {
       className: 'chrome-note-slot--editor flex min-h-0 flex-col',
       style: {
@@ -91,7 +91,7 @@ export function ChromeNoteSlot<K extends string>({
   // 预览与编辑器共用外壳，但内容树差异很大。短暂保留旧内容，让窗口先开始变形，
   // 再交叉淡入新内容，避免“先空白/跳高、后出现编辑器”的断帧。
   useLayoutEffect(() => {
-    if (sticky == null || spec == null) return;
+    if (kind == null || sticky == null || spec == null) return;
     const previousKind = previousKindRef.current;
     const previousSpec = previousSpecRef.current;
     if (previousKind != null && previousKind !== sticky && previousSpec) {
@@ -102,14 +102,27 @@ export function ChromeNoteSlot<K extends string>({
         switchTimerRef.current = null;
       }, 180);
     }
-  }, [sticky, spec]);
+  }, [kind, sticky, spec]);
 
   // 每次渲染都记住当前内容；这样预览内容更新后再进入编辑器，淡出的仍是最新卡片。
   useLayoutEffect(() => {
-    if (sticky == null || spec == null) return;
+    if (kind == null || sticky == null || spec == null) return;
     previousKindRef.current = sticky;
     previousSpecRef.current = spec;
-  });
+  }, [kind, sticky, spec]);
+
+  // 窗口经历过真正关闭后，下一次打开是全新的会话，不能把上一次的
+  // preview 当作 preview → editor 的直接切换内容继续交叉淡入。
+  useLayoutEffect(() => {
+    if (kind != null) return;
+    if (switchTimerRef.current != null) {
+      window.clearTimeout(switchTimerRef.current);
+      switchTimerRef.current = null;
+    }
+    setOutgoingChildren(null);
+    previousKindRef.current = null;
+    previousSpecRef.current = null;
+  }, [kind]);
 
   useEffect(() => {
     return () => {

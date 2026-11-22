@@ -74,6 +74,7 @@ import { afterNextPaint, waitForAnimation } from './utils/ui/animationTiming';
 import { dismissWorkspaceTransients } from './utils/ui/workspaceTransientDismiss';
 import { hasSupabaseClientConfig, isSupabaseEnabled } from './utils/supabaseEnv';
 import { loadBoardResource, loadMapResource, loadTableResource } from './utils/resources/featureResources';
+import { installVisualViewportInsets } from './utils/ui/visualViewportInsets';
 
 type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
 
@@ -143,6 +144,8 @@ const Playground = lazy(() =>
 export default function App() {
   const emptyNotes = useMemo(() => [], []);
   const emptyFrames = useMemo(() => [], []);
+
+  useEffect(() => installVisualViewportInsets(), []);
 
   // Use custom hooks for state management
   const projectState = useProjectState();

@@ -748,7 +748,7 @@ export const TableView: React.FC<TableViewProps> = ({
 
   /** 与左上角设置、系统状态栏错开，避免分组标题紧贴视口顶 */
   const tableScrollTopPad =
-    'max(5.5rem, calc(env(safe-area-inset-top, 0px) + 3.25rem))';
+    'max(5.5rem, calc(var(--app-safe-top, 0px) + 3.25rem))';
 
   const activateTableNote = useCallback(
     async (note: Note) => {

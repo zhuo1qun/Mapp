@@ -45,7 +45,7 @@ export const NoteHeader: React.FC<NoteHeaderProps> = ({
   return (
     <div
       data-workspace-link-anchor="note-editor-title"
-      className="flex items-center gap-2 p-4 pb-2 flex-shrink-0 relative before:absolute before:bottom-0 before:left-3 before:right-3 before:border-b before:border-gray-400/50"
+      className="note-window-title-divider flex items-center gap-2 p-4 pb-2 flex-shrink-0 relative"
     >
       <div className="flex-1 min-w-0 min-h-9 flex items-center" onClick={(e) => e.stopPropagation()}>
         {title ? (

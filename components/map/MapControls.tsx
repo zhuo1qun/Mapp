@@ -122,6 +122,17 @@ export const MapControls: React.FC<MapControlsProps> = ({
   }, [compactViewport, hostedWindow, onCloseMenus, showCreateMenu]);
 
   const renderedKind = menuKind ?? (showLocateMenu ? 'locate' : showCreateMenu ? 'create' : null);
+  // Four actions stay inside the upper-right 90° quadrant. When the unplaced
+  // tray lifts the anchor, use a smaller radius so the top action remains in view.
+  const compactCreateRadius = compactUnplacedTrayOpen ? 88 : 104;
+  const compactCreatePosition = (index: number) => {
+    const angle = (-90 + index * 30) * Math.PI / 180;
+    return {
+      x: Math.round(Math.cos(angle) * compactCreateRadius),
+      y: Math.round(Math.sin(angle) * compactCreateRadius)
+    };
+  };
+  const compactCreatePositions = [0, 1, 2, 3].map(compactCreatePosition);
 
   return (
     <div
@@ -209,7 +220,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           {allowPhotoImport ? <div
             className="absolute inset-0"
             style={{
-              transform: showCreateMenu ? 'translate3d(0, -78px, 0) scale(1)' : 'scale(0.66)',
+              transform: showCreateMenu ? `translate3d(${compactCreatePositions[0].x}px, ${compactCreatePositions[0].y}px, 0) scale(1)` : 'scale(0.66)',
               opacity: showCreateMenu ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '0ms' : '45ms'}, opacity 150ms ease ${showCreateMenu ? '0ms' : '45ms'}`
             }}
@@ -225,7 +236,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
                 onCreateAtCurrentLocation();
                 onCloseMenus();
               }}
-              tooltip="在当前位置添加"
+              title="在当前位置添加"
+              aria-label="在当前位置添加"
             >
               {isCreatingAtLocation ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
             </ChromeIconButton>
@@ -234,7 +246,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <div
             className="absolute inset-0"
             style={{
-              transform: showCreateMenu ? 'translate3d(55px, -55px, 0) scale(1)' : 'scale(0.66)',
+              transform: showCreateMenu ? `translate3d(${compactCreatePositions[1].x}px, ${compactCreatePositions[1].y}px, 0) scale(1)` : 'scale(0.66)',
               opacity: showCreateMenu ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '35ms' : '0ms'}, opacity 150ms ease ${showCreateMenu ? '35ms' : '0ms'}`
             }}
@@ -250,7 +262,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
                 onCreateFromClipboard();
                 onCloseMenus();
               }}
-              tooltip="从剪贴板添加"
+              title="从剪贴板添加"
+              aria-label="从剪贴板添加"
             >
               <ClipboardPaste size={18} />
             </ChromeIconButton>
@@ -259,7 +272,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <div
             className="absolute inset-0"
             style={{
-              transform: showCreateMenu ? 'translate3d(78px, 0, 0) scale(1)' : 'scale(0.66)',
+              transform: showCreateMenu ? `translate3d(${compactCreatePositions[2].x}px, ${compactCreatePositions[2].y}px, 0) scale(1)` : 'scale(0.66)',
               opacity: showCreateMenu ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '35ms' : '0ms'}, opacity 150ms ease ${showCreateMenu ? '35ms' : '0ms'}`
             }}
@@ -275,7 +288,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
                 onCloseMenus();
                 onImportFromPhotos();
               }}
-              tooltip="从相册导入"
+              title="从相册导入"
+              aria-label="从相册导入"
             >
               <ImageIcon size={18} />
             </ChromeIconButton>
@@ -284,7 +298,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <div
             className="absolute inset-0"
             style={{
-              transform: showCreateMenu ? 'translate3d(55px, 55px, 0) scale(1)' : 'scale(0.66)',
+              transform: showCreateMenu ? `translate3d(${compactCreatePositions[3].x}px, ${compactCreatePositions[3].y}px, 0) scale(1)` : 'scale(0.66)',
               opacity: showCreateMenu ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '70ms' : '0ms'}, opacity 150ms ease ${showCreateMenu ? '70ms' : '0ms'}`
             }}
@@ -301,7 +315,8 @@ export const MapControls: React.FC<MapControlsProps> = ({
                 onImportFromCamera();
                 onCloseMenus();
               }}
-              tooltip="拍照添加"
+              title="拍照添加"
+              aria-label="拍照添加"
             >
               <Camera size={18} />
             </ChromeIconButton>

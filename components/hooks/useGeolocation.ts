@@ -317,6 +317,10 @@ export const useGeolocation = (isMapMode: boolean) => {
         setIsRequestingLocation(true);
       }
 
+      // iOS requires the orientation prompt to start in the original click stack.
+      // Waiting for geolocation success first loses the user gesture and silently fails.
+      if (wantOrientation) void requestOrientationPermission();
+
       return new Promise<LocationData | null>((resolve) => {
         const done = (value: LocationData | null) => {
           if (mountedRef.current) setIsRequestingLocation(false);
@@ -328,7 +332,6 @@ export const useGeolocation = (isMapMode: boolean) => {
           (position) => {
             const loc = applyPositionUpdate(position);
             if (mountedRef.current) startWatching();
-            if (wantOrientation) void requestOrientationPermission();
             done(loc ?? { lat: position.coords.latitude, lng: position.coords.longitude });
           },
           (error) => {

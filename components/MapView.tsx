@@ -656,7 +656,8 @@ export const MapView: React.FC<MapViewProps> = ({
     isSecureContext,
     locationError,
     setLocationError,
-    requestLocation
+    requestLocation,
+    requestOrientationPermission
   } = useGeolocation(true);
 
   const [locationEnableDismissed, setLocationEnableDismissed] = useState(false);
@@ -690,6 +691,8 @@ export const MapView: React.FC<MapViewProps> = ({
     // 已有实时定位时先立即飞入；watchPosition 会持续更新它，避免重复点击仍等待一轮 GPS 请求。
     const liveMap = mapInstanceRef.current;
     if (currentLocation && liveMap?.getContainer().isConnected) {
+      // Even when GPS is already warm, this click must still open/refresh the iOS direction prompt.
+      void requestOrientationPermission();
       // 取消仍在跑的自动/旧请求，避免其延迟结果随后覆盖这次即时定位。
       cancelPendingMapLocate(projectId);
       setViewPositionCache(projectId, 'map', { center: [currentLocation.lat, currentLocation.lng], zoom: 16 });
@@ -732,7 +735,7 @@ export const MapView: React.FC<MapViewProps> = ({
     } finally {
       if (mapViewMountedRef.current) setIsLocating(false);
     }
-  }, [currentLocation, requestLocation, setLocationError, project.id]);
+  }, [currentLocation, requestLocation, requestOrientationPermission, setLocationError, project.id]);
 
   /** 冷启动门闸：click 第一行就发起 getCurrentPosition，专用于唤起系统权限。 */
   const handleEnableLocation = useCallback(() => {
@@ -955,7 +958,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const toolbarSlotKind = compactViewport && mapToolbarKind === 'create' ? null : mapToolbarKind;
   const mapNoteKind: 'preview' | 'editor' | null = isEditorOpen
     ? 'editor'
-    : isUIVisible && selectedNoteId
+    : isUIVisible && selectedNoteId && selectedNoteRaw
       ? 'preview'
       : null;
   const mapToolbarMenuTop = useChromeMenuTop(

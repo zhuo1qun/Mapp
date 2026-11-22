@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, ClipboardPaste, ExternalLink, LassoSelect, Loader2, Upload, Wand2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ClipboardPaste, ExternalLink, LassoSelect, Loader2, RotateCcw, Upload, Wand2, X } from 'lucide-react';
 import type { NormPoint } from '../../types';
 import type { MapChromeAppearance } from '../../utils/map/mapChromeStyle';
 import { useChromeAppearance } from '../ui/chromeAppearanceContext';
@@ -24,6 +24,7 @@ interface MediaDetailWindowProps {
   maskEnabled?: boolean;
   onMaskEnabledChange?: (enabled: boolean) => void;
   onStartLasso?: () => void;
+  onRotateCounterClockwise?: () => void | Promise<void>;
   cropBusy?: boolean;
   lassoImageSrc?: string | null;
   onBackFromLasso?: () => void;
@@ -54,6 +55,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
   maskEnabled = false,
   onMaskEnabledChange,
   onStartLasso,
+  onRotateCounterClockwise,
   cropBusy = false,
   lassoImageSrc,
   onBackFromLasso,
@@ -86,6 +88,7 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
       previewImage.startsWith('http://') ||
       previewImage.startsWith('https://'));
   const showMaskControls = typeof onMaskEnabledChange === 'function';
+  const showEditControls = showMaskControls || typeof onRotateCounterClockwise === 'function';
   const [mediaAspect, setMediaAspect] = useState(() =>
     previewImage ? mediaAspectCache.get(previewImage) ?? 1 : 1
   );
@@ -238,11 +241,13 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
                   </p>
                 ) : (
                   <p className="mt-0.5 truncate text-[11px] text-gray-500">
-                    {autoRemoveStatus || (hasMask
-                      ? maskEnabled
-                        ? '蒙版已应用，最终呈现处理后的图片'
-                        : '当前呈现原图，蒙版仍保留'
-                      : '选择一种方式创建蒙版')}
+                    {showMaskControls
+                      ? autoRemoveStatus || (hasMask
+                          ? maskEnabled
+                            ? '蒙版已应用，最终呈现处理后的图片'
+                            : '当前呈现原图，蒙版仍保留'
+                          : '选择一种方式创建蒙版')
+                      : '查看媒体原图'}
                   </p>
                 )}
               </div>
@@ -260,8 +265,20 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
               ) : null}
             </header>
 
-            {!isLassoMode && showMaskControls ? (
+            {!isLassoMode && showEditControls ? (
               <div className="flex shrink-0 flex-wrap items-center gap-1.5 px-3 pb-2">
+                {onRotateCounterClockwise ? (
+                  <button
+                    type="button"
+                    disabled={cropBusy || autoRemoveBusy}
+                    onClick={() => void onRotateCounterClockwise()}
+                    className="chrome-menu-item inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 text-[11px] font-medium text-gray-600 disabled:cursor-wait disabled:opacity-50"
+                    title="逆时针旋转 90°"
+                  >
+                    {cropBusy ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                    逆时针旋转
+                  </button>
+                ) : null}
                 {onAutoRemoveBackground ? (
                   <button
                     type="button"
@@ -286,18 +303,20 @@ export const MediaDetailWindow: React.FC<MediaDetailWindowProps> = ({
                     套索裁剪
                   </button>
                 ) : null}
-                <div className="ml-auto flex h-8 items-center gap-2 pl-1">
-                  <span className={`text-[11px] font-medium ${hasMask ? 'text-gray-500' : 'text-gray-300'}`}>
-                    应用蒙版
-                  </span>
-                  <ChromeToggle
-                    checked={hasMask && maskEnabled}
-                    onCheckedChange={(next) => onMaskEnabledChange?.(next)}
-                    themeColor={themeColor}
-                    label="应用蒙版"
-                    disabled={!hasMask || cropBusy || autoRemoveBusy}
-                  />
-                </div>
+                {showMaskControls ? (
+                  <div className="ml-auto flex h-8 items-center gap-2 pl-1">
+                    <span className={`text-[11px] font-medium ${hasMask ? 'text-gray-500' : 'text-gray-300'}`}>
+                      应用蒙版
+                    </span>
+                    <ChromeToggle
+                      checked={hasMask && maskEnabled}
+                      onCheckedChange={(next) => onMaskEnabledChange?.(next)}
+                      themeColor={themeColor}
+                      label="应用蒙版"
+                      disabled={!hasMask || cropBusy || autoRemoveBusy}
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
