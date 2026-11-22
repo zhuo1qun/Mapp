@@ -3,6 +3,7 @@ import { Note, Tag } from '../types';
 import { THEME_COLOR } from '../constants';
 import { generateId, parseNoteContent } from '../utils';
 import { buildEditorModel, fromEditorModel } from '../utils/note/editorModel';
+import { firstLineInputEmoji, resolveNoteEmoji } from '../utils/note/textEmoji';
 import { isNoteContentEmpty, submitNoteDraft, type NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { useTiptapEditor } from './hooks/useTiptapEditor';
 import { useNoteState } from './hooks/useNoteState';
@@ -37,6 +38,7 @@ import { CHROME_DIALOG_SURFACE_SHELL_CLASS } from './ui/ChromeDialogSurface';
 import { useChromeAppearance } from './ui/chromeAppearanceContext';
 import { fitBoardMediaDimensions } from '../utils/board/boardPlacement';
 import { loadCameraResource, loadDrawingResource, loadMediaDetailResource } from '../utils/resources/featureResources';
+import { ensureNoteMediaSynced } from '../utils/persistence/noteMediaSync';
 
 const LazyDrawingCanvas = lazy(async () => {
   const module = await loadDrawingResource();
@@ -65,6 +67,8 @@ export interface NoteEditorProps {
   onRequestOutsideClose?: () => void;
   /** 供记录切换等场景先提交当前草稿、但不关闭编辑器。 */
   saveDraftRef?: React.MutableRefObject<(() => Promise<NoteDraftOutcome>) | null>;
+  /** 点击外部关闭前，供窗口宿主同步判断当前编辑会话是否有未保存修改。 */
+  hasUnsavedChangesRef?: React.MutableRefObject<boolean>;
   onSave: (note: Partial<Note>) => void | Promise<void>;
   /** 调用方尚未把这条便签写入项目数据。 */
   isNewNote?: boolean;
@@ -101,6 +105,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onSaveClose,
   onRequestOutsideClose,
   saveDraftRef,
+  hasUnsavedChangesRef,
   onSave,
   isNewNote = false,
   onDelete,
@@ -172,6 +177,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     newTagLabel,
     newTagColor
   } = noteState;
+  const inputEmoji = useMemo(() => firstLineInputEmoji(text), [text]);
+  const effectiveEmoji = useMemo(() => resolveNoteEmoji(text, emoji), [emoji, text]);
+
+  useEffect(() => {
+    if (inputEmoji) setShowEmojiPicker(false);
+  }, [inputEmoji]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -421,7 +432,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
     const model = buildEditorModel({
       text,
-      emoji: isCompactMode ? '' : emoji,
+      emoji: isCompactMode ? '' : effectiveEmoji,
       tags: isCompactMode ? [] : tags,
       startYear,
       endYear,
@@ -463,7 +474,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
   const isDiscardableDraft = isNoteContentEmpty({
     text,
-    emoji,
+    emoji: effectiveEmoji,
     tags,
     startYear,
     endYear,
@@ -472,6 +483,82 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     sketch,
     media: mediaItems,
   }, isCompactMode);
+
+  const initialDraftSignature = useMemo(() => {
+    const initial = initialNote ?? {};
+    const synced = ensureNoteMediaSynced({
+      ...(initial as Note),
+      images: initial.images || [],
+      imageRefs: initial.imageRefs,
+      sketch: initial.sketch,
+      media: initial.media
+    });
+    return JSON.stringify({
+      text: initial.text || '',
+      emoji: resolveNoteEmoji(initial.text || '', initial.emoji || ''),
+      favorite: initial.isFavorite ?? false,
+      tags: initial.tags || [],
+      startYear: initial.startYear ?? null,
+      endYear: initial.endYear ?? null,
+      imageWidth: initial.imageWidth ?? null,
+      imageHeight: initial.imageHeight ?? null,
+      media: (synced.media || []).map((item) => ({
+        kind: item.kind,
+        assetId: item.assetId,
+        source: item.source?.kind === 'remote'
+          ? { kind: 'remote', url: item.source.url, cachedAssetId: item.source.cachedAssetId ?? null }
+          : item.source?.kind === 'local' ? { kind: 'local' } : null,
+        variantId: item.variantId ?? null,
+        variantEnabled: item.variantEnabled !== false
+      }))
+    });
+  }, [initialNote]);
+
+  const currentDraftSignature = useMemo(() => JSON.stringify({
+    text,
+    emoji: effectiveEmoji,
+    favorite: isFavorite,
+    tags,
+    startYear: startYear ?? null,
+    endYear: endYear ?? null,
+    imageWidth: stickerSize?.width ?? initialNote?.imageWidth ?? null,
+    imageHeight: stickerSize?.height ?? initialNote?.imageHeight ?? null,
+    media: mediaItems.map((item) => ({
+      kind: item.kind,
+      assetId: item.assetId,
+      source: item.source?.kind === 'remote'
+        ? { kind: 'remote', url: item.source.url, cachedAssetId: item.source.cachedAssetId ?? null }
+        : item.source?.kind === 'local' ? { kind: 'local' } : null,
+      variantId: item.variantId ?? null,
+      variantEnabled: item.variantEnabled !== false
+    }))
+  }), [
+    effectiveEmoji,
+    endYear,
+    initialNote?.imageHeight,
+    initialNote?.imageWidth,
+    isFavorite,
+    mediaItems,
+    startYear,
+    stickerSize?.height,
+    stickerSize?.width,
+    tags,
+    text
+  ]);
+
+  const draftBaselineRef = useRef<{ noteId: string; signature: string } | null>(null);
+  const draftNoteId = initialNote?.id ?? '__new-note__';
+  if (!isOpen) {
+    draftBaselineRef.current = null;
+    if (hasUnsavedChangesRef) hasUnsavedChangesRef.current = false;
+  } else {
+    if (!draftBaselineRef.current || draftBaselineRef.current.noteId !== draftNoteId) {
+      draftBaselineRef.current = { noteId: draftNoteId, signature: initialDraftSignature };
+    }
+    if (hasUnsavedChangesRef) {
+      hasUnsavedChangesRef.current = currentDraftSignature !== draftBaselineRef.current.signature;
+    }
+  }
 
   const handleSave = async (closeAfterSave = true): Promise<NoteDraftOutcome> => {
     const persisted = await persistMediaForSave();
@@ -498,8 +585,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   useEffect(
     () => () => {
       if (saveDraftRef) saveDraftRef.current = null;
+      if (hasUnsavedChangesRef) hasUnsavedChangesRef.current = false;
     },
-    [saveDraftRef]
+    [hasUnsavedChangesRef, saveDraftRef]
   );
 
   const deleteTitleHint = useMemo(
@@ -661,17 +749,19 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         type="button"
         onClick={(e) => {
           e.stopPropagation();
+          if (inputEmoji) return;
           openEmojiPicker();
         }}
+        disabled={Boolean(inputEmoji)}
         className={`${NOTE_EDITOR_ADD_PILL_CLASS} ${
-          showEmojiPicker || emoji ? NOTE_EDITOR_ADD_PILL_ACTIVE : NOTE_EDITOR_ADD_PILL_IDLE
-        }`}
-        title={emoji ? '更换表情' : '添加表情'}
+          showEmojiPicker || effectiveEmoji ? NOTE_EDITOR_ADD_PILL_ACTIVE : NOTE_EDITOR_ADD_PILL_IDLE
+        } ${inputEmoji ? 'cursor-default opacity-70' : ''}`}
+        title={inputEmoji ? '已使用标题第一行输入的 Emoji' : emoji ? '更换表情' : '添加表情'}
         aria-expanded={showEmojiPicker}
       >
-        {emoji ? (
+        {effectiveEmoji ? (
           <span className="text-[1.05rem] leading-none select-none" role="img" aria-label="当前表情">
-            {emoji}
+            {effectiveEmoji}
           </span>
         ) : (
           <>
@@ -680,7 +770,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           </>
         )}
       </button>
-      {emoji ? (
+      {emoji && !inputEmoji ? (
         <button
           type="button"
           onClick={(e) => {

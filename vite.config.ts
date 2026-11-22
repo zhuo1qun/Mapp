@@ -53,6 +53,8 @@ export default defineConfig(({ mode }) => {
                   expiration: {
                     maxEntries: 160,
                     maxAgeSeconds: 60 * 60 * 24 * 30,
+                    // 模块可随时重新下载，配额紧张时优先让出空间给项目数据。
+                    purgeOnQuotaError: true,
                   },
                   cacheableResponse: {
                     statuses: [0, 200],
@@ -68,6 +70,7 @@ export default defineConfig(({ mode }) => {
                   expiration: {
                     maxEntries: 24,
                     maxAgeSeconds: 60 * 60 * 24 * 90,
+                    purgeOnQuotaError: true,
                   },
                   cacheableResponse: { statuses: [0, 200] },
                 },
@@ -81,6 +84,7 @@ export default defineConfig(({ mode }) => {
                   expiration: {
                     maxEntries: 12,
                     maxAgeSeconds: 60 * 60 * 24 * 90,
+                    purgeOnQuotaError: true,
                   },
                   cacheableResponse: { statuses: [0, 200] },
                 },
@@ -95,6 +99,8 @@ export default defineConfig(({ mode }) => {
                   expiration: {
                     maxEntries: 800,
                     maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+                    // 瓦片是纯派生缓存；发生 quota error 时不应阻断照片或项目写入。
+                    purgeOnQuotaError: true,
                   },
                   cacheableResponse: {
                     statuses: [0, 200],

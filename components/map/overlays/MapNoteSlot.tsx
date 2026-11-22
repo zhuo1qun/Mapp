@@ -19,6 +19,7 @@ type MapNoteSlotProps = {
   contentSurfaceStyle: CSSProperties;
   menuTop: number | null;
   saveDraftRef: MutableRefObject<(() => Promise<NoteDraftOutcome>) | null>;
+  hasUnsavedChangesRef: MutableRefObject<boolean>;
   onDiscard: () => void;
   onSaveClose: () => void;
   onSave: (note: Partial<Note>) => void | Promise<void>;
@@ -51,6 +52,7 @@ export function MapNoteSlot({
   contentSurfaceStyle,
   menuTop,
   saveDraftRef,
+  hasUnsavedChangesRef,
   onDiscard,
   onSaveClose,
   onSave,
@@ -90,6 +92,7 @@ export function MapNoteSlot({
                 shell={false}
                 isOpen
                 saveDraftRef={saveDraftRef}
+                hasUnsavedChangesRef={hasUnsavedChangesRef}
                 onClose={onDiscard}
                 onSaveClose={onSaveClose}
                 onSave={onSave}

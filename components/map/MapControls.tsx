@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import { Note } from '../../types';
 import { THEME_COLOR } from '../../constants';
-import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon, Camera, Maximize2 } from 'lucide-react';
+import { Locate, Loader2, Settings, MapPin, Plus, Image as ImageIcon, Camera, Maximize2, ClipboardPaste } from 'lucide-react';
 import { ChromeIconButton } from '../ui/ChromeIconButton';
 import { ChromeMenuItem } from '../ui/ChromeMenuItem';
 import { ChromeWindow } from '../ui/ChromeWindow';
@@ -26,6 +26,7 @@ interface MapControlsProps {
   /** 锚定设置下拉面板 */
   settingsButtonRef?: React.RefObject<HTMLButtonElement | null>;
   onCreateAtCurrentLocation: () => void;
+  onCreateFromClipboard: () => void;
   onImportFromPhotos: () => void;
   onImportFromCamera: () => void;
   isCreatingAtLocation?: boolean;
@@ -59,6 +60,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
   settingsOpen = false,
   settingsButtonRef,
   onCreateAtCurrentLocation,
+  onCreateFromClipboard,
   onImportFromPhotos,
   allowPhotoImport = true,
   onImportFromCamera,
@@ -245,6 +247,31 @@ export const MapControls: React.FC<MapControlsProps> = ({
               disabled={!showCreateMenu}
               tabIndex={showCreateMenu ? 0 : -1}
               onClick={() => {
+                onCreateFromClipboard();
+                onCloseMenus();
+              }}
+              tooltip="从剪贴板添加"
+            >
+              <ClipboardPaste size={18} />
+            </ChromeIconButton>
+          </div>
+
+          <div
+            className="absolute inset-0"
+            style={{
+              transform: showCreateMenu ? 'translate3d(78px, 0, 0) scale(1)' : 'scale(0.66)',
+              opacity: showCreateMenu ? 1 : 0,
+              transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '35ms' : '0ms'}, opacity 150ms ease ${showCreateMenu ? '35ms' : '0ms'}`
+            }}
+          >
+            <ChromeIconButton
+              className="ui-map-create-radial-action pointer-events-auto"
+              themeColor={themeColor}
+              chromeSurfaceStyle={neutralStyle}
+              chromeHoverBackground={neutralHover}
+              disabled={!showCreateMenu}
+              tabIndex={showCreateMenu ? 0 : -1}
+              onClick={() => {
                 onCloseMenus();
                 onImportFromPhotos();
               }}
@@ -257,7 +284,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <div
             className="absolute inset-0"
             style={{
-              transform: showCreateMenu ? 'translate3d(78px, 0, 0) scale(1)' : 'scale(0.66)',
+              transform: showCreateMenu ? 'translate3d(55px, 55px, 0) scale(1)' : 'scale(0.66)',
               opacity: showCreateMenu ? 1 : 0,
               transition: `transform 220ms cubic-bezier(0.22, 1, 0.36, 1) ${showCreateMenu ? '70ms' : '0ms'}, opacity 150ms ease ${showCreateMenu ? '70ms' : '0ms'}`
             }}
@@ -317,6 +344,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           chromeHoverBackground={neutralHover}
           onLocateCurrentPosition={onLocateCurrentPosition}
           onCreateAtCurrentLocation={onCreateAtCurrentLocation}
+          onCreateFromClipboard={onCreateFromClipboard}
           onImportFromPhotos={onImportFromPhotos}
           allowPhotoImport={allowPhotoImport}
           onCloseMenus={onCloseMenus}
@@ -335,6 +363,7 @@ export function MapLocateCreateMenu({
   chromeHoverBackground,
   onLocateCurrentPosition,
   onCreateAtCurrentLocation,
+  onCreateFromClipboard,
   onImportFromPhotos,
   allowPhotoImport = true,
   onCloseMenus,
@@ -346,6 +375,7 @@ export function MapLocateCreateMenu({
   chromeHoverBackground?: string;
   onLocateCurrentPosition: () => void;
   onCreateAtCurrentLocation: () => void;
+  onCreateFromClipboard: () => void;
   onImportFromPhotos: () => void;
   allowPhotoImport?: boolean;
   onCloseMenus: () => void;
@@ -403,6 +433,20 @@ export function MapLocateCreateMenu({
           >
             在当前位置添加
           </ChromeMenuItem> : null}
+          <ChromeMenuItem
+            className="group"
+            hoverBackground={chromeHoverBackground}
+            icon={<ClipboardPaste size={16} className="text-gray-400 transition-colors group-hover:text-blue-500" />}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateFromClipboard();
+              onCloseMenus();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerMove={(e) => e.stopPropagation()}
+          >
+            从剪贴板添加
+          </ChromeMenuItem>
           <ChromeMenuItem
             className="group"
             hoverBackground={chromeHoverBackground}

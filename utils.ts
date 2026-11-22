@@ -2,6 +2,7 @@ import { TAG_COLORS } from './constants';
 import { Tag } from './types';
 import { toJpeg, toPng } from 'html-to-image';
 import { convertHeicImageIfNeeded } from './utils/media/imageFileProcessing';
+import { firstLineInputEmoji } from './utils/note/textEmoji';
 
 export const generateId = (): string => {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -173,7 +174,12 @@ export const parseNoteContent = (text: string) => {
   const detail = firstNewlineIndex === -1 ? '' : text.substring(firstNewlineIndex + 1);
 
   // 去除标题中的 Markdown 标识符 (如 #, ##, ###)
-  const cleanTitle = title.replace(/^#+\s+/, '').trim();
+  const cleanTitleWithEmoji = title.replace(/^#+\s+/, '').trim();
+  const inputEmoji = firstLineInputEmoji(title);
+  // Emoji 已作为独立属性呈现，派生标题中不再重复；正文原文保持不变。
+  const cleanTitle = inputEmoji
+    ? cleanTitleWithEmoji.replace(inputEmoji, '').replace(/\s{2,}/g, ' ').trim()
+    : cleanTitleWithEmoji;
 
   return {
     title: cleanTitle,

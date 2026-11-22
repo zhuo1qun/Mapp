@@ -27,6 +27,7 @@ import { useMapMarkerSelection } from '@/components/hooks/useMapMarkerSelection'
 import { useDataImport } from '@/components/hooks/useDataImport';
 import { useFileDrop } from '@/components/hooks/useFileDrop';
 import { extractDroppedImageFiles } from '@/utils/media/dataTransferImages';
+import { parseClipboardLocation } from '@/utils/map/clipboardLocation';
 import { useCsvImport } from '@/components/hooks/useCsvImport';
 import { MapWorldMinZoom } from './map/MapWorldMinZoom';
 import { MapSmoothZoom } from './map/MapSmoothZoom';
@@ -34,6 +35,7 @@ import { MapLongPressHandler } from './map/MapLongPressHandler';
 import { MapNavigationHandler } from './map/MapNavigationHandler';
 import { TextLabelsLayer } from './map/TextLabelsLayer';
 import { MapPositionTracker } from './map/MapPositionTracker';
+import { MapScale } from './map/MapScale';
 import { MapCenterHandler } from './map/MapCenterHandler';
 import {
   MapAttributionPrefix,
@@ -259,6 +261,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapChromeHoverBg = mapChromeControlHoverBackground(mapUiChromeOpacity, mapChromeTone);
   const [pendingPersistedEditorNoteId, setPendingPersistedEditorNoteId] = useState<string | null>(null);
   const mapNoteSaveRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
+  const mapNoteDirtyRef = useRef(false);
   const compactViewport = useCompactViewport();
   // 所有退出路径（取消草稿、删除已有点）共用这一份状态，避免重复播放离场动画。
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
@@ -530,6 +533,7 @@ export const MapView: React.FC<MapViewProps> = ({
   
   // Text labels display mode
   const [showTextLabels, setShowTextLabels] = useState(false);
+  const [showMapScale, setShowMapScale] = useState(true);
   /** 仅用于检测全局 label 是否从「开」变为「关」，避免选中态变化时误清簇展开列表 */
   const prevShowTextLabelsRef = useRef(showTextLabels);
 
@@ -1285,6 +1289,56 @@ export const MapView: React.FC<MapViewProps> = ({
     void createNoteAtCurrentLocation();
   }, [createNoteAtCurrentLocation]);
 
+  const createNoteFromClipboardText = useCallback(
+    (text: string) => {
+      const parsed = parseClipboardLocation(text);
+      if (!parsed) return false;
+      mapInstanceRef.current?.flyTo(
+        [parsed.coords.lat, parsed.coords.lng],
+        16,
+        { duration: 1.5 }
+      );
+      const newNote = stageNewMapNote(parsed.coords);
+      setEditorAutoOpenCamera(false);
+      openNewNoteEditorAfterIntro(newNote);
+      return true;
+    },
+    [openNewNoteEditorAfterIntro, stageNewMapNote]
+  );
+
+  const handleCreateFromClipboard = useCallback(async () => {
+    if (!navigator.clipboard?.readText) {
+      window.alert('当前浏览器不能直接读取剪贴板，请复制位置信息后在地图上按 Cmd/Ctrl + V。');
+      return;
+    }
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!createNoteFromClipboardText(text)) {
+        window.alert('没有识别到明确位置。可粘贴经纬度、geo: 链接或 Google、Apple、OpenStreetMap 的完整地图链接。');
+      }
+    } catch (error) {
+      console.warn('Read location from clipboard failed:', error);
+      window.alert('无法读取剪贴板，请允许剪贴板权限，或在地图上按 Cmd/Ctrl + V。');
+    }
+  }, [createNoteFromClipboardText]);
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const target = event.target;
+      if (
+        isEditorOpen ||
+        (target instanceof Element &&
+          !!target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'))
+      ) return;
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (!createNoteFromClipboardText(text)) return;
+      event.preventDefault();
+      handleCloseLocateAndCreateMenus();
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [createNoteFromClipboardText, handleCloseLocateAndCreateMenus, isEditorOpen]);
+
   /** 与当前位置新建同一套流程，编辑器内自动打开 +拍照 overlay */
   const handleImportFromCamera = useCallback(() => {
     void createNoteAtCurrentLocation({ autoOpenCamera: true });
@@ -1373,7 +1427,8 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const closeMapNoteSlot = useCallback(() => {
     if (isEditorOpen) {
-      setConfirmOutsideClose(true);
+      if (mapNoteDirtyRef.current) setConfirmOutsideClose(true);
+      else closeEditorAndDismissNoteSlot('discarded');
       return;
     }
     setSelectedNoteId(null);
@@ -1645,6 +1700,7 @@ export const MapView: React.FC<MapViewProps> = ({
         <MapWorldMinZoom />
         <MapNavigationHandler coords={navigateToCoords} onComplete={onNavigateComplete} />
         <MapPositionTracker onPositionChange={handleMapPositionChange} />
+        {showMapScale ? <MapScale color={mapChromeTone === 'dark' ? '#ffffff' : '#111827'} /> : null}
         <MapClickHandler onClick={handleMapClickInternal} />
         <MapUnplacedNoteDropHandler
           enabled={isUIVisible && isMapToolbarEditMode && unplacedMapNotes.length > 0}
@@ -1948,6 +2004,7 @@ export const MapView: React.FC<MapViewProps> = ({
                     settingsButtonRef={settingsButtonRef}
                     onOpenSettings={handleToggleSettings}
                     onCreateAtCurrentLocation={handleCreateAtCurrentLocation}
+                    onCreateFromClipboard={handleCreateFromClipboard}
                     onImportFromPhotos={handleImportFromPhotos}
                     onImportFromCamera={handleImportFromCamera}
                     isCreatingAtLocation={isCreatingAtLocation}
@@ -2063,6 +2120,8 @@ export const MapView: React.FC<MapViewProps> = ({
                           onLabelSizeChange={setLabelSize}
                           showTextLabels={showTextLabels}
                           onShowTextLabelsChange={setShowTextLabels}
+                          showMapScale={showMapScale}
+                          onShowMapScaleChange={setShowMapScale}
                           onExportHtml={() => void exportStandaloneMapTab()}
                         />
                       )
@@ -2141,6 +2200,7 @@ export const MapView: React.FC<MapViewProps> = ({
                         chromeHoverBackground={mapChromeHoverBg}
                         onLocateCurrentPosition={handleLocateCurrentPosition}
                         onCreateAtCurrentLocation={handleCreateAtCurrentLocation}
+                        onCreateFromClipboard={handleCreateFromClipboard}
                         onImportFromPhotos={handleImportFromPhotos}
                         onCloseMenus={handleCloseLocateAndCreateMenus}
                         mapNotes={mapRenderedNotes}
@@ -2261,6 +2321,7 @@ export const MapView: React.FC<MapViewProps> = ({
           contentSurfaceStyle={mapChromeContentSurface}
           menuTop={mapToolbarMenuTop}
           saveDraftRef={mapNoteSaveRef}
+          hasUnsavedChangesRef={mapNoteDirtyRef}
           onDiscard={() => closeEditorAndDismissNoteSlot('discarded')}
           onSaveClose={() => closeEditorAndDismissNoteSlot('saved')}
           onSave={handleSaveNote}

@@ -6,6 +6,7 @@
 import type { Note, NoteImageRef, Tag } from '../../types';
 import { parseNoteContent } from '../../utils';
 import { isMediaRefId } from '../persistence/imageAssetStore';
+import { resolveNoteEmoji } from './textEmoji';
 
 export type AttachmentKind = 'image' | 'sketch';
 
@@ -94,7 +95,7 @@ export function toEditorModel(note: Partial<Note>): EditorModel {
       detail: detail || undefined
     },
     properties: [
-      { key: 'emoji', value: note.emoji || '' },
+      { key: 'emoji', value: resolveNoteEmoji(text, note.emoji || '') },
       { key: 'tags', value: note.tags || [] },
       {
         key: 'time',

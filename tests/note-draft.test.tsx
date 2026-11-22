@@ -4,8 +4,25 @@ import { act, create } from 'react-test-renderer';
 import { isNoteContentEmpty, submitNoteDraft, type NoteDraftOutcome } from '../utils/note/draftLifecycle';
 import { NoteHeader } from '../components/note-editor/NoteHeader';
 import type { Note } from '../types';
+import { firstLineInputEmoji, resolveNoteEmoji } from '../utils/note/textEmoji';
+import { buildEditorModel, fromEditorModel } from '../utils/note/editorModel';
+import { parseNoteContent } from '../utils';
 
 async function run() {
+  assert.equal(firstLineInputEmoji('# 🌊 河流更新\n正文里的 🐟 不参与解析'), '🌊');
+  assert.equal(firstLineInputEmoji('# 没有标题表情\n正文 🐟'), '');
+  assert.equal(firstLineInputEmoji('家庭 👨‍👩‍👧‍👦 项目'), '👨‍👩‍👧‍👦');
+  assert.equal(resolveNoteEmoji('# 🌊 河流更新', '📍'), '🌊');
+  assert.equal(resolveNoteEmoji('# 河流更新', '📍'), '📍');
+  assert.equal(parseNoteContent('# 🌊 河流更新\n项目正文').title, '河流更新');
+  assert.equal(parseNoteContent('# 河流 🌊 更新\n项目正文').title, '河流 更新');
+  assert.equal(parseNoteContent('# 河流更新\n项目正文 🐟').title, '河流更新');
+  const inputEmojiNote = fromEditorModel(buildEditorModel({
+    text: '# 🌊 河流更新', emoji: '📍', tags: [], images: []
+  }));
+  assert.equal(inputEmojiNote.emoji, '🌊');
+  console.log('PASS: first-line input emoji overrides the independent emoji field');
+
   const empty: Partial<Note> = {
     id: 'camera-draft', coords: { lat: 28, lng: 112 }, createdAt: 123,
     boardX: 100, boardY: 100, isFavorite: true, variant: 'standard',

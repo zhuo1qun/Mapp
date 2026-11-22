@@ -159,6 +159,9 @@ interface SettingsPanelProps {
   /** 地图：是否显示便签文字标签 */
   showTextLabels?: boolean;
   onShowTextLabelsChange?: (show: boolean) => void;
+  /** 地图：是否显示顶部比例尺 */
+  showMapScale?: boolean;
+  onShowMapScaleChange?: (show: boolean) => void;
   boardVariantToggles?: {
     primary: boolean;
     image: boolean;
@@ -198,6 +201,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onLabelSizeChange,
   showTextLabels,
   onShowTextLabelsChange,
+  showMapScale,
+  onShowMapScaleChange,
   boardVariantToggles,
   onExportHtml,
   shell = true,
@@ -361,6 +366,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   label="显示标签"
                   checked={showTextLabels}
                   onChange={onShowTextLabelsChange}
+                  themeColor={themeColor}
+                />
+              ) : null}
+              {showMapScale !== undefined && onShowMapScaleChange ? (
+                <SettingsToggleSwitch
+                  label="显示比例尺"
+                  checked={showMapScale}
+                  onChange={onShowMapScaleChange}
                   themeColor={themeColor}
                 />
               ) : null}

@@ -22,8 +22,8 @@ export function SaveBeforeCloseDialog({ open, saving = false, themeColor, panelC
     {(phase) => <div className={`fixed inset-0 z-[var(--z-blocking-dialog)] flex items-center justify-center p-4 chrome-dialog-backdrop-${phase}`} role="dialog" aria-modal="true" aria-labelledby="save-before-close-title">
       <button type="button" className="absolute inset-0 bg-black/40" aria-label="继续编辑" onClick={() => !saving && onCancel()} />
       <ChromeDialogSurface className={`max-w-sm p-5 text-sm chrome-dialog-${phase}`} style={surface}>
-        <h2 id="save-before-close-title" className="mb-2 text-base font-bold text-gray-900">保存这次修改吗？</h2>
-        <p className="mb-4 leading-relaxed text-gray-600">你点击了编辑器外部。可以保存后关闭，也可以不保存本次修改。</p>
+        <h2 id="save-before-close-title" className="mb-2 text-base font-bold text-gray-900">是否保存编辑？</h2>
+        <p className="mb-4 leading-relaxed text-gray-600">还有未保存的编辑，是否保存？</p>
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" disabled={saving} onClick={onCancel} className="rounded-xl px-4 py-2 font-semibold text-gray-500 hover:bg-gray-100 disabled:opacity-50">继续编辑</button>
           <button type="button" disabled={saving} onClick={onDiscard} className="rounded-xl px-4 py-2 font-semibold text-red-500 hover:bg-red-50 disabled:opacity-50">不保存</button>

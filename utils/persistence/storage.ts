@@ -100,6 +100,21 @@ export async function checkStorageUsage(): Promise<{ used: number, available: nu
   return null;
 }
 
+let persistenceRequest: Promise<boolean> | null = null;
+
+/**
+ * 项目第一次实际落盘后申请持久存储。拒绝不影响保存；浏览器仍可能批准，
+ * 从而降低 IndexedDB 与 Cache Storage 一同在空间压力下被驱逐的风险。
+ */
+export function requestPersistentProjectStorage(): Promise<boolean> {
+  if (persistenceRequest) return persistenceRequest;
+  if (typeof navigator === 'undefined' || !navigator.storage?.persist) {
+    return Promise.resolve(false);
+  }
+  persistenceRequest = navigator.storage.persist().catch(() => false);
+  return persistenceRequest;
+}
+
 // 分析重复图片的详细信息
 export async function analyzeDuplicateImages(): Promise<{
   duplicateGroups: Array<{
@@ -1661,6 +1676,8 @@ function collectEntityChanges<T extends SyncableProjectEntity>(
 
 // 保存项目（分片存储，图片分离）。同时记录实体级 outbox，供未来共享地图增量同步使用。
 export async function saveProject(project: Project): Promise<Project> {
+  // 不阻塞用户保存；持久化许可由浏览器按站点互动情况决定。
+  void requestPersistentProjectStorage();
   const previousStored = await get<Project>(`${PROJECT_PREFIX}${project.id}`);
   const previous = previousStored ? ensureProjectCompatibility(previousStored) : undefined;
   const now = Date.now();

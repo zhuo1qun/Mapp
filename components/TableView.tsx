@@ -113,6 +113,7 @@ export const TableView: React.FC<TableViewProps> = ({
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [editorNoteId, setEditorNoteId] = useState<string | null>(null);
   const editorSaveDraftRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
+  const editorDirtyRef = useRef(false);
   const [confirmOutsideClose, setConfirmOutsideClose] = useState(false);
   const [savingOutsideClose, setSavingOutsideClose] = useState(false);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
@@ -977,8 +978,12 @@ export const TableView: React.FC<TableViewProps> = ({
           initialNote={project.notes.find(n => n.id === editorNoteId)}
           isOpen={!!editorNoteId}
           onClose={() => setEditorNoteId(null)}
-          onRequestOutsideClose={() => setConfirmOutsideClose(true)}
+          onRequestOutsideClose={() => {
+            if (editorDirtyRef.current) setConfirmOutsideClose(true);
+            else setEditorNoteId(null);
+          }}
           saveDraftRef={editorSaveDraftRef}
+          hasUnsavedChangesRef={editorDirtyRef}
           onDelete={onDeleteNote}
           onSave={(updatedNote) => {
             if (editorNoteId) {

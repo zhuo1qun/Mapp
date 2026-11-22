@@ -242,6 +242,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [pendingKeyboardDeleteIds, setPendingKeyboardDeleteIds] = useState<string[] | null>(null);
   const boardNoteSaveRef = useRef<(() => Promise<NoteDraftOutcome>) | null>(null);
+  const boardNoteDirtyRef = useRef(false);
   const [confirmOutsideClose, setConfirmOutsideClose] = useState(false);
   const [savingOutsideClose, setSavingOutsideClose] = useState(false);
   const {
@@ -2535,7 +2536,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
 
         <ChromeNoteSlot
           kind={editingNote && !isIntroPending ? 'editor' : null}
-          onClose={() => setConfirmOutsideClose(true)}
+          onClose={() => {
+            if (boardNoteDirtyRef.current) setConfirmOutsideClose(true);
+            else closeEditor('discarded');
+          }}
           appearance={chromeAppearance}
           motionAnchor={noteEditorAnimationAnchor}
           dismissIgnoreRefs={[boardToolbarRef]}
@@ -2550,6 +2554,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               shell={false}
               isOpen={!!editingNote && !isIntroPending}
               saveDraftRef={boardNoteSaveRef}
+              hasUnsavedChangesRef={boardNoteDirtyRef}
               onClose={closeEditor}
               onSaveClose={() => closeEditor('saved')}
               animationAnchor={noteEditorAnimationAnchor}
