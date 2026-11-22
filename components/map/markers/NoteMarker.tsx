@@ -52,6 +52,7 @@ interface NoteMarkerProps {
   /** 新建 / 删除时的锚点动效，外层动画不干扰图钉自身的旋转。 */
   motion?: 'enter' | 'settle' | 'exit';
   interactive?: boolean;
+  selected?: boolean;
   /** 浏览态的已选图钉：长按后切入编辑并由同一次手势继续拖动。 */
   longPressDragEnabled?: boolean;
   onLongPressDragStart?: () => void;
@@ -76,6 +77,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
   onDrag,
   motion,
   interactive = true,
+  selected = false,
   longPressDragEnabled = false,
   onLongPressDragStart,
   onLongPressDrag,
@@ -142,6 +144,13 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
   if (onMouseLeave) eventHandlers.mouseout = onMouseLeave;
   if (onDragEnd) eventHandlers.dragend = onDragEnd;
   if (onDrag) eventHandlers.drag = onDrag;
+
+  useEffect(() => {
+    const element = markerRef.current?.getElement();
+    if (!element) return;
+    element.classList.toggle('mapp-map-pin-selected', selected);
+    element.setAttribute('aria-selected', selected ? 'true' : 'false');
+  }, [icon, selected]);
 
   useEffect(() => {
     const marker = markerRef.current;

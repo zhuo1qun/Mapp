@@ -37,6 +37,9 @@ type MapNoteSlotProps = {
   onImageIndexChange: (index: number) => void;
   canModifyNote: (note: Note) => boolean;
   onOpenSelectedNote: (noteId: string) => void;
+  onOpenSelectedMedia: (noteId: string, mediaIndex: number) => void;
+  editorMediaPreviewRequest?: { key: number; index: number } | null;
+  onEditorMediaPreviewConsumed?: () => void;
   isEditMode: boolean;
 };
 
@@ -70,6 +73,9 @@ export function MapNoteSlot({
   onImageIndexChange,
   canModifyNote,
   onOpenSelectedNote,
+  onOpenSelectedMedia,
+  editorMediaPreviewRequest,
+  onEditorMediaPreviewConsumed,
   isEditMode
 }: MapNoteSlotProps) {
   return (
@@ -100,6 +106,8 @@ export function MapNoteSlot({
                 initialNote={editingNote || {}}
                 isNewNote={!!editingNote?.id && !notes.some((note) => note.id === editingNote.id)}
                 autoOpenCamera={autoOpenCamera}
+                initialMediaPreviewRequest={editorMediaPreviewRequest}
+                onInitialMediaPreviewConsumed={onEditorMediaPreviewConsumed}
                 onSwitchToBoardView={(coords) => onSwitchToBoardView?.(coords, mapInstance ?? undefined)}
                 themeColor={themeColor}
                 mapUiChromeOpacity={mapUiChromeOpacity}
@@ -139,6 +147,7 @@ export function MapNoteSlot({
               chromeSurfaceStyle={contentSurfaceStyle}
               chromeAppearance={appearance}
               onOpenEditor={canModifyNote(selectedNote) ? onOpenSelectedNote : undefined}
+              onOpenMediaEditor={canModifyNote(selectedNote) ? onOpenSelectedMedia : undefined}
               onDelete={isEditMode && canModifyNote(selectedNote) ? onDelete : undefined}
               onFocusMap={(note) => {
                 if (!mapInstance) return;

@@ -79,13 +79,13 @@ export function useBoardNoteInteraction({
 
       const latestNote = notes.find((n) => n.id === note.id) || note;
       const commandSelect = e.metaKey || e.ctrlKey;
-      const additiveSelect = commandSelect || isShiftPressed || e.shiftKey;
 
-      // Command/Ctrl-click is always a selection gesture in both Board modes.
-      // Apply it immediately and never let it fall through to editor opening.
+      // Figma-style Command/Ctrl-click: always keep exactly this object selected.
+      // Clicking it again is idempotent; clicking another object replaces the
+      // current selection. Shift remains the only additive/toggle gesture.
       if (commandSelect) {
         clearDeferredClick();
-        applyEditModeSelection(note.id, additiveSelect);
+        applyEditModeSelection(note.id, false);
         return;
       }
 

@@ -1,7 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Marker, useMap, useMapEvents } from 'react-leaflet';
 import type { Note, Coordinates } from '../../types';
-import { DivIcon } from 'leaflet';
+import { DivIcon, Marker as LeafletMarker } from 'leaflet';
 import { lngWrapOffsetsForBounds } from '../../utils/map/lngWorldWrap';
 import {
   DEFAULT_MAP_UI_CHROME_BLUR_PX,
@@ -142,6 +142,57 @@ function labelInnerHtml(
     }
   </div>`;
 }
+
+/** 保持同一个 DivIcon DOM，让选中状态的位移可以连续过渡。 */
+const StableTextLabelMarker: React.FC<{
+  position: React.ComponentProps<typeof Marker>['position'];
+  html: string;
+  labelHeight: number;
+  anchorGap: number;
+  selected: boolean;
+  pointerInteractive: boolean;
+  zIndexOffset: number;
+  eventHandlers?: React.ComponentProps<typeof Marker>['eventHandlers'];
+}> = ({
+  position,
+  html,
+  labelHeight,
+  anchorGap,
+  selected,
+  pointerInteractive,
+  zIndexOffset,
+  eventHandlers
+}) => {
+  const markerRef = useRef<LeafletMarker | null>(null);
+  const icon = useMemo(
+    () =>
+      new DivIcon({
+        html,
+        className: 'custom-text-label',
+        iconSize: [0, labelHeight],
+        iconAnchor: [0, labelHeight + anchorGap]
+      }),
+    [html, labelHeight, anchorGap]
+  );
+
+  useLayoutEffect(() => {
+    const element = markerRef.current?.getElement();
+    if (!element) return;
+    element.classList.toggle('custom-text-label--selected-centered', selected);
+    element.classList.toggle('custom-text-label--interactive', pointerInteractive);
+  }, [selected, pointerInteractive, icon]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={position}
+      icon={icon}
+      interactive={true}
+      zIndexOffset={zIndexOffset}
+      eventHandlers={eventHandlers}
+    />
+  );
+};
 
 export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
   notes,
@@ -312,27 +363,25 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
             const ks = ksSafe.length ? ksSafe : [0];
 
             return ks.map((k) => {
-              const icon = new DivIcon({
-                html: `<div style="${chromeLabelShellStyle({
+              const html = `<div style="${chromeLabelShellStyle({
                   chromeCss,
                   color: isFavorite ? themeColor : labelColor,
                   paddingY,
                   paddingX,
                   fontSize,
                   fontWeight: isFavorite ? 'bold' : 500,
-                  pointerEvents: allowLabelPointer ? 'auto' : 'none'
-                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor, mutedLabelColor)}</div>`,
-                className: 'custom-text-label',
-                iconSize: [0, labelHeight],
-                iconAnchor: [0, labelHeight + (isFavorite ? 10 : 5)]
-              });
+                  pointerEvents: 'none'
+                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor, mutedLabelColor)}</div>`;
 
               return (
-                <Marker
+                <StableTextLabelMarker
                   key={`connection-text-${note.id}-w${k}`}
                   position={[lat, lng + 360 * k]}
-                  icon={icon}
-                  interactive={true}
+                  html={html}
+                  labelHeight={labelHeight}
+                  anchorGap={isFavorite ? 10 : 5}
+                  selected={isSelected}
+                  pointerInteractive={allowLabelPointer}
                   zIndexOffset={zOff}
                   eventHandlers={{
                     mousedown: (e) => {
@@ -522,28 +571,26 @@ export const TextLabelsLayer: React.FC<TextLabelsLayerProps> = ({
             const ksSafe = ks.length ? ks : [0];
 
             return ksSafe.map((k) => {
-              const icon = new DivIcon({
-                html: `<div style="${chromeLabelShellStyle({
+              const html = `<div style="${chromeLabelShellStyle({
                   chromeCss,
                   color: isFavorite ? themeColor : labelColor,
                   paddingY,
                   paddingX,
                   fontSize,
                   fontWeight: isFavorite ? 'bold' : 500,
-                  pointerEvents: labelPointerInteractive ? 'auto' : 'none',
+                  pointerEvents: 'none',
                   display: 'flex'
-                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor, mutedLabelColor)}</div>`,
-                className: 'custom-text-label',
-                iconSize: [0, labelHeight],
-                iconAnchor: [0, labelHeight + (isFavorite ? 10 : 5)]
-              });
+                })}">${labelInnerHtml(text, timeText, timeFontSize, isFavorite, themeColor, mutedLabelColor)}</div>`;
 
               return (
-                <Marker
+                <StableTextLabelMarker
                   key={`text-${note.id}-w${k}`}
                   position={[lat, lng + 360 * k]}
-                  icon={icon}
-                  interactive={true}
+                  html={html}
+                  labelHeight={labelHeight}
+                  anchorGap={isFavorite ? 10 : 5}
+                  selected={isSelected}
+                  pointerInteractive={labelPointerInteractive}
                   zIndexOffset={zOff}
                   eventHandlers={{
                     mousedown: (e) => {

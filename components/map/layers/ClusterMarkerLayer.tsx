@@ -163,6 +163,9 @@ function ClusterMarkerLayerInner({
     ((selectedNoteIds != null && selectedNoteIds.size > 0 && selectedNoteIds.has(note.id)) ||
       selectedNoteId === note.id);
 
+  const pinSelected = (note: Note) =>
+    selectedNoteId === note.id || !!selectedNoteIds?.has(note.id);
+
   const wrapKs = (lng: number) => {
     const ks = lngWrapOffsetsForBounds(lng, west, east);
     return ks.length ? ks : [0];
@@ -188,6 +191,7 @@ function ClusterMarkerLayerInner({
                 pinSize={pinSize}
                 imageSize={imageSize}
                 themeColor={themeColor}
+                selected={pinSelected(note)}
                 zIndexOffset={zBoost(note)}
                 onClick={(e) => {
                   e.originalEvent?.stopPropagation();
@@ -232,6 +236,7 @@ function ClusterMarkerLayerInner({
                 pinSize={pinSize}
                 imageSize={imageSize}
                 themeColor={themeColor}
+                selected={cluster.notes.some(pinSelected)}
                 zIndexOffset={clusterZ}
                 onClick={(e) => {
                   e.originalEvent?.stopPropagation();
@@ -264,6 +269,7 @@ function ClusterMarkerLayerInner({
             pinSize={pinSize}
             imageSize={imageSize}
             themeColor={themeColor}
+            selected={pinSelected(note)}
             zIndexOffset={zBoost(note)}
             onClick={(e) => {
               e.originalEvent?.stopPropagation();

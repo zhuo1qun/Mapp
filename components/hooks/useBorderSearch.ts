@@ -8,6 +8,7 @@ import {
   type NominatimResult
 } from '../../utils/map/overpass';
 import { generateId } from '../../utils';
+import { moveNoteToBoardUnplaced } from '../../utils/note/notePlacement';
 
 interface UseBorderSearchProps {
   mapInstance: LeafletMap | null;
@@ -151,7 +152,7 @@ export function useBorderSearch({
   const handleConvertPendingToNote = useCallback(() => {
     if (!pendingPlaceNote) return;
 
-    const newNote: Note = {
+    const newNote = moveNoteToBoardUnplaced({
       id: generateId(),
       coords: { lat: pendingPlaceNote.lat, lng: pendingPlaceNote.lng },
       text: pendingPlaceNote.name,
@@ -163,7 +164,7 @@ export function useBorderSearch({
       createdAt: Date.now(),
       boardX: 0,
       boardY: 0
-    };
+    } as Note, Date.now());
 
     onAddNote(newNote);
     setPendingPlaceNote(null);

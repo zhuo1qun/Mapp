@@ -36,6 +36,8 @@ interface NotePreviewCardProps {
   embedded?: boolean;
   /** 传入时显示右上角铅笔，打开全文编辑器 */
   onOpenEditor?: (noteId: string) => void;
+  /** 从 Mapping 详情直接进入可编辑的媒体详情会话。 */
+  onOpenMediaEditor?: (noteId: string, mediaIndex: number) => void;
   /** 编辑模式下传入，显示与其它便签操作一致的删除入口。 */
   onDelete?: (noteId: string) => void;
   /** 在当前地图内平滑回到本点的合适视野。 */
@@ -54,6 +56,7 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
   offsetTopPx,
   embedded = false,
   onOpenEditor,
+  onOpenMediaEditor,
   onDelete,
   onFocusMap,
   hosted = false
@@ -297,7 +300,8 @@ export const NotePreviewCard: React.FC<NotePreviewCardProps> = ({
                 title="打开媒体详情"
                 onClick={(event) => {
                   event.stopPropagation();
-                  setMediaDetailOpen(true);
+                  if (onOpenMediaEditor) onOpenMediaEditor(note.id, currentImageIndex);
+                  else setMediaDetailOpen(true);
                 }}
                 className="flex w-full cursor-zoom-in items-center justify-center border-0 bg-transparent p-0"
               >

@@ -442,6 +442,8 @@ export function useBoardNoteDrag({
         const isShortClick =
           wasOnSameNote &&
           movedDistance < BROWSE_OPEN_EDITOR_MAX_MOVE_PX &&
+          !e.metaKey &&
+          !e.ctrlKey &&
           !e.shiftKey &&
           !isShiftPressed;
 

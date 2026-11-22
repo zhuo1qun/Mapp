@@ -273,6 +273,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const [savingOutsideClose, setSavingOutsideClose] = useState(false);
   const [preSelectedNotes, setPreSelectedNotes] = useState<Note[] | null>(null);
   const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState(0);
+  const [editorMediaPreviewRequest, setEditorMediaPreviewRequest] = useState<{ key: number; index: number } | null>(null);
+  const editorMediaPreviewRequestKeyRef = useRef(0);
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectionHighlightNoteIds, setConnectionHighlightNoteIds] = useState<string[] | null>(null);
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
@@ -1503,6 +1505,15 @@ export const MapView: React.FC<MapViewProps> = ({
     closeMapChromeExcept();
   }, [canModifyNote, closeMapChromeExcept, denyEdit, isUIVisible, notes, onToggleEditor]);
 
+  const handleOpenMediaFromPreview = useCallback((noteId: string, mediaIndex: number) => {
+    editorMediaPreviewRequestKeyRef.current += 1;
+    setEditorMediaPreviewRequest({
+      key: editorMediaPreviewRequestKeyRef.current,
+      index: mediaIndex
+    });
+    handleEditNoteFromLabel(noteId);
+  }, [handleEditNoteFromLabel]);
+
   const handleMapMarkerClick = useCallback(
     (note: Note, event?: L.LeafletMouseEvent) => {
       const repeatedSingleSelection =
@@ -2342,6 +2353,9 @@ export const MapView: React.FC<MapViewProps> = ({
           onImageIndexChange={setCurrentPreviewImageIndex}
           canModifyNote={canModifyNote}
           onOpenSelectedNote={handleEditNoteFromLabel}
+          onOpenSelectedMedia={handleOpenMediaFromPreview}
+          editorMediaPreviewRequest={editorMediaPreviewRequest}
+          onEditorMediaPreviewConsumed={() => setEditorMediaPreviewRequest(null)}
           isEditMode={isMapToolbarEditMode}
         />
       ) : null}

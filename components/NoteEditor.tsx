@@ -96,6 +96,9 @@ export interface NoteEditorProps {
    * 用于「拍照新建点位」：先落临时图钉再开编辑器拍照挂媒体。
    */
   autoOpenCamera?: boolean;
+  /** 从外部详情卡指定本次打开后自动展开的媒体。 */
+  initialMediaPreviewRequest?: { key: number; index: number } | null;
+  onInitialMediaPreviewConsumed?: () => void;
 }
 
 export const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -120,7 +123,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   mapStyleId = 'carto-light-nolabels',
   onCanvasMediaDetailOpenChange,
   shell = true,
-  autoOpenCamera = false
+  autoOpenCamera = false,
+  initialMediaPreviewRequest,
+  onInitialMediaPreviewConsumed
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const isCanvasWindow = presentation === 'canvas-window';
@@ -273,6 +278,25 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     insertTextAtSelection: insertTextAtEditorSelection
   });
   richPasteHandlerRef.current = handlePaste;
+  const consumedMediaPreviewRequestRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !initialMediaPreviewRequest) return;
+    if (consumedMediaPreviewRequestRef.current === initialMediaPreviewRequest.key) return;
+    const index = Math.min(initialMediaPreviewRequest.index, displaySrcs.length - 1);
+    if (index < 0 || !displaySrcs[index]) return;
+    consumedMediaPreviewRequestRef.current = initialMediaPreviewRequest.key;
+    setPreviewImageIndex(index);
+    setPreviewImage(displaySrcs[index]);
+    onInitialMediaPreviewConsumed?.();
+  }, [
+    displaySrcs,
+    initialMediaPreviewRequest,
+    isOpen,
+    onInitialMediaPreviewConsumed,
+    setPreviewImage,
+    setPreviewImageIndex
+  ]);
 
   const [isSketching, setIsSketching] = useState(false);
   const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
