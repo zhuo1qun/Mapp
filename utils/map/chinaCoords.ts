@@ -6,6 +6,7 @@
 const PI = Math.PI;
 const A = 6378245.0;
 const EE = 0.00669342162296594323;
+const X_PI = (PI * 3000.0) / 180.0;
 
 export function isCoordInChina(lat: number, lng: number): boolean {
   return lng > 72.004 && lng < 137.8347 && lat > 0.8293 && lat < 55.8271;
@@ -62,4 +63,34 @@ export function wgs84ToGcj02(lat: number, lng: number): { lat: number; lng: numb
   if (!isCoordInChina(lat, lng)) return { lat, lng };
   const d = delta(lat, lng);
   return { lat: lat + d.lat, lng: lng + d.lng };
+}
+
+/** 国内地图 App（GCJ-02）→ GPS / 网页底图（WGS-84）。 */
+export function gcj02ToWgs84(lat: number, lng: number): { lat: number; lng: number } {
+  if (!isCoordInChina(lat, lng)) return { lat, lng };
+
+  // 用正向转换迭代求逆，避免一次减偏移在城市级缩放下仍留下明显误差。
+  let wgsLat = lat;
+  let wgsLng = lng;
+  for (let i = 0; i < 4; i += 1) {
+    const projected = wgs84ToGcj02(wgsLat, wgsLng);
+    wgsLat -= projected.lat - lat;
+    wgsLng -= projected.lng - lng;
+  }
+  return { lat: wgsLat, lng: wgsLng };
+}
+
+/** 百度经纬度（BD-09）→ 国测局坐标（GCJ-02）。 */
+export function bd09ToGcj02(lat: number, lng: number): { lat: number; lng: number } {
+  const x = lng - 0.0065;
+  const y = lat - 0.006;
+  const z = Math.sqrt(x * x + y * y) - 0.00002 * Math.sin(y * X_PI);
+  const theta = Math.atan2(y, x) - 0.000003 * Math.cos(x * X_PI);
+  return { lat: z * Math.sin(theta), lng: z * Math.cos(theta) };
+}
+
+/** 百度经纬度（BD-09）→ GPS / 网页底图（WGS-84）。 */
+export function bd09ToWgs84(lat: number, lng: number): { lat: number; lng: number } {
+  const gcj = bd09ToGcj02(lat, lng);
+  return gcj02ToWgs84(gcj.lat, gcj.lng);
 }

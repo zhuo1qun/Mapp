@@ -1303,7 +1303,14 @@ export const MapView: React.FC<MapViewProps> = ({
         16,
         { duration: 1.5 }
       );
-      const newNote = stageNewMapNote(parsed.coords);
+      const importedText = [
+        parsed.title ? `# ${parsed.title}` : '',
+        parsed.body || ''
+      ].filter(Boolean).join('\n\n');
+      const newNote = stageNewMapNote(
+        parsed.coords,
+        importedText ? { text: importedText } : undefined
+      );
       setEditorAutoOpenCamera(false);
       openNewNoteEditorAfterIntro(newNote);
       return true;
@@ -1319,7 +1326,7 @@ export const MapView: React.FC<MapViewProps> = ({
     try {
       const text = await navigator.clipboard.readText();
       if (!createNoteFromClipboardText(text)) {
-        window.alert('没有识别到明确位置。可粘贴经纬度、geo: 链接或 Google、Apple、OpenStreetMap 的完整地图链接。');
+        window.alert('没有识别到明确位置。可粘贴经纬度、geo: 链接，或 Google、Apple、高德、百度、OpenStreetMap 的完整点位链接。');
       }
     } catch (error) {
       console.warn('Read location from clipboard failed:', error);

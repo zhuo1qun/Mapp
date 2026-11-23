@@ -9,6 +9,7 @@
     "test:image-import": "node scripts/test-image-import.mjs",
     "test:note-draft": "node scripts/test-note-draft.mjs",
     "test:note-placement": "node scripts/test-note-placement.mjs",
+    "test:clipboard-location": "node scripts/test-clipboard-location.mjs",
     "test:full-project-import": "node scripts/test-full-project-import.mjs",
     "test:table-export": "node scripts/test-table-export.mjs",
     "test:board-viewport": "node scripts/test-board-viewport.mjs",
