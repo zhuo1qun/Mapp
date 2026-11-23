@@ -1,0 +1,540 @@
+{
+  "version": "1.0",
+  "project": {
+    "id": "hk-timebank-map-20261123",
+    "name": "香港时间银行与社区货币｜10 个典型案例",
+    "type": "map",
+    "projectKind": "mapping",
+    "createdAt": 1795363200000,
+    "notes": [
+      {
+        "id": "sjs-come",
+        "createdAt": 1795363200000,
+        "coords": {
+          "lat": 22.2768,
+          "lng": 114.1734
+        },
+        "emoji": "🤝",
+        "text": "# 聖雅各福群會社區經濟互助計劃（時分券）\n\n*灣仔 · 2001–至今*\n\n## 案例类型\n\n社区货币\n\n## 项目背景\n\n2001年前后香港经济低迷、失业及开工不足加剧，部分居民的技能在主流市场中难以获得回报。聖雅各福群會在既有合作社、维修队和社区经济实验基础上，以时分券记录劳动与交换。\n\n## 项目目标\n\n承认非市场劳动的价值，连接不同地区的技能、物品与服务交换，减轻低收入居民生活压力，并以会员治理建立互惠社区经济。\n\n## 核心利益相关方\n\n聖雅各福群會社区中心、个人会员、低收入及就业不足居民、管理委员会、接受时分券的小商铺与团体法人会员。\n\n## 关注的指标\n\n会员留存与活跃率、时分发行及实际流通量、服务与商品交换次数、法人会员数量、跨区交易比例、会员在决策中的参与程度。公开页面可确认会员制度与兑换规则，但缺少连续公开的交易序列。\n\n## 特殊性\n\n香港最早且持续时间最长的社区货币实践之一；不只交换照顾服务，还让小商铺和团体成为法人会员，接近完整的地方互助经济系统。\n\n## 成果与数据\n\n- **2001年** — [计划启动年份（已观测）](https://beccc.sjs.org.hk/index.php/home)\n- **60时分** — [首次入会回赠（已观测）](https://come.sjs.org.hk/%E6%9C%83%E5%93%A1%E8%B3%87%E8%A8%8A/)\n\n## 参考来源\n\n- [聖雅各福群會：计划背景](https://beccc.sjs.org.hk/index.php/home) — 社區經濟互助計劃\n- [会员及法人会员制度](https://come.sjs.org.hk/%E6%9C%83%E5%93%A1%E8%B3%87%E8%A8%8A/) — 會員制度\n- [香港社联社区经济报告](https://www.hkcss.org.hk/upload/pra/%E7%A4%BE%E5%8D%80%E7%B6%93%E6%BF%9F%E7%99%BC%E5%B1%95%E8%A8%88%E5%8A%83%E5%A0%B1%E5%91%8A%E6%9B%B8.pdf) — 社區經濟發展計劃報告書",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [],
+        "imageRefs": [],
+        "media": [],
+        "tags": [
+          {
+            "id": "tag-sjs-come-1",
+            "label": "类型 · 社区货币",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-sjs-come-2",
+            "label": "标签 · 时分券",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-sjs-come-3",
+            "label": "标签 · 社区经济",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-sjs-come-4",
+            "label": "标签 · 个人与法人会员",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2001,
+        "boardX": 100,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 1
+      },
+      {
+        "id": "timebank-exchange",
+        "createdAt": 1795363200001,
+        "coords": {
+          "lat": 22.3193,
+          "lng": 114.1694
+        },
+        "emoji": "🤝",
+        "text": "# 时分区区通（Time Bank Exchange）\n\n*跨区网络 · 跨区纸本互通始于2017；数字平台持续发展*\n\n## 案例类型\n\n跨区平台\n\n## 项目背景\n\n香港多个地区时间银行长期采用各自的时分或社区积分，规则与记录分散。早期“区区通”尝试让六区社区货币互通；其后由关关注草根生活联盟、香港妇女中心协会和香港聖公會麦理浩夫人中心共同建立数字平台。\n\n## 项目目标\n\n把机构内时间银行升级为跨机构、跨社区交换网络，让成员能在不同社区市集及服务场景使用时分，并降低记录、配对和结算成本。\n\n## 核心利益相关方\n\n三家共同运营机构、参与平台的时间银行项目、社区成员、合作机构与市集摊档，以及资助方香港交易所慈善基金和香港公益金。\n\n## 关注的指标\n\n接入机构与地区数、跨区交易占比、活跃用户数、成功配对数、平台留存率、不同项目积分规则的兼容程度，以及数字门槛对长者和基层用户的影响。\n\n## 特殊性\n\n它不是单一社区项目，而是香港时间银行的互操作基础设施；典型价值在于处理“各自为政”后的跨区流通与数字化治理问题。\n\n## 成果与数据\n\n- **三家机构** — [共同运营机构（已观测）](https://www.time-ex.org/)\n\n## 参考来源\n\n- [时分区区通官方网站](https://www.time-ex.org/) — 時間銀行 · 時分區區通計劃\n- [早期六区互通报道](https://www.hk01.com/%E7%A4%BE%E5%8D%80%E5%B0%88%E9%A1%8C/110550/%E6%99%82%E5%88%86%E5%88%B8%E8%A8%88%E5%8A%83%E6%94%B9%E6%88%90%E5%85%AD%E5%8D%80%E9%80%9A%E8%A1%8C-%E5%8F%AF%E8%B7%A8%E5%8D%80%E4%BB%A5%E5%8B%9E%E5%8B%95%E6%8F%9B%E7%B3%A7%E6%B2%B9%E9%9B%9C%E8%B2%A8) — 時分券計劃改成六區通行",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [],
+        "imageRefs": [],
+        "media": [],
+        "tags": [
+          {
+            "id": "tag-timebank-exchange-1",
+            "label": "类型 · 跨区平台",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-timebank-exchange-2",
+            "label": "标签 · 数字平台",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-timebank-exchange-3",
+            "label": "标签 · 跨机构",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-timebank-exchange-4",
+            "label": "标签 · 跨区流通",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2017,
+        "boardX": 420,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 2
+      },
+      {
+        "id": "yang-timebank",
+        "createdAt": 1795363200002,
+        "coords": {
+          "lat": 22.3344,
+          "lng": 114.2098
+        },
+        "emoji": "🤝",
+        "text": "# 循道卫理杨震时间银行\n\n*彩虹及九龙东 · 持续运营；2023–24年度有公开成果*\n\n## 案例类型\n\n长者互助\n\n## 项目背景\n\n面对社区长者的关怀、陪诊、简单维修和生活支援需求，杨震社会服务处以时间银行动员成员提供个人协助、中心支援和社区活动，并逐步引入数字记录与实务培训。\n\n## 项目目标\n\n把长者和居民从单纯受助者转为互助参与者，累积可兑换的时分，扩大邻里支援，并提升时间银行的管理和服务配对能力。\n\n## 核心利益相关方\n\n循道卫理杨震社会服务处及彩虹长者服务中心、时间银行成员、受支援长者、社区义工、香港大学HINCare技术与研究团队。\n\n## 关注的指标\n\n会员人数、产生与使用的时分、个人协助次数、义工活动数量、服务配对完成率、时分沉淀率、受助者转为贡献者的比例。2023–24年报提供了成员、时分和活动量，是本组数据最完整的案例。\n\n## 特殊性\n\n兼具长期社区运营、可量化成果和数字工具经验；公开实务分享册使其具有较强的复制与培训价值。\n\n## 成果与数据\n\n- **428人** — [截至2024年3月成员数（已观测）](https://yang.org.hk/wp-content/uploads/2025/01/%E5%BE%AA%E9%81%93%E8%A1%9B%E7%90%86%E6%A5%8A%E9%9C%87%E7%A4%BE%E6%9C%83%E6%9C%8D%E5%8B%99%E8%99%95%E5%B9%B4-2023-24-A-nnual-Report-2023-24.pdf)\n- **657,696时分** — [截至2024年3月累计产生（已观测）](https://yang.org.hk/wp-content/uploads/2025/01/%E5%BE%AA%E9%81%93%E8%A1%9B%E7%90%86%E6%A5%8A%E9%9C%87%E7%A4%BE%E6%9C%8D%E5%8B%99%E8%99%95%E5%B9%B4-2023-24-A-nnual-Report-2023-24.pdf)；1时分等于1分钟\n- **126次** — [个人协助次数（已观测）](https://yang.org.hk/wp-content/uploads/2025/01/%E5%BE%AA%E9%81%93%E8%A1%9B%E7%90%86%E6%A5%8A%E9%9C%87%E7%A4%BE%E6%9C%83%E6%9C%8D%E5%8B%99%E8%99%95%E5%B9%B4-2023-24-A-nnual-Report-2023-24.pdf)\n\n## 图片来源\n\n- [《时时分享》时间银行实务分享册封面](https://hincare.hku.hk/post/yang-memorial-methodist-social-service-choi-hung-community-centre-for-senior-citizens-releases-%E6%99%82%E6%99%82%E5%88%86)；署名：循道卫理杨震社会服务处／HKU HINCare；替代文本：以时钟、沙漏和人物线稿构成的时间银行实务分享册封面\n\n## 参考来源\n\n- [2023–24机构年报](https://yang.org.hk/wp-content/uploads/2025/01/%E5%BE%AA%E9%81%93%E8%A1%9B%E7%90%86%E6%A5%8A%E9%9C%87%E7%A4%BE%E6%9C%83%E6%9C%8D%E5%8B%99%E8%99%95%E5%B9%B4-2023-24-A-nnual-Report-2023-24.pdf) — 循道卫理杨震社会服务处年报\n- [HKU HINCare实务分享](https://hincare.hku.hk/post/yang-memorial-methodist-social-service-choi-hung-community-centre-for-senior-citizens-releases-%E6%99%82%E6%99%82%E5%88%86) — 时间银行实务分享册",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://static.wixstatic.com/media/e2d780_827908692400430eb2a38a580880ca85~mv2.png/v1/fill/w_1000%2Ch_653%2Cal_c%2Cq_90%2Cusm_0.66_1.00_0.01/e2d780_827908692400430eb2a38a580880ca85~mv2.png"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://static.wixstatic.com/media/e2d780_827908692400430eb2a38a580880ca85~mv2.png/v1/fill/w_1000%2Ch_653%2Cal_c%2Cq_90%2Cusm_0.66_1.00_0.01/e2d780_827908692400430eb2a38a580880ca85~mv2.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://static.wixstatic.com/media/e2d780_827908692400430eb2a38a580880ca85~mv2.png/v1/fill/w_1000%2Ch_653%2Cal_c%2Cq_90%2Cusm_0.66_1.00_0.01/e2d780_827908692400430eb2a38a580880ca85~mv2.png",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-yang-timebank-1",
+            "kind": "image",
+            "assetId": "https://static.wixstatic.com/media/e2d780_827908692400430eb2a38a580880ca85~mv2.png/v1/fill/w_1000%2Ch_653%2Cal_c%2Cq_90%2Cusm_0.66_1.00_0.01/e2d780_827908692400430eb2a38a580880ca85~mv2.png",
+            "source": {
+              "kind": "remote",
+              "url": "https://static.wixstatic.com/media/e2d780_827908692400430eb2a38a580880ca85~mv2.png/v1/fill/w_1000%2Ch_653%2Cal_c%2Cq_90%2Cusm_0.66_1.00_0.01/e2d780_827908692400430eb2a38a580880ca85~mv2.png",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-yang-timebank-1",
+            "label": "类型 · 长者互助",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-yang-timebank-2",
+            "label": "标签 · 运行数据",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-yang-timebank-3",
+            "label": "标签 · HINCare",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-yang-timebank-4",
+            "label": "标签 · 居家支援",
+            "color": "#8B5CF6"
+          }
+        ],
+        "boardX": 740,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 3
+      },
+      {
+        "id": "skhlmc-mutual-bank",
+        "createdAt": 1795363200003,
+        "coords": {
+          "lat": 22.3651,
+          "lng": 114.1316
+        },
+        "emoji": "🤝",
+        "text": "# 香港聖公會麦理浩夫人中心社区互惠银行\n\n*葵青 · 长期运营*\n\n## 案例类型\n\n社区互惠银行\n\n## 项目背景\n\n葵青基层家庭、照顾者及长者需要低门槛的邻里支援；中心把时间银行纳入团体及社区工作部的持续服务，以社区工作方式连接居民、商户、学校与专业团体。\n\n## 项目目标\n\n发掘居民能力、推动时分经济与互助互惠，使照顾、陪诊、托儿等通常被忽视的劳动获得记录和交换，并提升时间银行的可持续性。\n\n## 核心利益相关方\n\n麦理浩夫人中心、基层居民及家庭照顾者、时间银行会员、社区组织、学校、商户、专业伙伴和资助机构。\n\n## 关注的指标\n\n会员与照顾者家庭数、完成配对数、服务类型分布、跨界别伙伴数、会员获得与使用时分的平衡、照顾者压力变化，以及项目由资助期走向恒常服务的程度。\n\n## 特殊性\n\n时间银行已进入机构常设社区工作架构，并与后来的照顾者支援和跨区数字平台形成连接，体现由单点计划走向组织能力的路径。\n\n## 参考来源\n\n- [中心服务页](https://skhlmc.org.hk/chi/services/family_community/gc/) — 时间银行：社区互惠银行\n- [中心年度刊物](https://www.skhlmc.org.hk/upload/publication/6/download_2/6530961985904.pdf) — 社区互惠银行持续运营",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [],
+        "imageRefs": [],
+        "media": [],
+        "tags": [
+          {
+            "id": "tag-skhlmc-mutual-bank-1",
+            "label": "类型 · 社区互惠银行",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-skhlmc-mutual-bank-2",
+            "label": "标签 · 基层社区",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-skhlmc-mutual-bank-3",
+            "label": "标签 · 照顾者",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-skhlmc-mutual-bank-4",
+            "label": "标签 · 机构化运营",
+            "color": "#8B5CF6"
+          }
+        ],
+        "boardX": 1060,
+        "boardY": 100,
+        "variant": "standard",
+        "layerStackOrder": 4
+      },
+      {
+        "id": "sham-shui-po-sham-sum-fuk",
+        "createdAt": 1795363200004,
+        "coords": {
+          "lat": 22.3305,
+          "lng": 114.1622
+        },
+        "emoji": "🤝",
+        "text": "# 深水埗「深心福」时间银行\n\n*深水埗 · 2021–至今*\n\n## 案例类型\n\n长者社区照顾\n\n## 项目背景\n\n民社服务中心与深水埗长者于2021年共同筹办，以回应家居照顾、陪诊、文件处理、简单维修及技能支援需求；项目由机构自行筹募经费。\n\n## 项目目标\n\n增加长者居家安老信心，肯定长者能力与自我价值，建立邻近街坊互助小组，并探索不把长者固定为受助者的社区照顾模式。\n\n## 核心利益相关方\n\n民社服务中心、深水埗长者共同筹办者、65岁以上基本会员、18至64岁义工会员、有特殊服务需要居民及专业支援伙伴。\n\n## 关注的指标\n\n三屋邨覆盖人数、服务配对及完成率、捐分规模、家居照顾服务兑换量、长者作为提供者的比例、居家安老信心和社会连结变化。\n\n## 特殊性\n\n由长者参与共同筹办，并设置捐分制度；时分可兑换家居照顾、专业支援、课程及实物，兼顾互助伦理与实际照顾需要。\n\n## 成果与数据\n\n- **南昌邨、富昌邨及大坑东邨** — [试验覆盖地点（已观测）](https://pschk.org/%E6%9C%8D%E5%8B%99%E4%BB%8B%E7%B4%B9/%E9%95%B7%E8%80%85%E6%9C%8D%E5%8B%99/%E6%B7%B1%E6%B0%B4%E5%9F%97%E6%B7%B1%E5%BF%83%E7%A6%8F%E6%99%82%E9%96%93%E9%8A%80%E8%A1%8C%E8%A8%88%E5%8A%83/)\n\n## 参考来源\n\n- [民社项目介绍](https://pschk.org/%E6%9C%8D%E5%8B%99%E4%BB%8B%E7%B4%B9/%E9%95%B7%E8%80%85%E6%9C%8D%E5%8B%99/%E6%B7%B1%E6%B0%B4%E5%9F%97%E6%B7%B1%E5%BF%83%E7%A6%8F%E6%99%82%E9%96%93%E9%8A%80%E8%A1%8C%E8%A8%88%E5%8A%83/) — 深水埗深心福时间银行计划\n- [2022–23服务报告](https://www.pschk.org/wp-content/uploads/PSC_Annual-Report_2022-2023_96dpi.pdf) — 深心福时间银行服务报告",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [],
+        "imageRefs": [],
+        "media": [],
+        "tags": [
+          {
+            "id": "tag-sham-shui-po-sham-sum-fuk-1",
+            "label": "类型 · 长者社区照顾",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-sham-shui-po-sham-sum-fuk-2",
+            "label": "标签 · 长者共创",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-sham-shui-po-sham-sum-fuk-3",
+            "label": "标签 · 捐分制度",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-sham-shui-po-sham-sum-fuk-4",
+            "label": "标签 · 居家安老",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2021,
+        "boardX": 100,
+        "boardY": 460,
+        "variant": "standard",
+        "layerStackOrder": 5
+      },
+      {
+        "id": "skh-tko-weaving-blessings",
+        "createdAt": 1795363200005,
+        "coords": {
+          "lat": 22.3172,
+          "lng": 114.2642
+        },
+        "emoji": "🤝",
+        "text": "# 「织福」长者互助发展计划\n\n*将军澳 · 2016–至今*\n\n## 案例类型\n\n数字时间银行\n\n## 项目背景\n\n香港聖公會将军澳安老服务大楼自2016年起把“老有所为”、社区经济和时间银行结合，推动长者以服务赚取时分，回应陪诊、购物、维修和陪伴等需要。\n\n## 项目目标\n\n扭转长者只是服务接受者的角色，使长者贡献可记录、可兑换、可捐赠，并以手机应用改善支援服务配对和时分记录。\n\n## 核心利益相关方\n\n香港聖公會福利协会、将军澳安老服务大楼、长者会员、社区义工、服务接受者及HINCare应用技术团队。\n\n## 关注的指标\n\n会员数、赚取与兑换时分、成功配对数、时分捐赠量、应用活跃度、数字排斥情况，以及参与对长者自我效能和社会参与的影响。\n\n## 特殊性\n\n香港较早将实体时分簿、社区墟市与专属手机应用结合的长者时间银行；数字化同时带来效率和使用门槛两方面议题。\n\n## 成果与数据\n\n- **183名长者会员** — [2018年报道的长者会员（已观测）](https://echo.hkskh.org/issue.aspx?id=3393&lang=2&nid=5615)\n\n## 图片来源\n\n- [2018年织福计划活动中展示时分象征支票](https://echo.hkskh.org/issue.aspx?id=3393&lang=2&nid=5615)；署名：香港聖公會《教声》；替代文本：长者与项目人员在织福计划活动上展示时分支票\n- [织福大笪地活动中的长者会员与时分展示](https://www.inmediahk.net/node/1058250)；署名：独立媒体；替代文本：社区会场内长者展示织福时间银行手作与时分牌\n\n## 参考来源\n\n- [香港聖公會项目报道](https://echo.hkskh.org/issue.aspx?id=3393&lang=2&nid=5615) — 将军澳安老大楼长者做义工储分织福\n- [织福2应用介绍](https://play.google.com/store/apps/details?hl=zh_HK&id=hk.hku.hincare.SKHTimebank) — 织福计划时间银行手机应用",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://www.hkskh.org/uploads/echo/issues/Chinese/2214/6A-4.JPG",
+          "https://www.inmediahk.net/files/styles/w775/public/column_images/IMG_8981.JPG?itok=9lkkdHCV"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://www.hkskh.org/uploads/echo/issues/Chinese/2214/6A-4.JPG",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.hkskh.org/uploads/echo/issues/Chinese/2214/6A-4.JPG",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "assetId": "https://www.inmediahk.net/files/styles/w775/public/column_images/IMG_8981.JPG?itok=9lkkdHCV",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.inmediahk.net/files/styles/w775/public/column_images/IMG_8981.JPG?itok=9lkkdHCV",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-skh-tko-weaving-blessings-1",
+            "kind": "image",
+            "assetId": "https://www.hkskh.org/uploads/echo/issues/Chinese/2214/6A-4.JPG",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.hkskh.org/uploads/echo/issues/Chinese/2214/6A-4.JPG",
+              "cacheStatus": "none"
+            }
+          },
+          {
+            "id": "mid-skh-tko-weaving-blessings-2",
+            "kind": "image",
+            "assetId": "https://www.inmediahk.net/files/styles/w775/public/column_images/IMG_8981.JPG?itok=9lkkdHCV",
+            "source": {
+              "kind": "remote",
+              "url": "https://www.inmediahk.net/files/styles/w775/public/column_images/IMG_8981.JPG?itok=9lkkdHCV",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-skh-tko-weaving-blessings-1",
+            "label": "类型 · 数字时间银行",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-skh-tko-weaving-blessings-2",
+            "label": "标签 · 长者互助",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-skh-tko-weaving-blessings-3",
+            "label": "标签 · 手机应用",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-skh-tko-weaving-blessings-4",
+            "label": "标签 · 服务配对",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2016,
+        "boardX": 420,
+        "boardY": 460,
+        "variant": "standard",
+        "layerStackOrder": 6
+      },
+      {
+        "id": "bokss-planting-time",
+        "createdAt": 1795363200006,
+        "coords": {
+          "lat": 22.3544,
+          "lng": 114.1279
+        },
+        "emoji": "🤝",
+        "text": "# 「耆妙护航」／「栽」种有「时」\n\n*葵青 · 2019–2026（两阶段）*\n\n## 案例类型\n\n社区照顾网络\n\n## 项目背景\n\n第一阶段于青衣邨和丽瑶邨推动银龄义工支援独居及双老长者；2023年起第二阶段扩展至祖尧邨，并结合楼长制、健康管理、家居安全及防灾支援。\n\n## 项目目标\n\n以服务互换发掘退休人士、妇女和居民潜能，建立居家安老支援网络，并把社、福、商、校伙伴转化为可持续的社区资源。\n\n## 核心利益相关方\n\n浸信会爱群社会服务处、青衣邨、丽瑶邨及祖尧邨居民、护航大使与楼长、独居及双老长者、学校、商户、教会和公营机构。\n\n## 关注的指标\n\n楼长覆盖住户数、探访与生活支援次数、时间银行市集交易、服务时分兑换、家居安全改善、跨界伙伴留存，以及两阶段之间会员和制度的延续程度。\n\n## 特殊性\n\n从银龄互助扩展为多屋邨楼长网络，并把时间银行用于健康、维修、防灾与社区市集；两阶段连续性便于观察制度如何扩区。\n\n## 成果与数据\n\n- **祖尧邨、青衣邨、丽尧邨** — [第二阶段覆盖（已观测）](https://elderly.bokss.org.hk//Special/subsection/zht/57)\n\n## 图片来源\n\n- [2024年守望相助时间银行市集活动海报](https://elderly.bokss.org.hk/News/news_item/zht/elderly_notice/18?return_link=http%3A%2F%2Felderly.bokss.org.hk%2FNews%2Fsubsection%2Fzht%2F66)；署名：浸信会爱群社会服务处；替代文本：列有手作、食品、维修和资讯科技服务兑换的时间银行市集海报\n\n## 参考来源\n\n- [第一阶段项目介绍](https://www.bokss.org.hk/community-support-and-care-services-for-the-elderly/service?_fsize=l&id=268) — 耆妙护航社区支援计划\n- [第二阶段项目介绍](https://elderly.bokss.org.hk//Special/subsection/zht/57) — 栽种有时社区支援计划\n- [CIIF项目摘要](https://www.ciif.gov.hk/download/tc/28_projsum_0013.pdf) — 耆妙护航项目摘要",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [
+          "https://elderly.bokss.org.hk/News/news_item/zht/elderly_notice/upload/75b9b6.jpg"
+        ],
+        "imageRefs": [
+          {
+            "assetId": "https://elderly.bokss.org.hk/News/news_item/zht/elderly_notice/upload/75b9b6.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://elderly.bokss.org.hk/News/news_item/zht/elderly_notice/upload/75b9b6.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "media": [
+          {
+            "id": "mid-bokss-planting-time-1",
+            "kind": "image",
+            "assetId": "https://elderly.bokss.org.hk/News/news_item/zht/elderly_notice/upload/75b9b6.jpg",
+            "source": {
+              "kind": "remote",
+              "url": "https://elderly.bokss.org.hk/News/news_item/zht/elderly_notice/upload/75b9b6.jpg",
+              "cacheStatus": "none"
+            }
+          }
+        ],
+        "tags": [
+          {
+            "id": "tag-bokss-planting-time-1",
+            "label": "类型 · 社区照顾网络",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-bokss-planting-time-2",
+            "label": "标签 · 阶段延续",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-bokss-planting-time-3",
+            "label": "标签 · 楼长制",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-bokss-planting-time-4",
+            "label": "标签 · 时间银行市集",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2019,
+        "endYear": 2026,
+        "boardX": 740,
+        "boardY": 460,
+        "variant": "standard",
+        "layerStackOrder": 7
+      },
+      {
+        "id": "peng-chau-active-ageing",
+        "createdAt": 1795363200007,
+        "coords": {
+          "lat": 22.2848,
+          "lng": 114.038
+        },
+        "emoji": "🤝",
+        "text": "# 坪洲乐龄荟2.0时间银行\n\n*坪洲 · 2022–持续推进*\n\n## 案例类型\n\n离岛互助\n\n## 项目背景\n\n坪洲人口规模小、长者比例高，社区服务和跨代联系受地理条件影响。香港伤健协会在坪洲乐龄荟第二阶段加入时间银行，与社区义工团和关爱同盟共同运行。\n\n## 项目目标\n\n动员岛民和区外伙伴贡献技能，支援长者及儿童，建立互信互惠，并以时分兑换服务及日用品。\n\n## 核心利益相关方\n\n香港伤健协会坪洲中心、长者与青年义工、岛上居民、楼长、坪洲关爱同盟及区内外协作伙伴。\n\n## 关注的指标\n\n跨代义工人数、岛内服务覆盖率、探访和数码支援次数、时分兑换服务与日用品比例、区外伙伴贡献、偏远社区的配对等待时间。\n\n## 特殊性\n\n把时间银行放入边界清晰的小岛社会网络，居民关系密度和服务资源有限，使互助机制的覆盖、信任与瓶颈更容易观察。\n\n## 成果与数据\n\n- **2022年** — [时间银行开始推行（已观测）](https://me.icac.hk/filemanager/BookShelf/tc/upload/114/Issue_105_web.pdf)\n\n## 参考来源\n\n- [中心活动通讯](https://hkphab.org.hk/wp-content/uploads/2022/09/Centre-News_PCE_22-10-Approved.pdf) — 坪洲乐龄荟2.0时间银行系统\n- [廉政公署专题](https://me.icac.hk/filemanager/BookShelf/tc/upload/114/Issue_105_web.pdf) — 时间银行计划访问\n- [社会资本卓越计划奖](https://hkphab.org.hk/archives/9012) — 坪洲乐龄荟获奖",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [],
+        "imageRefs": [],
+        "media": [],
+        "tags": [
+          {
+            "id": "tag-peng-chau-active-ageing-1",
+            "label": "类型 · 离岛互助",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-peng-chau-active-ageing-2",
+            "label": "标签 · 小岛社区",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-peng-chau-active-ageing-3",
+            "label": "标签 · 跨代义工",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-peng-chau-active-ageing-4",
+            "label": "标签 · 服务与日用品兑换",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2022,
+        "boardX": 1060,
+        "boardY": 460,
+        "variant": "standard",
+        "layerStackOrder": 8
+      },
+      {
+        "id": "lutheran-yau-ming",
+        "createdAt": 1795363200008,
+        "coords": {
+          "lat": 22.4864,
+          "lng": 114.1432
+        },
+        "emoji": "🤝",
+        "text": "# 友里共「明」社区邻里支援计划\n\n*北区四屋邨 · 2023–2026*\n\n## 案例类型\n\n屋邨邻里网络\n\n## 项目背景\n\n粉岭北区多个屋邨需要加强长者及家庭关怀、屋邨间联系和居民技能共享。香港路德会社会服务处承接早期计划，于四个屋邨建立时间银行。\n\n## 项目目标\n\n培训社区关怀大使和“时银心友”，建立时间银行委员会与运作系统，促进四屋邨资源共享，并深化社、福、校协作。\n\n## 核心利益相关方\n\n路德会赛马会雍盛综合服务中心、雍盛苑、晖明邨、昌盛苑和华明邨居民、长者及家庭、学校和跨界协作伙伴。\n\n## 关注的指标\n\n四屋邨会员分布、持续配对探访、时间银行委员会参与、跨屋邨交换比例、儿童青少年义工参与、伙伴共同活动和计划期后制度留存。\n\n## 特殊性\n\n以四个相邻屋邨为共同网络，并明确设置居民时间银行委员会；但项目仍在资助期，长期持续性尚待观察。\n\n## 成果与数据\n\n- **雍盛苑、晖明邨、昌盛苑、华明邨** — [计划覆盖（已观测）](https://www.ciif.gov.hk/download/tc/social-captial-development-projects/approved-project-list/35_projsum_0012.pdf)\n- **港币3,371,000元** — [CIIF批准拨款（已观测）](https://www.ciif.gov.hk/download/tc/social-captial-development-projects/approved-project-list/35_projsum_0012.pdf)\n\n## 参考来源\n\n- [CIIF项目摘要](https://www.ciif.gov.hk/download/tc/social-captial-development-projects/approved-project-list/35_projsum_0012.pdf) — 友里共明社区邻里支援计划\n- [2023–24机构年报](https://www.hklss.hk/uploads/files/publication-resource/annual-reports/annualreports23242.pdf) — 香港路德会社会服务处年报",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [],
+        "imageRefs": [],
+        "media": [],
+        "tags": [
+          {
+            "id": "tag-lutheran-yau-ming-1",
+            "label": "类型 · 屋邨邻里网络",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-lutheran-yau-ming-2",
+            "label": "标签 · 四屋邨",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-lutheran-yau-ming-3",
+            "label": "标签 · 时银心友",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-lutheran-yau-ming-4",
+            "label": "标签 · 社福校协作",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2023,
+        "endYear": 2026,
+        "boardX": 100,
+        "boardY": 820,
+        "variant": "standard",
+        "layerStackOrder": 9
+      },
+      {
+        "id": "skh-hung-hom-weaving",
+        "createdAt": 1795363200009,
+        "coords": {
+          "lat": 22.3052,
+          "lng": 114.1876
+        },
+        "emoji": "🤝",
+        "text": "# 「织福红磡」时间银行\n\n*红磡 · 2023–2026*\n\n## 案例类型\n\n照顾者支援\n\n## 项目背景\n\n红磡家庭照顾者面对长期照顾压力。香港聖公會福利协会在红磡邨、家维邨及邻近选区，以身心健康和楼长网络为切入点建立时间银行。\n\n## 项目目标\n\n培训预备及毕业照顾者和社区人士，通过时间银行支援照顾儿童及长者的家庭照顾者，缓解压力，并建立照顾者友善社区平台。\n\n## 核心利益相关方\n\n聖公會圣匠堂社区中心与长者地区中心、家庭照顾者、楼长、预备和毕业照顾者、医疗、学校、社区及福利伙伴。\n\n## 关注的指标\n\n照顾者会员数、楼长配对、支援时数、照顾压力与身心健康变化、不同照顾类型的供需缺口、社福医校伙伴参与和计划结束后的持续性。\n\n## 特殊性\n\n以家庭照顾者而非一般长者互助为主要对象，并把时间银行嵌入社、福、医、校协作；处于建设期，结果证据仍有限。\n\n## 成果与数据\n\n- **港币3,439,000元** — [CIIF批准拨款（已观测）](https://www.ciif.gov.hk/download/tc/social-captial-development-projects/approved-project-list/34_projsum_0056.pdf)\n\n## 参考来源\n\n- [CIIF项目摘要](https://www.ciif.gov.hk/download/tc/social-captial-development-projects/approved-project-list/34_projsum_0056.pdf) — 织福红磡时间银行\n- [OpenCare项目介绍](https://opencare.hk/events/20071) — 织福红磡时间银行",
+        "fontSize": 3,
+        "isFavorite": false,
+        "weight": 1,
+        "color": "#FFFDF5",
+        "images": [],
+        "imageRefs": [],
+        "media": [],
+        "tags": [
+          {
+            "id": "tag-skh-hung-hom-weaving-1",
+            "label": "类型 · 照顾者支援",
+            "color": "#3B82F6"
+          },
+          {
+            "id": "tag-skh-hung-hom-weaving-2",
+            "label": "标签 · 家庭照顾者",
+            "color": "#10B981"
+          },
+          {
+            "id": "tag-skh-hung-hom-weaving-3",
+            "label": "标签 · 社福医校",
+            "color": "#F59E0B"
+          },
+          {
+            "id": "tag-skh-hung-hom-weaving-4",
+            "label": "标签 · 楼长",
+            "color": "#8B5CF6"
+          }
+        ],
+        "startYear": 2023,
+        "endYear": 2026,
+        "boardX": 420,
+        "boardY": 820,
+        "variant": "standard",
+        "layerStackOrder": 10
+      }
+    ],
+    "frames": [],
+    "connections": []
+  }
+}

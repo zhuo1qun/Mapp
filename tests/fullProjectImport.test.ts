@@ -6,6 +6,7 @@ import {
   mergeImportedProject,
   regenerateImportedProjectContent
 } from '../utils/import/fullProjectImport';
+import './fullProjectBundle.test';
 
 const note = (id: string, overrides: Partial<Note> = {}): Note => ({
   id,

@@ -479,6 +479,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       coords: initialNote?.coords,
       boardX: initialNote?.boardX,
       boardY: initialNote?.boardY,
+      isInitialPosition: initialNote?.isInitialPosition,
+      unplacedOrder: initialNote?.unplacedOrder,
       groupId: initialNote?.groupId,
       groupName: initialNote?.groupName,
       groupIds: initialNote?.groupIds,

@@ -282,9 +282,10 @@ export const useImageImport = (props: UseImageImportProps) => {
           images: [assetId], imageRefs: [{ assetId }],
           media: [{ id: `mid-${assetId}`, kind: 'image', assetId }],
           tags: [], variant: 'image', createdAt: Date.now(),
-          // 不再自动分配 Board 网格；由 Board 的待定位箱接收。
+          // 图片导入与是否带 EXIF 坐标无关：地图可直接定位，但 Board 一律先进入
+          // 待定位箱，避免落在 Board 原点；unplacedOrder 决定叠放时的最新项。
           boardX: 0, boardY: 0, isInitialPosition: true,
-          ...(preview.target === 'unplaced' ? { unplacedOrder: Date.now() } : null)
+          unplacedOrder: Date.now()
         });
       }
       processing = null;

@@ -127,6 +127,10 @@ export function fromEditorModel(model: EditorModel, base: Partial<Note> = {}): P
     coords: base.coords,
     boardX: base.boardX,
     boardY: base.boardY,
+    // Board 暂存状态与坐标同属跨视图位置数据。编辑内容不能让已暂存的
+    // Mapping 导入点意外回到 Board 原点。
+    isInitialPosition: base.isInitialPosition,
+    unplacedOrder: base.unplacedOrder,
     groupId: base.groupId,
     groupName: base.groupName,
     groupIds: base.groupIds,

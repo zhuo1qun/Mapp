@@ -23,6 +23,18 @@ async function run() {
   assert.equal(inputEmojiNote.emoji, '🌊');
   console.log('PASS: first-line input emoji overrides the independent emoji field');
 
+  const pendingBoardNote = fromEditorModel(buildEditorModel({
+    text: '照片说明', emoji: '📍', tags: [], images: []
+  }), {
+    boardX: 0,
+    boardY: 0,
+    isInitialPosition: true,
+    unplacedOrder: 456
+  });
+  assert.equal(pendingBoardNote.isInitialPosition, true);
+  assert.equal(pendingBoardNote.unplacedOrder, 456);
+  console.log('PASS: editing preserves the Board pending-tray placement state');
+
   const empty: Partial<Note> = {
     id: 'camera-draft', coords: { lat: 28, lng: 112 }, createdAt: 123,
     boardX: 100, boardY: 100, isFavorite: true, variant: 'standard',

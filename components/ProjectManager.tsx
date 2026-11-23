@@ -3,10 +3,14 @@ import { createPortal } from 'react-dom';
 import { Project, Note } from '../types';
 import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, RefreshCw, PackageCheck } from 'lucide-react';
 import { generateId, formatDate, compressImageFromBase64 } from '../utils';
-import { loadProject, loadNoteImages, saveProject, loadAllProjects } from '../utils/persistence/storage';
+import { loadProject, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
 import { isSupabaseEnabled } from '../utils/supabaseEnv';
 import { downloadMappVizJson } from '../utils/export/mappVizJson';
+import {
+  buildFullProjectExportPayload,
+  restoreFullProjectMedia
+} from '../utils/export/fullProjectBundle';
 import {
   formatImportErrorMessage,
   formatJsonParseFailure,
@@ -657,31 +661,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   // Export full project data for cross-device sharing
   const handleExportFullProject = async (project: Project) => {
     try {
-      // Load full project with images for export
-      const fullProject = await loadProject(project.id, true);
-      if (!fullProject) {
-        alert('无法加载项目数据');
-        return;
-      }
-
-      // Export complete project data as JSON (with all images loaded)
-      // Ensure frames and connections are included
-      const exportData = {
-        version: '1.0',
-        project: {
-          id: fullProject.id,
-          name: fullProject.name,
-          type: fullProject.type,
-          projectKind: 'mapping',
-          backgroundImage: fullProject.backgroundImage,
-          createdAt: fullProject.createdAt,
-          notes: fullProject.notes || [],
-          frames: fullProject.frames || [],
-          connections: fullProject.connections || [],
-          themeColor: fullProject.themeColor,
-          backgroundOpacity: fullProject.backgroundOpacity
-        }
-      };
+      const exportData = await buildFullProjectExportPayload(project.id);
       
       // Debug: log export data
       console.log('Exporting project:', {
@@ -696,11 +676,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       link.href = URL.createObjectURL(blob);
       link.download = `${project.name}-project.json`;
       link.click();
+      URL.revokeObjectURL(link.href);
       
       setOpenMenuId(null);
     } catch (error) {
       console.error('导出失败:', error);
-      alert('导出项目失败');
+      alert(`导出项目失败：${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
@@ -827,11 +808,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         return;
       }
 
-      const importedProject = (data as { project: Project }).project;
-      if ((importedProject as { projectKind?: unknown }).projectKind === 'graph') {
+      const rawImportedProject = (data as { project: Project }).project;
+      if ((rawImportedProject as { projectKind?: unknown }).projectKind === 'graph') {
         reportImportError('Graph 项目已迁出 Mapping，请在 Mapp Graph 中导入该文件。');
         return;
       }
+      const importedProject = await restoreFullProjectMedia(data);
       
       const newProject = createImportedProjectShell(importedProject);
 
