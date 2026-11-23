@@ -40,12 +40,7 @@ import {
   checkStorageDetails,
   analyzeStorageRedundancy,
   cleanupCorruptedImages,
-  cleanupLargeImages,
-  cleanupDuplicateImages,
-  analyzeDuplicateImages,
-  attemptImageRecovery,
   loadNoteImages,
-  cleanBrokenReferences,
   loadAllProjects,
   saveProject,
   ProjectSummary
@@ -449,121 +444,6 @@ export default function App() {
     }));
   }, []);
   
-  // Check and repair project data
-  const handleCheckData = useCallback(async () => {
-    try {
-      console.log('Starting data check and repair...');
-
-      // Show loading state
-      setIsLoadingProject(true);
-      setLoadingProgress(0);
-
-      // Step 1: Attempt to recover missing images (25%)
-      setLoadingProgress(25);
-      const recoveryResult = await attemptImageRecovery();
-      if (recoveryResult.imagesRecovered > 0 || recoveryResult.sketchesRecovered > 0) {
-        console.log(`Recovered ${recoveryResult.imagesRecovered} images and ${recoveryResult.sketchesRecovered} sketches`);
-      }
-
-      // Step 2: Clean up corrupted data (30%)
-      setLoadingProgress(30);
-      const cleanupResult = await cleanupCorruptedImages();
-      if (cleanupResult.imagesCleaned > 0 || cleanupResult.sketchesCleaned > 0) {
-        console.log(`Cleaned ${cleanupResult.imagesCleaned} corrupted images and ${cleanupResult.sketchesCleaned} corrupted sketches`);
-      }
-
-      // Step 3: Analyze and clean up duplicate images (50%)
-      setLoadingProgress(50);
-      const duplicateCleanupResult = await cleanupDuplicateImages(true); // autoDelete = true
-      if (duplicateCleanupResult) {
-        if (duplicateCleanupResult.suspiciousGroups.length > 0) {
-          console.warn(`⚠️ Found ${duplicateCleanupResult.suspiciousGroups.length} suspicious duplicate groups that were NOT deleted:`);
-          duplicateCleanupResult.suspiciousGroups.forEach(group => {
-            console.warn(`  ${group.count} duplicates (${group.reason}): ${group.ids.join(', ')}`);
-          });
-        }
-        if (duplicateCleanupResult.imagesCleaned > 0) {
-          console.log(`✅ Cleaned ${duplicateCleanupResult.imagesCleaned} normal duplicate images, freed ${duplicateCleanupResult.spaceFreed.toFixed(2)}MB`);
-        }
-      }
-
-      // Step 4: Clean up large images (>2MB) (70%)
-      setLoadingProgress(70);
-      const largeCleanupResult = await cleanupLargeImages(2);
-      if (largeCleanupResult.imagesCleaned > 0) {
-        console.log(`Cleaned ${largeCleanupResult.imagesCleaned} large images, freed ${largeCleanupResult.spaceFreed.toFixed(2)}MB`);
-      }
-
-      // Step 5: Detailed duplicate analysis (90%)
-      setLoadingProgress(90);
-      const detailedAnalysis = await analyzeDuplicateImages();
-      if (detailedAnalysis) {
-        console.log('📊 Detailed duplicate analysis:');
-        console.log(`   Total duplicate groups: ${detailedAnalysis.duplicateGroups.length}`);
-        console.log(`   Suspicious groups: ${detailedAnalysis.suspiciousGroups.length}`);
-
-        if (detailedAnalysis.suspiciousGroups.length > 0) {
-          console.log('🚨 Suspicious duplicate groups (investigate these):');
-          detailedAnalysis.suspiciousGroups.forEach((group, index) => {
-            console.log(`   ${index + 1}. ${group.reason}`);
-            console.log(`      Hash: ${group.hash.substring(0, 16)}`);
-            console.log(`      Count: ${group.count}`);
-            console.log(`      IDs: ${group.ids.join(', ')}`);
-            console.log(`      Timestamps: ${group.timestamps.map(t => new Date(t).toISOString()).join(', ')}`);
-          });
-        }
-      }
-
-      // Step 6: Refresh projects (95%)
-      setLoadingProgress(95);
-      await projectState.loadProjects();
-
-      // Step 7: Complete (100%)
-      setLoadingProgress(100);
-
-      console.log('Data check and repair completed');
-    } catch (error) {
-      console.error('Data check failed:', error);
-    } finally {
-      setIsLoadingProject(false);
-      setLoadingProgress(0);
-    }
-  }, []);
-
-  // Clean broken resource references in a project
-  const handleCleanupBrokenReferences = useCallback(async (project: Project) => {
-    try {
-      console.log(`Cleaning broken resource references for project: ${project.name}`);
-
-      // Show loading state
-      setIsLoadingProject(true);
-      setLoadingProgress(0);
-
-      // Clean broken references
-      setLoadingProgress(50);
-      const cleanedNotes = await cleanBrokenReferences(project.notes);
-
-      // Update project with cleaned notes
-      setLoadingProgress(80);
-      const cleanedProject = {
-        ...project,
-        notes: cleanedNotes
-      };
-
-      await projectState.updateProject(cleanedProject);
-      setLoadingProgress(100);
-
-      console.log(`Successfully cleaned broken references for project: ${project.name}`);
-      alert(`已清理项目 "${project.name}" 中的断链资源引用`);
-    } catch (error) {
-      console.error('Failed to clean broken references:', error);
-      alert('清理断链引用时出错，请查看控制台日志');
-    } finally {
-      setIsLoadingProject(false);
-      setLoadingProgress(0);
-    }
-  }, [projectState]);
-
   const closeProjectSidebar = useCallback(() => {
     setSidebarExpandForProjectSwitch(false);
     setPendingEnterWorkspaceFromHome(false);
@@ -1399,56 +1279,6 @@ export default function App() {
     }
   };
 
-  const handleExportCSV = (project: Project) => {
-    // 只导出标准便签（不包括小便签和纯文本）
-    const standardNotes = project.notes;
-    
-    if (standardNotes.length === 0) {
-      alert("该项目没有标准便签数据可导出。");
-      return;
-    }
-    
-    // 创建CSV内容
-    // 支持多个分组：分组1、分组2、分组3
-    const headers = ['文本内容', 'Tag1', 'Tag2', 'Tag3', '分组1', '分组2', '分组3'];
-    const rows = standardNotes.map(note => {
-      // 文本内容
-      const text = note.text || '';
-      
-      // 标签
-      const tags = note.tags || [];
-      const tag1 = tags[0]?.label || '';
-      const tag2 = tags[1]?.label || '';
-      const tag3 = tags[2]?.label || '';
-      
-      // 分组（支持多个分组）
-      const groupNames = note.groupNames || [];
-      // 如果没有 groupNames，使用 groupName（向后兼容）
-      const allGroups = groupNames.length > 0 
-        ? groupNames 
-        : (note.groupName ? [note.groupName] : []);
-      
-      const group1 = allGroups[0] || '';
-      const group2 = allGroups[1] || '';
-      const group3 = allGroups[2] || '';
-      
-      return [text, tag1, tag2, tag3, group1, group2, group3];
-    });
-
-    // 生成CSV
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    // 下载文件
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${project.name}-数据.csv`;
-    link.click();
-  };
-
   const handleCreateProject = async (project: Project) => {
     const enteringFromHome = !currentProjectId;
     const hasImportedPayload =
@@ -1736,10 +1566,7 @@ export default function App() {
                   onOpenPlayground={isSupabaseEnabled() ? openPlayground : undefined}
                   viewMode={viewMode}
                   activeProject={activeProject}
-                  onExportCSV={handleExportCSV}
                   syncStatus={syncStatus}
-                  onCleanupBrokenReferences={handleCleanupBrokenReferences}
-                  onCheckData={handleCheckData}
                   themeColor={themeColor}
                   onThemeColorChange={handleThemeColorChange}
                   mapUiChromeOpacity={mapUiChromeOpacity}

@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Project, Note } from '../types';
-import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Image as ImageIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, RefreshCw, PackageCheck } from 'lucide-react';
-import { generateId, formatDate, compressImageFromBase64 } from '../utils';
+import { Project } from '../types';
+import { Plus, MoreHorizontal, Trash2, Map as MapIcon, Download, LayoutGrid, X, Home, Cloud, Edit2, Check, Upload, Palette, Sparkles, ZoomIn, Copy, RefreshCw, PackageCheck } from 'lucide-react';
+import { generateId, formatDate } from '../utils';
 import { loadProject, saveProject, loadAllProjects } from '../utils/persistence/storage';
 import { getLastSyncTime, type SyncStatus } from '../utils/persistence/sync';
 import { isSupabaseEnabled } from '../utils/supabaseEnv';
-import { downloadMappVizJson } from '../utils/export/mappVizJson';
 import {
   buildFullProjectExportPayload,
   restoreFullProjectMedia
@@ -18,7 +17,6 @@ import {
   validateFullProjectImportPayload
 } from '../utils/import/importErrorFormat';
 import {
-  areProjectNotesDuplicates,
   createImportedProjectShell,
   mergeImportedProject,
   regenerateImportedProjectContent
@@ -45,6 +43,8 @@ import { ChromeMenuItem } from './ui/ChromeMenuItem';
 import { ChromeDialogSurface } from './ui/ChromeDialogSurface';
 import { ChromeMenuShell } from './ui/ChromeMenuShell';
 import { ProjectMoreMenu } from './projects/ProjectMoreMenu';
+import { useDataImport } from './hooks/useDataImport';
+import { useCsvImport } from './hooks/useCsvImport';
 import { ChromeWindow } from './ui/ChromeWindow';
 import { ChromeWindowHeader } from './ui/ChromeWindowHeader';
 import { ChromeDropOverlay } from './ui/ChromeDropOverlay';
@@ -140,9 +140,6 @@ interface ProjectManagerProps {
   onOpenPlayground?: () => void;
   viewMode?: 'map' | 'board' | 'table';
   activeProject?: Project | null;
-  onExportCSV?: (project: Project) => void;
-  onCheckData?: () => Promise<void>;
-  onCleanupBrokenReferences?: (project: Project) => Promise<void>;
   syncStatus?: SyncStatus;
   themeColor?: string;
   onThemeColorChange?: (color: string) => void;
@@ -197,9 +194,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   onOpenPlayground,
   viewMode = 'map',
   activeProject,
-  onExportCSV,
-  onCheckData,
-  onCleanupBrokenReferences,
   themeColor = DEFAULT_THEME_COLOR,
   onThemeColorChange,
   mapUiChromeOpacity = 0.6,
@@ -294,11 +288,12 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   const [sidebarRightSelectionRect, setSidebarRightSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState('');
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [isImportingFromData, setIsImportingFromData] = useState(false);
+  const [pointImportProject, setPointImportProject] = useState<Project | null>(null);
+  const [pendingPointImportFile, setPendingPointImportFile] = useState<File | null>(null);
+  const pointImportProjectIdRef = React.useRef<string | null>(null);
   /** 导入失败时展示带位置说明的弹窗 */
   const [importErrorMessage, setImportErrorMessage] = useState<string | null>(null);
-  const importFileInputRef = React.useRef<HTMLInputElement>(null);
+  const pointImportFileInputRef = React.useRef<HTMLInputElement>(null);
   const newProjectFileInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isCreateFileDragging, setIsCreateFileDragging] = useState(false);
@@ -313,6 +308,55 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
   } | null>(null);
   const [pendingBuiltinExampleUpdate, setPendingBuiltinExampleUpdate] = useState<Project | null>(null);
   const [isUpdatingBuiltinExample, setIsUpdatingBuiltinExample] = useState(false);
+
+  const pointImportTarget = pointImportProject ?? ({} as Project);
+  const { handleDataImport: handlePointJsonImport } = useDataImport({
+    project: pointImportTarget,
+    onUpdateProject: async (project) => {
+      if (onUpdateProject && activeProject?.id === project.id) await onUpdateProject(project);
+      else await saveProject(project);
+    }
+  });
+  const { handleCsvImport: handlePointCsvImport } = useCsvImport({
+    project: pointImportTarget,
+    onUpdateProject: async (project) => {
+      if (onUpdateProject && activeProject?.id === project.id) await onUpdateProject(project);
+      else await saveProject(project);
+    }
+  });
+
+  useEffect(() => {
+    if (!pointImportProject || !pendingPointImportFile) return;
+    const file = pendingPointImportFile;
+    setPendingPointImportFile(null);
+    void (async () => {
+      const isCsv = file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv');
+      if (isCsv) await handlePointCsvImport(file);
+      else await handlePointJsonImport(file);
+      setPointImportProject(null);
+      pointImportProjectIdRef.current = null;
+    })();
+  }, [handlePointCsvImport, handlePointJsonImport, pendingPointImportFile, pointImportProject]);
+
+  const handleOpenPointImport = (project: Project) => {
+    pointImportProjectIdRef.current = project.id;
+    pointImportFileInputRef.current?.click();
+  };
+
+  const handlePointImportFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const projectId = pointImportProjectIdRef.current;
+    if (!file || !projectId) return;
+    const fullProject = await loadProject(projectId, false);
+    if (!fullProject) {
+      alert('无法读取该项目，请重新打开后再试。');
+      pointImportProjectIdRef.current = null;
+      return;
+    }
+    setPointImportProject(fullProject);
+    setPendingPointImportFile(file);
+  };
 
   useEffect(() => {
     const captureInstallPrompt = (event: Event) => {
@@ -602,62 +646,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     }
   };
 
-  const handleExportData = (project: Project) => {
-    const standardNotes = project.notes;
-    
-    if (standardNotes.length === 0) {
-      alert("This project has no standard note data");
-      setOpenMenuId(null);
-      return;
-    }
-
-    const coordHeader = 'Latitude, Longitude';
-    
-    // Create CSV content
-    // Support multiple groups: Group1, Group2, Group3
-    const headers = [coordHeader, 'Text Content', 'Tag1', 'Tag2', 'Tag3', 'Group1', 'Group2', 'Group3'];
-    const rows = standardNotes.map(note => {
-      const coords = `${note.coords.lat.toFixed(6)}, ${note.coords.lng.toFixed(6)}`;
-      
-      // Text content
-      const text = note.text || '';
-      
-      // Tags
-      const tags = note.tags || [];
-      const tag1 = tags[0]?.label || '';
-      const tag2 = tags[1]?.label || '';
-      const tag3 = tags[2]?.label || '';
-      
-      // Groups (support multiple groups)
-      const groupNames = note.groupNames || [];
-      // If no groupNames, use groupName (backward compatibility)
-      const allGroups = groupNames.length > 0 
-        ? groupNames 
-        : (note.groupName ? [note.groupName] : []);
-      
-      const group1 = allGroups[0] || '';
-      const group2 = allGroups[1] || '';
-      const group3 = allGroups[2] || '';
-      
-      return [coords, text, tag1, tag2, tag3, group1, group2, group3];
-    });
-
-    // Convert to CSV format
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    // Create download link
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${project.name}-data.csv`;
-    link.click();
-    
-    setOpenMenuId(null);
-  };
-
   // Export full project data for cross-device sharing
   const handleExportFullProject = async (project: Project) => {
     try {
@@ -685,105 +673,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
     }
   };
 
-  const handleExportMappViz = (project: Project) => {
-    try {
-      if (!(project.notes || []).length) {
-        alert('该项目没有便签可导出');
-        setOpenMenuId(null);
-        return;
-      }
-      downloadMappVizJson(project);
-      setOpenMenuId(null);
-    } catch (error) {
-      console.error('导出 viz.json 失败:', error);
-      alert('导出 Bibliometrics 格式失败');
-    }
-  };
-
-  // 数据检查：删除重复便签 + 压缩图片
-  const handleCompressImages = async (project: Project) => {
-    if (!onUpdateProject) {
-      alert('无法执行数据检查：缺少项目更新方法');
-      return;
-    }
-
-    const confirmCompress = confirm(`将对项目「${project.name}」执行数据检查：\n1) 删除重复便签\n2) 压缩所有图片（含背景/手绘）\n\n可能耗时较长，是否继续？`);
-    if (!confirmCompress) return;
-
-    try {
-      // 1) 删除重复便签
-      let duplicateCount = 0;
-      const dedupedNotes: Note[] = [];
-      for (const note of project.notes) {
-        const found = dedupedNotes.find((n) => areProjectNotesDuplicates(n, note));
-        if (found) {
-          duplicateCount++;
-          continue;
-        }
-        dedupedNotes.push(note);
-      }
-
-      // 2) 压缩图片
-      let compressedCount = 0;
-      let errorCount = 0;
-      const updatedNotes = await Promise.all(
-        dedupedNotes.map(async (note) => {
-          const updatedNote = { ...note };
-          
-          // Compress images array
-          if (note.images && note.images.length > 0) {
-            const compressedImages = await Promise.all(
-              note.images.map(async (image) => {
-                try {
-                  const compressed = await compressImageFromBase64(image);
-                  compressedCount++;
-                  return compressed;
-                } catch (error) {
-                  console.error('Error compressing image:', error);
-                  errorCount++;
-                  return image; // Return original if compression fails
-                }
-              })
-            );
-            updatedNote.images = compressedImages;
-          }
-          
-          // Compress sketch
-          if (note.sketch) {
-            try {
-              const compressed = await compressImageFromBase64(note.sketch);
-              updatedNote.sketch = compressed;
-              compressedCount++;
-            } catch (error) {
-              console.error('Error compressing sketch:', error);
-              errorCount++;
-            }
-          }
-          
-          return updatedNote;
-        })
-      );
-
-      const updatedProject: Project = {
-        ...project,
-        notes: updatedNotes
-      };
-
-      onUpdateProject(updatedProject);
-      
-      let message = `数据检查完成！删除重复便签 ${duplicateCount} 个，压缩图片 ${compressedCount} 张。`;
-      if (errorCount > 0) {
-        message += ` 有 ${errorCount} 张图片压缩失败（已保留原图）。`;
-      }
-      alert(message);
-      setOpenMenuId(null);
-    } catch (error) {
-      console.error('数据检查失败:', error);
-      alert('数据检查失败，请重试。');
-    }
-  };
-
-  // Import project from JSON data（merge 必须用参数传入：拖放时 setState 异步，不能依赖 isImportingFromData）
+  // Import a complete project JSON, either as a new project or merged into the active one.
   const reportImportError = (message: string) => {
     setImportErrorMessage(message);
   };
@@ -923,26 +813,13 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
         }
       }
       
-      setShowImportDialog(false);
-      setIsImportingFromData(false);
       setIsCreating(false);
-      if (importFileInputRef.current) {
-        importFileInputRef.current.value = '';
-      }
       if (newProjectFileInputRef.current) {
         newProjectFileInputRef.current.value = '';
       }
     } catch (error) {
       console.error('Failed to import project:', error);
       reportImportError(formatUnexpectedImportError(error, file.name));
-    }
-  };
-
-  const handleImportFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      handleImportProject(e.target.files[0], {
-        merge: !!(isImportingFromData && activeProject)
-      });
     }
   };
 
@@ -1900,6 +1777,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
       />
       {mainHomeChrome}
 
+      <input
+        ref={pointImportFileInputRef}
+        type="file"
+        accept=".json,application/json,.csv,text/csv"
+        className="hidden"
+        onChange={(event) => void handlePointImportFileSelect(event)}
+      />
+
       <ChromeWindow
         open={isCreating}
         onClose={closeCreateDialog}
@@ -1981,51 +1866,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
           </div>
         </div>
       </ChromeWindow>
-
-      {/* Import Dialog */}
-      {showImportDialog && (
-        <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4">
-          <ChromeDialogSurface
-            appearance={chromeAppearance}
-            className="max-w-md p-6 animate-in zoom-in-95"
-            style={mapChromeSurface}
-          >
-            <h2 className="text-2xl font-black text-gray-800 mb-6">
-              {isImportingFromData ? 'Import from Data' : 'Import Project'}
-            </h2>
-            <p className="text-sm text-gray-600 mb-6">
-              {isImportingFromData 
-                ? 'Import project data into the current project. Map notes will be added directly, board notes will be placed to the right.'
-                : 'Select a project JSON file to import as a new project.'}
-            </p>
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleImportFileSelect}
-              className="hidden"
-            />
-            <div className="flex gap-3">
-              <button 
-                onClick={() => {
-                  setShowImportDialog(false);
-                  setIsImportingFromData(false);
-                }} 
-                className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => importFileInputRef.current?.click()}
-                className="flex-1 py-3 text-theme-chrome-fg font-bold rounded-xl shadow-lg transition-opacity hover:opacity-90"
-                style={{ backgroundColor: themeColor }}
-              >
-                Select File
-              </button>
-            </div>
-          </ChromeDialogSurface>
-        </div>
-      )}
 
       {pendingBuiltinExampleUpdate && (
         <div className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="update-example-title">
@@ -2161,14 +2001,14 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     </ChromeMenuItem>
                   ) : null}
                   <ChromeMenuItem
-                    icon={<Download size={16} />}
+                    icon={<Upload size={16} />}
                     hoverBackground={mapChromeHoverBg}
                     onClick={() => {
-                      handleExportData(pm);
+                      handleOpenPointImport(pm);
                       setOpenMenuId(null);
                     }}
                   >
-                    Export Data (CSV)
+                    导入点位（JSON / CSV）
                   </ChromeMenuItem>
                   <ChromeMenuItem
                     icon={<Download size={16} />}
@@ -2179,26 +2019,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                     }}
                   >
                     Export Full Project (JSON)
-                  </ChromeMenuItem>
-                  <ChromeMenuItem
-                    icon={<Download size={16} />}
-                    hoverBackground={mapChromeHoverBg}
-                    onClick={() => {
-                      handleExportMappViz(pm);
-                      setOpenMenuId(null);
-                    }}
-                  >
-                    Export Bibliometrics (.viz.json)
-                  </ChromeMenuItem>
-                  <ChromeMenuItem
-                    icon={<ImageIcon size={16} />}
-                    hoverBackground={mapChromeHoverBg}
-                    onClick={() => {
-                      handleCompressImages(pm);
-                      setOpenMenuId(null);
-                    }}
-                  >
-                    Compress Images
                   </ChromeMenuItem>
                   {!builtinExampleIds.has(pm.id) ? (
                     <ChromeMenuItem
@@ -2223,13 +2043,9 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({
                   project={pm}
                   onRename={handleRename}
                   onDuplicate={handleDuplicateProject}
-                  onExportData={handleExportData}
+                  onImportPoints={handleOpenPointImport}
                   onExportFullProject={handleExportFullProject}
-                  onExportMappViz={handleExportMappViz}
-                  onCompressImages={handleCompressImages}
                   onUpdateBuiltinExample={(project) => setPendingBuiltinExampleUpdate(project)}
-                  onCheckData={onCheckData}
-                  onCleanupBrokenReferences={onCleanupBrokenReferences}
                   onDelete={onDeleteProject}
                   onClose={() => setOpenMenuId(null)}
                   surfaceStyle={mapChromeSurface}
