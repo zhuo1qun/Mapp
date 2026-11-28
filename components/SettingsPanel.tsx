@@ -22,6 +22,8 @@ import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
 import { exportWorkspaceSnapshot } from '../utils';
 import { ExportResolutionDialog } from './ExportResolutionDialog';
 import { AppearanceSettingsBlock } from './AppearanceSettingsBlock';
+import { ChromeSegmentedControl } from './ui/ChromeSegmentedControl';
+import type { BoardMediaMode } from '../utils/board/boardMediaPresentation';
 
 /** 由打开设置时所在的视图决定只展示哪一块 */
 export type SettingsContextView = 'map' | 'board' | 'table';
@@ -159,14 +161,17 @@ interface SettingsPanelProps {
   /** 地图：是否显示便签文字标签 */
   showTextLabels?: boolean;
   onShowTextLabelsChange?: (show: boolean) => void;
+  /** 地图：是否显示媒体内容及纯媒体点位 */
+  showMapMedia?: boolean;
+  onShowMapMediaChange?: (show: boolean) => void;
   /** 地图：是否显示顶部比例尺 */
   showMapScale?: boolean;
   onShowMapScaleChange?: (show: boolean) => void;
-  boardVariantToggles?: {
-    primary: boolean;
-    image: boolean;
-    onChange: (next: { primary: boolean; image: boolean }) => void;
-  };
+  /** Board：是否显示便签媒体背景与纯媒体对象。 */
+  showBoardMedia?: boolean;
+  onShowBoardMediaChange?: (show: boolean) => void;
+  boardMediaMode?: BoardMediaMode;
+  onBoardMediaModeChange?: (mode: BoardMediaMode) => void;
   /** 快照窗口「导出 HTML」：与 Tab/预览态右上角导出一致 */
   onExportHtml?: () => void;
   /** 为 false 时只渲染内容，由顶栏槽提供 ChromeWindow。 */
@@ -201,9 +206,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onLabelSizeChange,
   showTextLabels,
   onShowTextLabelsChange,
+  showMapMedia,
+  onShowMapMediaChange,
   showMapScale,
   onShowMapScaleChange,
-  boardVariantToggles,
+  showBoardMedia,
+  onShowBoardMediaChange,
+  boardMediaMode,
+  onBoardMediaModeChange,
   onExportHtml,
   shell = true,
   chromeAppearance: chromeAppearanceProp
@@ -369,6 +379,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   themeColor={themeColor}
                 />
               ) : null}
+              {showMapMedia !== undefined && onShowMapMediaChange ? (
+                <SettingsToggleSwitch
+                  label="显示媒体"
+                  checked={showMapMedia}
+                  onChange={onShowMapMediaChange}
+                  themeColor={themeColor}
+                />
+              ) : null}
               {showMapScale !== undefined && onShowMapScaleChange ? (
                 <SettingsToggleSwitch
                   label="显示比例尺"
@@ -399,7 +417,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     minCaption="0.5x"
                     maxCaption="2.0x"
                   />
-                    {imageSize !== undefined && onImageSizeChange ? (
+                    {showMapMedia !== false && imageSize !== undefined && onImageSizeChange ? (
                       <SettingsCompactSlider
                         label="Image Size"
                         hint={
@@ -458,46 +476,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
           ) : null}
 
-          {settingsContextView === 'board' ? (
-            boardVariantToggles ? (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs leading-relaxed text-gray-500">显示类型（便签 / 图片）</p>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={boardVariantToggles.primary}
-                      onChange={(e) =>
-                        boardVariantToggles.onChange({
-                          primary: e.target.checked,
-                          image: boardVariantToggles.image
-                        })
-                      }
-                      className="h-4 w-4 rounded border-gray-200"
-                      style={{ accentColor: 'var(--theme-color)' }}
-                    />
-                    <span>便签</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={boardVariantToggles.image}
-                      onChange={(e) =>
-                        boardVariantToggles.onChange({
-                          primary: boardVariantToggles.primary,
-                          image: e.target.checked
-                        })
-                      }
-                      className="h-4 w-4 rounded border-gray-200"
-                      style={{ accentColor: 'var(--theme-color)' }}
-                    />
-                    <span>图片</span>
-                  </label>
+          {settingsContextView === 'board' && showBoardMedia !== undefined && onShowBoardMediaChange ? (
+            <div className="flex flex-col gap-2">
+              <SettingsToggleSwitch
+                label="显示媒体"
+                checked={showBoardMedia}
+                onChange={onShowBoardMediaChange}
+                themeColor={themeColor}
+              />
+              {showBoardMedia && boardMediaMode && onBoardMediaModeChange ? (
+                <div className="flex items-center gap-3">
+                  <span className="shrink-0 text-xs font-medium text-gray-500">媒体样式</span>
+                  <ChromeSegmentedControl
+                    value={boardMediaMode}
+                    onChange={onBoardMediaModeChange}
+                    size="sm"
+                    className="min-w-0 flex-1"
+                    aria-label="选择 Board 媒体样式"
+                    options={[
+                      { id: 'background', label: '背景' },
+                      { id: 'sticker', label: '贴纸' }
+                    ]}
+                  />
                 </div>
-              </div>
-            ) : (
-              <p className="py-2 text-xs leading-relaxed text-gray-500">看板视图相关样式将放在此处，敬请期待。</p>
-            )
+              ) : null}
+            </div>
           ) : null}
 
           {settingsContextView === 'table' ? (

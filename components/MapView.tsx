@@ -77,14 +77,16 @@ import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolb
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { parseNoteContent } from '../utils';
 import type { NoteDraftOutcome } from '../utils/note/draftLifecycle';
-import { hexToRgb, isPhotoTakenRecently } from '../utils/map/mapUtils';
+import { isPhotoTakenRecently } from '../utils/map/mapUtils';
 import { calculateImageFingerprint, calculateFingerprintFromBase64 } from '../utils/media/imageProcessing';
 import { loadImage, getViewPositionCache, setViewPositionCache } from '../utils/persistence/storage';
 import { useNotesWithResolvedMedia } from '../utils/persistence/useNotesWithResolvedMedia';
+import { noteIsMapMediaOnly } from '../utils/persistence/mediaDisplay';
 import { buildMapTabExportPayload } from '../utils/map/mapTabExportPayload';
 import { buildStandaloneMapTabHtml } from '../utils/map/mapTabExportHtml';
 import { downloadTextFile } from '../utils/builtinExamples/projectFromExport';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
+import { WORKSPACE_PAGE_RESUME_EVENT } from '../utils/ui/workspacePageLifecycle';
 
 const UNPLACED_DROP_EDGE_TOLERANCE_PX = 20;
 import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
@@ -514,6 +516,39 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, [mapInstance, project.id]);
 
+  /** bfcache / 外部地图返回后 Leaflet 不一定收到容器 resize，保留相机状态只重测尺寸。 */
+  useEffect(() => {
+    if (!mapInstance) return;
+    let frame: number | null = null;
+    let settleTimer: number | null = null;
+    const invalidate = () => {
+      try {
+        mapInstance.invalidateSize({ animate: false, pan: false });
+      } catch {
+        /* 地图在卸载边缘不需要恢复。 */
+      }
+    };
+    const refreshAfterResume = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        invalidate();
+        // iOS 从原生地图回浏览器时，底部工具栏常在下一拍才稳定。
+        settleTimer = window.setTimeout(() => {
+          settleTimer = null;
+          invalidate();
+        }, 140);
+      });
+    };
+    window.addEventListener(WORKSPACE_PAGE_RESUME_EVENT, refreshAfterResume);
+    return () => {
+      window.removeEventListener(WORKSPACE_PAGE_RESUME_EVENT, refreshAfterResume);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+    };
+  }, [mapInstance]);
+
   // Marker clustering related state (reserved for future use)
   
   // 读取已有图片（可能是存储的图片 ID），用于指纹对比
@@ -535,6 +570,7 @@ export const MapView: React.FC<MapViewProps> = ({
   
   // Text labels display mode
   const [showTextLabels, setShowTextLabels] = useState(false);
+  const [showMapMedia, setShowMapMedia] = useState(true);
   const [showMapScale, setShowMapScale] = useState(true);
   /** 仅用于检测全局 label 是否从「开」变为「关」，避免选中态变化时误清簇展开列表 */
   const prevShowTextLabelsRef = useRef(showTextLabels);
@@ -676,15 +712,6 @@ export const MapView: React.FC<MapViewProps> = ({
     setShowBorderPanel
   });
   const { pendingPlaceNote, setPendingPlaceNote, handleConvertPendingToNote } = borderSearchState;
-
-  // Auto-hide location error after 2 seconds
-  useEffect(() => {
-    if (!locationError) return;
-    const timer = setTimeout(() => {
-      setLocationError(null);
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [locationError, setLocationError]);
 
   // Enhanced location request with auto-retry and navigation
   const handleLocateCurrentPosition = useCallback(async () => {
@@ -1017,10 +1044,12 @@ export const MapView: React.FC<MapViewProps> = ({
    * 未保存时只是局部状态；保存后真实 note 替换同 id 的临时数据，不会卸载图钉。
    */
   const mapMarkerNotes = useMemo(() => {
-    if (!introNote?.id || !introNote.coords) return mapRenderedNotes;
-    if (mapRenderedNotes.some((note) => note.id === introNote.id)) return mapRenderedNotes;
-    return [...mapRenderedNotes, introNote as Note];
-  }, [introNote, mapRenderedNotes]);
+    const withIntro =
+      !introNote?.id || !introNote.coords || mapRenderedNotes.some((note) => note.id === introNote.id)
+        ? mapRenderedNotes
+        : [...mapRenderedNotes, introNote as Note];
+    return showMapMedia ? withIntro : withIntro.filter((note) => !noteIsMapMediaOnly(note));
+  }, [introNote, mapRenderedNotes, showMapMedia]);
 
   const placeUnlocatedNotes = useCallback(
     (noteIds: string[], coords: Coordinates) => {
@@ -1161,6 +1190,7 @@ export const MapView: React.FC<MapViewProps> = ({
     forceSingleNoteIds
   });
   const { handleMarkerClick, handleClusterClick } = useMapMarkerSelection({
+    mapInstance,
     isUIVisible,
     showTextLabels,
     connections,
@@ -1903,24 +1933,30 @@ export const MapView: React.FC<MapViewProps> = ({
                 width: 48px;
                 height: 48px;
               ">
-                <!-- Semi-transparent direction sector (48px radius, 60 degrees) -->
+                <!-- Rounded direction triangle; rotates around the location dot. -->
                 <div style="
                   position: absolute;
                   top: 0;
                   left: 0;
                   width: 48px;
                   height: 48px;
-                  border-radius: 50%;
-                  background: conic-gradient(
-                    from -30deg,
-                    transparent 0deg,
-                    rgba(${hexToRgb(themeColor)}, 0.3) 0deg,
-                    rgba(${hexToRgb(themeColor)}, 0.3) 60deg,
-                    transparent 60deg
-                  );
                   transform: rotate(${deviceHeading || 0}deg);
+                  transform-origin: 24px 24px;
                   transition: transform 0.15s ease-out;
-                "></div>
+                ">
+                  <svg
+                    width="16"
+                    height="17"
+                    viewBox="0 0 16 17"
+                    aria-hidden="true"
+                    style="position:absolute;left:16px;top:1px;overflow:visible;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,0.2));"
+                  >
+                    <path
+                      fill="${themeColor}"
+                      d="M7.02 2.08C7.45 1.16 8.55 1.16 8.98 2.08L15.06 14.08C15.58 15.12 14.65 16.25 13.54 15.9L8.42 14.3C8.15 14.22 7.85 14.22 7.58 14.3L2.46 15.9C1.35 16.25.42 15.12.94 14.08L7.02 2.08Z"
+                    />
+                  </svg>
+                </div>
 
                 <!-- Center dot (12px radius) -->
                 <div style="
@@ -1975,6 +2011,7 @@ export const MapView: React.FC<MapViewProps> = ({
           showTextLabels={showTextLabels}
           pinSize={pinSize}
           imageSize={imageSize}
+          showMedia={showMapMedia}
           themeColor={themeColor}
           mapInstance={mapInstance}
           onMarkerClick={handleMapMarkerClick}
@@ -2141,6 +2178,8 @@ export const MapView: React.FC<MapViewProps> = ({
                           onLabelSizeChange={setLabelSize}
                           showTextLabels={showTextLabels}
                           onShowTextLabelsChange={setShowTextLabels}
+                          showMapMedia={showMapMedia}
+                          onShowMapMediaChange={setShowMapMedia}
                           showMapScale={showMapScale}
                           onShowMapScaleChange={setShowMapScale}
                           onExportHtml={() => void exportStandaloneMapTab()}

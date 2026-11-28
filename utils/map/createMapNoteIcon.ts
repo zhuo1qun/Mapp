@@ -92,13 +92,15 @@ export function buildMapNoteIconModel(
     clusterCount?: number;
     pinSize?: number;
     imageSize?: number;
+    /** false 时忽略媒体像素，以普通泪滴图钉呈现。 */
+    showMedia?: boolean;
     motion?: MapNoteIconMotion;
   }
 ): MapNoteIconModel {
-  const { themeColor, clusterCount, pinSize, imageSize, motion } = opts;
+  const { themeColor, clusterCount, pinSize, imageSize, showMedia = true, motion } = opts;
   const pinScale = mapPinScale(pinSize, note.isFavorite === true);
-  const photoSrc = firstDisplayableMapPhotoSrc(note);
-  const asPhotoSticker = noteRendersAsMapMediaPin(note);
+  const photoSrc = showMedia ? firstDisplayableMapPhotoSrc(note) : null;
+  const asPhotoSticker = showMedia && noteRendersAsMapMediaPin(note);
   const usesImageOutline = note.hasActiveMediaCrop ?? noteHasActiveFirstMediaCrop(note);
 
   if (asPhotoSticker) {

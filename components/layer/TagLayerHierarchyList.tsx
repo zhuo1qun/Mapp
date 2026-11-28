@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react';
-import type { GraphLayerState, Note, TagVisibilityLogic } from '../../types';
+import type { GraphLayerState, Note } from '../../types';
 import { UNTYPED_NOTE_LAYER_GROUP } from '../../utils/layer/noteLayerState';
 import {
   noteBelongsToLayerGroupKey,
-  normalizeTagVisibilityLogic,
   sortNotesForLayerPanelDesc,
   truncateRawTextLabel
 } from '../../utils/layer/unifiedNoteLayer';
@@ -17,7 +16,6 @@ import {
   tagHierarchySuffix,
   tagRenameEditablePart
 } from '../../utils/layer/tagHierarchy';
-import { ChromeSegmentedControl } from '../ui/ChromeSegmentedControl';
 
 type Props = {
   themeColor: string;
@@ -58,8 +56,6 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
     () => new Set((merged.hidden ?? []).map((h) => String(h).trim())),
     [merged.hidden]
   );
-
-  const visibilityLogic = normalizeTagVisibilityLogic(merged.tagVisibilityLogic);
 
   const hierarchy = useMemo(
     () => groupTagsByHierarchyPrefix(merged.order ?? [], UNTYPED_NOTE_LAYER_GROUP),
@@ -121,10 +117,6 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
     },
     [merged, onStateChange]
   );
-
-  const setVisibilityLogic = (logic: TagVisibilityLogic) => {
-    patch((p) => ({ ...p, tagVisibilityLogic: logic }));
-  };
 
   const toggleHidden = (keys: string[], force?: boolean) => {
     patch((p) => {
@@ -392,23 +384,6 @@ export const TagLayerHierarchyList: React.FC<Props> = ({
 
   return (
     <>
-      {showVisibilityControls ? (
-        <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-0.5">
-          <span className="text-[10px] font-medium text-gray-400">多标签显隐</span>
-          <ChromeSegmentedControl
-            aria-label="标签显隐逻辑"
-            size="sm"
-            className="shrink-0"
-            value={visibilityLogic}
-            onChange={setVisibilityLogic}
-            options={[
-              { id: 'and', label: 'AND', title: '且：任一标签隐藏则隐藏节点' },
-              { id: 'or', label: 'OR', title: '或：任一标签显示则显示节点' }
-            ]}
-          />
-        </div>
-      ) : null}
-
       {hierarchy.map(({ prefix, tags }) => {
         const leafOnly = tags.length === 1 && !tagHasHierarchySep(tags[0]);
         const prefixKey = `p:${prefix}`;

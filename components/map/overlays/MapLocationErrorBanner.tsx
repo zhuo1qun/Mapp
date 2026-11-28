@@ -27,7 +27,8 @@ export const MapLocationErrorBanner: React.FC<Props> = ({
 }) => {
   const chromeAppearance = useChromeAppearance(chromeAppearanceProp);
   const open = !!locationError;
-  const isPermission = !!locationError && /权限/.test(locationError);
+  const isPermission = !!locationError && /权限环节失败/.test(locationError);
+  const isPositionServiceFailure = !!locationError && /定位服务环节失败|坐标获取环节超时/.test(locationError);
 
   return (
     <ChromeWindow
@@ -80,7 +81,7 @@ export const MapLocationErrorBanner: React.FC<Props> = ({
           disabled={isLocating}
         >
           {isLocating ? <Loader2 size={12} className="animate-spin" /> : null}
-          {isPermission ? '再次启用' : '重试'}
+          {isPermission ? '再次申请权限' : isPositionServiceFailure ? '重新获取坐标' : '重试'}
         </ChromeActionButton>
       </div>
     </ChromeWindow>

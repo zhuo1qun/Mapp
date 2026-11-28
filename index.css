@@ -1866,6 +1866,16 @@ body {
   transition: none;
 }
 
+@keyframes mapp-cluster-label-reveal {
+  0%, 55% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* 聚合成员先沿路径到达新位置，标签随后显现；避免文字抢先跳到终点。 */
+.leaflet-container.map-cluster-settling .leaflet-marker-pane .custom-text-label {
+  animation: mapp-cluster-label-reveal 300ms ease-out both;
+}
+
 /* `smoothMapZoom` publishes a transform on every animation frame. Leaflet's
  * normal 250ms zoom transition is designed for one discrete zoom, so leaving
  * it on here makes each mobile pinch frame chase the previous one. */

@@ -190,10 +190,10 @@
     return `<div class="${cls}" style="position:relative;width:${width}px;height:${height}px;transform-origin:${width / 2}px ${height}px;overflow:visible;">${inner}</div>`;
   }
   function buildMapNoteIconModel(note, opts) {
-    const { themeColor, clusterCount, pinSize, imageSize, motion } = opts;
+    const { themeColor, clusterCount, pinSize, imageSize, showMedia = true, motion } = opts;
     const pinScale = mapPinScale(pinSize, note.isFavorite === true);
-    const photoSrc = firstDisplayableMapPhotoSrc(note);
-    const asPhotoSticker = noteRendersAsMapMediaPin(note);
+    const photoSrc = showMedia ? firstDisplayableMapPhotoSrc(note) : null;
+    const asPhotoSticker = showMedia && noteRendersAsMapMediaPin(note);
     const usesImageOutline = note.hasActiveMediaCrop ?? noteHasActiveFirstMediaCrop(note);
     if (asPhotoSticker) {
       const imageScale = mapImageScale(imageSize, note.isFavorite === true);

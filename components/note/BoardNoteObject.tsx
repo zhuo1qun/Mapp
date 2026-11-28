@@ -4,6 +4,7 @@ import { noteOrderedDisplayMediaSources, noteRendersAsBoardSticker } from '../..
 import { noteHasRenderableMapPosition } from '../../utils/layer/unifiedNoteLayer';
 import { BoardPaperNoteContent } from './BoardPaperNoteContent';
 import { getExpandedNoteLayout } from '../../utils/note/expandedNoteLayout';
+import type { BoardMediaMode } from '../../utils/board/boardMediaPresentation';
 
 type Props = {
   note: Note;
@@ -18,6 +19,8 @@ type Props = {
   staticInteraction?: boolean;
   paperBackground?: string;
   mediaSrc?: string | null;
+  showMedia?: boolean;
+  mediaMode?: BoardMediaMode;
   expandedContent?: boolean;
   fallbackMedia?: ReactNode;
   overlay?: ReactNode;
@@ -25,6 +28,10 @@ type Props = {
 
 export function boardNoteMediaSource(note: Note): string | null {
   return noteOrderedDisplayMediaSources(note)[0] || null;
+}
+
+export function boardAttachedStickerBottomClass(note: Note, expanded: boolean): '-bottom-[42%]' | '-bottom-[32%]' {
+  return expanded && note.tags.length > 0 ? '-bottom-[42%]' : '-bottom-[32%]';
 }
 
 /** Board 与暂存框共用的完整对象壳：交互状态、纸片/贴纸结构和投影只在这里定义。 */
@@ -41,6 +48,8 @@ export const BoardNoteObject = forwardRef<HTMLElement, Props>(function BoardNote
   staticInteraction = false,
   paperBackground,
   mediaSrc,
+  showMedia = true,
+  mediaMode = 'background',
   expandedContent,
   fallbackMedia,
   overlay
@@ -164,16 +173,31 @@ export const BoardNoteObject = forwardRef<HTMLElement, Props>(function BoardNote
           </div>
         </div>
       ) : (
-        <div
-          className={`board-note-elevation flex h-full w-full flex-col overflow-hidden rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
-          style={{ backgroundColor }}
-        >
-          <BoardPaperNoteContent
-            note={note}
-            contentWidth={contentWidth}
-            expanded={usesExpandedContent}
-            detailLineCount={expandedLayout?.detailLineCount}
-          />
+        <div className="relative h-full w-full overflow-visible">
+          <div
+            className={`board-note-elevation flex h-full w-full flex-col overflow-hidden rounded-sm transition-shadow ${isInFrame ? 'ring-4 ring-[#EEEEEE]' : ''}`}
+            style={{ backgroundColor }}
+          >
+            <BoardPaperNoteContent
+              note={note}
+              contentWidth={contentWidth}
+              expanded={usesExpandedContent}
+              detailLineCount={expandedLayout?.detailLineCount}
+              showMedia={showMedia}
+              mediaMode={mediaMode}
+            />
+          </div>
+          {showMedia && mediaMode === 'sticker' && src ? (
+            <div className={`pointer-events-none absolute ${boardAttachedStickerBottomClass(note, usesExpandedContent)} -right-[7%] z-20 flex h-[55%] w-[55%] items-start justify-end overflow-visible`}>
+              <img
+                src={src}
+                alt=""
+                referrerPolicy="no-referrer"
+                draggable={false}
+                className="board-sticker-elevation max-h-full max-w-full object-contain"
+              />
+            </div>
+          ) : null}
         </div>
       )}
       {overlay}

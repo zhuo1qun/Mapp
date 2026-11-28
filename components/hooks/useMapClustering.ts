@@ -248,7 +248,7 @@ export function useMapClustering({
         settleRemoveTimer = setTimeout(() => {
           mapInstanceRef.current?.getContainer()?.classList.remove('map-cluster-settling');
           settleRemoveTimer = null;
-        }, 80);
+        }, 340);
       }, settleMs);
     };
 

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useMap, useMapEvents } from 'react-leaflet';
 import type { Map as LeafletMap, LeafletMouseEvent, DragEndEvent } from 'leaflet';
 import type { Note } from '../../../types';
@@ -8,10 +8,40 @@ import {
   lngWrapOffsetsForBounds,
   primaryWrapOffsetForCenter
 } from '../../../utils/map/lngWorldWrap';
+import { selectClusterRepresentative } from '../../../utils/map/clusterRepresentative';
 
 export interface ClusterResult {
   notes: Note[];
   position: [number, number];
+}
+
+type ClusterPathTransition = {
+  token: number;
+  paths: Array<{
+    note: Note;
+    from: [number, number];
+    to: [number, number];
+    targetGroupKey: string;
+  }>;
+  targetGroupKeys: ReadonlySet<string>;
+};
+
+function visualGroupKey(cluster: ClusterResult): string {
+  return cluster.notes.map((note) => note.id).sort().join('|');
+}
+
+function visualLayout(clusters: ClusterResult[]) {
+  const layout = new Map<
+    string,
+    { note: Note; position: [number, number]; groupKey: string }
+  >();
+  clusters.forEach((cluster) => {
+    const groupKey = visualGroupKey(cluster);
+    cluster.notes.forEach((note) => {
+      layout.set(note.id, { note, position: cluster.position, groupKey });
+    });
+  });
+  return layout;
 }
 
 interface ClusterMarkerLayerProps {
@@ -20,6 +50,7 @@ interface ClusterMarkerLayerProps {
   showTextLabels: boolean;
   pinSize: number;
   imageSize: number;
+  showMedia: boolean;
   themeColor: string;
   mapInstance: LeafletMap | null;
   onMarkerClick: (note: Note, e?: LeafletMouseEvent) => void;
@@ -54,6 +85,7 @@ function ClusterMarkerLayerInner({
   showTextLabels,
   pinSize,
   imageSize,
+  showMedia,
   themeColor,
   mapInstance,
   onMarkerClick,
@@ -83,6 +115,71 @@ function ClusterMarkerLayerInner({
   /** Native Leaflet pinch emits `move` for every touch frame. React must not
    * reconcile markers in that loop: Leaflet already transforms them visually. */
   const isGestureZoomingRef = useRef(false);
+  const previousClustersRef = useRef<ClusterResult[] | null>(null);
+  const clusterPathTimerRef = useRef<number | null>(null);
+  const clusterPathTokenRef = useRef(0);
+  const [clusterPathTransition, setClusterPathTransition] = useState<ClusterPathTransition | null>(null);
+
+  useLayoutEffect(() => {
+    const previous = previousClustersRef.current;
+    previousClustersRef.current = clusteredMarkers;
+    if (clusterPathTimerRef.current != null) {
+      window.clearTimeout(clusterPathTimerRef.current);
+      clusterPathTimerRef.current = null;
+    }
+    if (
+      !previous ||
+      !map.getContainer().classList.contains('map-cluster-settling') ||
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setClusterPathTransition(null);
+      return;
+    }
+
+    const before = visualLayout(previous);
+    const after = visualLayout(clusteredMarkers);
+    const paths: ClusterPathTransition['paths'] = [];
+    const targetGroupKeys = new Set<string>();
+    after.forEach((target, noteId) => {
+      const source = before.get(noteId);
+      if (!source || source.groupKey === target.groupKey) return;
+      paths.push({
+        note: target.note,
+        from: source.position,
+        to: target.position,
+        targetGroupKey: target.groupKey
+      });
+      targetGroupKeys.add(target.groupKey);
+    });
+    if (paths.length === 0) {
+      setClusterPathTransition(null);
+      return;
+    }
+
+    const maxAnimatedMembers = 96;
+    const animatedPaths =
+      paths.length <= maxAnimatedMembers
+        ? paths
+        : paths.filter((_, index) => index % Math.ceil(paths.length / maxAnimatedMembers) === 0);
+    const transition: ClusterPathTransition = {
+      token: ++clusterPathTokenRef.current,
+      paths: animatedPaths,
+      targetGroupKeys
+    };
+    setClusterPathTransition(transition);
+    clusterPathTimerRef.current = window.setTimeout(() => {
+      setClusterPathTransition((current) =>
+        current?.token === transition.token ? null : current
+      );
+      clusterPathTimerRef.current = null;
+    }, 340);
+    return () => {
+      if (clusterPathTimerRef.current != null) {
+        window.clearTimeout(clusterPathTimerRef.current);
+        clusterPathTimerRef.current = null;
+      }
+    };
+  }, [clusteredMarkers, map]);
 
   useMapEvents({
     zoomstart: () => {
@@ -153,7 +250,7 @@ function ClusterMarkerLayerInner({
   const zBoost = (note: Note) => (note.isFavorite ? 200 : 0) + (noteStackRank?.get(note.id) ?? 0) * 2;
 
   // 编辑态下，已单独渲染的 pin 没有「误拖整组」的风险，允许直接拖动。
-  // 真正的 cluster 不会走到这个分支；仍须先点开、选中成员后才会成为独立 pin。
+  // 真正的 cluster 不会走到这个分支；点击聚合只负责导航，拆开后的独立 pin 才可拖动。
   const pinDraggable = (note: Note) => !isPreviewMode && isEditMode && (canEditNote?.(note) ?? true);
 
   const pinLongPressDraggable = (note: Note) =>
@@ -177,6 +274,7 @@ function ClusterMarkerLayerInner({
         {renderClusters.map((cluster) => {
           if (cluster.notes.length === 1) {
             const note = cluster.notes[0]!;
+            const groupKey = visualGroupKey(cluster);
             const override = noteCoordOverrides[note.id];
             const lat = override ? override.lat : cluster.position[0]!;
             const lng = override ? override.lng : cluster.position[1]!;
@@ -190,8 +288,10 @@ function ClusterMarkerLayerInner({
                 showTextLabels={showTextLabels}
                 pinSize={pinSize}
                 imageSize={imageSize}
+                showMedia={showMedia}
                 themeColor={themeColor}
                 selected={pinSelected(note)}
+                clusterPathReveal={clusterPathTransition?.targetGroupKeys.has(groupKey)}
                 zIndexOffset={zBoost(note)}
                 onClick={(e) => {
                   e.originalEvent?.stopPropagation();
@@ -220,9 +320,12 @@ function ClusterMarkerLayerInner({
             ));
           } else {
             const clusterKey = cluster.notes.map((n) => n.id).sort().join('-');
-            const topNote = [...cluster.notes].sort(
-              (a, b) => (noteStackRank?.get(b.id) ?? 0) - (noteStackRank?.get(a.id) ?? 0)
-            )[0]!;
+            const groupKey = visualGroupKey(cluster);
+            const topNote = selectClusterRepresentative(
+              cluster.notes,
+              noteStackRank,
+              showMedia
+            );
             const clusterZ = Math.max(...cluster.notes.map((n) => zBoost(n)));
             const [lat, lng] = cluster.position;
             const ks = wrapKs(lng);
@@ -235,8 +338,10 @@ function ClusterMarkerLayerInner({
                 showTextLabels={showTextLabels}
                 pinSize={pinSize}
                 imageSize={imageSize}
+                showMedia={showMedia}
                 themeColor={themeColor}
                 selected={cluster.notes.some(pinSelected)}
+                clusterPathReveal={clusterPathTransition?.targetGroupKeys.has(groupKey)}
                 zIndexOffset={clusterZ}
                 onClick={(e) => {
                   e.originalEvent?.stopPropagation();
@@ -248,6 +353,24 @@ function ClusterMarkerLayerInner({
             ));
           }
         })}
+        {clusterPathTransition?.paths.map((path) => (
+          <NoteMarker
+            key={`cluster-path-${clusterPathTransition.token}-${path.note.id}`}
+            note={path.note}
+            position={path.to}
+            showTextLabels={false}
+            pinSize={pinSize}
+            imageSize={imageSize}
+            showMedia={showMedia}
+            themeColor={themeColor}
+            zIndexOffset={10000 + zBoost(path.note)}
+            interactive={false}
+            selected={false}
+            onClick={() => {}}
+            clusterPathFrom={path.from}
+            clusterPathGhost
+          />
+        ))}
       </>
     );
   }
@@ -268,6 +391,7 @@ function ClusterMarkerLayerInner({
             showTextLabels={showTextLabels}
             pinSize={pinSize}
             imageSize={imageSize}
+            showMedia={showMedia}
             themeColor={themeColor}
             selected={pinSelected(note)}
             zIndexOffset={zBoost(note)}

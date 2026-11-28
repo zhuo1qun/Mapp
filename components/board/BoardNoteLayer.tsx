@@ -6,6 +6,7 @@ import { findFrameContainingNoteCenter } from '../../utils/frame/boardFrameMembe
 import { resolveBoardNoteRenderPose } from '../../utils/board/boardNoteRenderPose';
 import { isNoteBoardPlaced } from '../../utils/note/notePlacement';
 import { sortNotesByBoardLayer } from '../../utils/board/boardLayerOrder';
+import type { BoardMediaMode } from '../../utils/board/boardMediaPresentation';
 
 type BoardPoint = { x: number; y: number };
 type ImagePreview = { id: string; x: number; y: number; width: number; height: number } | null;
@@ -15,8 +16,8 @@ interface BoardNoteLayerProps {
   frames: Frame[];
   leavingNoteIds: Set<string>;
   isNoteVisible: (note: Note) => boolean;
-  showImages: boolean;
-  showNotes: boolean;
+  showMedia: boolean;
+  mediaMode: BoardMediaMode;
   workspaceEditMode: boolean;
   standardSizeScale: number;
   selectedNoteId: string | null;
@@ -45,13 +46,17 @@ interface BoardNoteLayerProps {
   onDoubleClick: (event: ReactMouseEvent, note: Note) => void;
 }
 
+export function boardNoteVisibleForMediaSetting(note: Note, showMedia: boolean): boolean {
+  return showMedia || !noteRendersAsBoardSticker(note);
+}
+
 export function BoardNoteLayer({
   notes,
   frames,
   leavingNoteIds,
   isNoteVisible,
-  showImages,
-  showNotes,
+  showMedia,
+  mediaMode,
   workspaceEditMode,
   standardSizeScale,
   selectedNoteId,
@@ -87,7 +92,7 @@ export function BoardNoteLayer({
         .filter(isNoteVisible)
         .map((note) => {
           const isImage = noteRendersAsBoardSticker(note);
-          if ((isImage && !showImages) || (!isImage && !showNotes)) return null;
+          if (!boardNoteVisibleForMediaSetting(note, showMedia)) return null;
 
           const isDragging = draggingNoteId === note.id;
           const isInMultiSelect = selectedNoteIds.has(note.id);
@@ -150,6 +155,8 @@ export function BoardNoteLayer({
               isInFrame={isInFrame}
               staticInteraction={!!resizePreview || isDragging || (isMultiSelectDragging && isInMultiSelect)}
               contentWidth={pose.width - 48}
+              showMedia={showMedia}
+              mediaMode={mediaMode}
               className={`pointer-events-auto ${motionClass} ${workspaceEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
               style={{
                 position: 'absolute', left: pose.x, top: pose.y, zIndex,

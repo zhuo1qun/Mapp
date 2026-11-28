@@ -20,6 +20,7 @@ import {
 } from '../utils/permissions/deviceOrientation';
 
 type PermissionState = 'prompt' | 'granted' | 'denied' | 'unsupported' | 'unknown';
+type LocationAvailability = 'unknown' | 'checking' | 'available' | 'unavailable';
 
 const resourceLoaders = {
   map: loadMapResource,
@@ -47,8 +48,22 @@ export function ResourcePermissionsPanel({ themeColor }: { themeColor: string })
     location: 'unknown', orientation: readDeviceOrientationPermission(), camera: 'unknown', clipboard: 'unknown', storage: 'unknown'
   });
   const [storageText, setStorageText] = useState('正在读取…');
+  const [locationAvailability, setLocationAvailability] = useState<LocationAvailability>('unknown');
 
   const setPermission = (id: string, state: PermissionState) => setPermissions((current) => ({ ...current, [id]: state }));
+
+  const probeGrantedLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationAvailability('unavailable');
+      return;
+    }
+    setLocationAvailability('checking');
+    navigator.geolocation.getCurrentPosition(
+      () => setLocationAvailability('available'),
+      () => setLocationAvailability('unavailable'),
+      { enableHighAccuracy: false, maximumAge: 600000, timeout: 6000 }
+    );
+  };
 
   useEffect(() => {
     let active = true;
@@ -59,7 +74,17 @@ export function ResourcePermissionsPanel({ themeColor }: { themeColor: string })
         const result = await navigator.permissions.query({ name });
         if (active) {
           setPermission(id, result.state as PermissionState);
-          result.onchange = () => setPermission(id, result.state as PermissionState);
+          if (id === 'location') {
+            if (result.state === 'granted') probeGrantedLocation();
+            else setLocationAvailability('unknown');
+          }
+          result.onchange = () => {
+            setPermission(id, result.state as PermissionState);
+            if (id === 'location') {
+              if (result.state === 'granted') probeGrantedLocation();
+              else setLocationAvailability('unknown');
+            }
+          };
           permissionStatuses.push(result);
         }
       } catch {
@@ -118,8 +143,10 @@ export function ResourcePermissionsPanel({ themeColor }: { themeColor: string })
   const requestPermission = async (id: string) => {
     try {
       if (id === 'location') {
-        await new Promise<void>((resolve, reject) => navigator.geolocation.getCurrentPosition(() => resolve(), reject, { timeout: 10000 }));
+        setLocationAvailability('checking');
+        await new Promise<void>((resolve, reject) => navigator.geolocation.getCurrentPosition(() => resolve(), reject, { enableHighAccuracy: false, maximumAge: 600000, timeout: 10000 }));
         setPermission(id, 'granted');
+        setLocationAvailability('available');
       } else if (id === 'orientation') {
         setPermission(id, await requestDeviceOrientationPermission());
       } else if (id === 'camera') {
@@ -133,8 +160,15 @@ export function ResourcePermissionsPanel({ themeColor }: { themeColor: string })
         const granted = await navigator.storage.persist?.();
         setPermission(id, granted ? 'granted' : 'denied');
       }
-    } catch {
-      setPermission(id, 'denied');
+    } catch (error) {
+      if (id === 'location') {
+        const geoError = error as GeolocationPositionError;
+        if (geoError?.code === geoError?.PERMISSION_DENIED) setPermission(id, 'denied');
+        else setPermission(id, 'granted');
+        setLocationAvailability('unavailable');
+      } else {
+        setPermission(id, 'denied');
+      }
     }
   };
 
@@ -153,7 +187,7 @@ export function ResourcePermissionsPanel({ themeColor }: { themeColor: string })
   const permissionText = (state: PermissionState) => ({ granted: '已允许', denied: '已拒绝', prompt: '未授权', unsupported: '不支持', unknown: '待确认' }[state]);
   const permissionItems = [
     { id: 'location', title: '位置', detail: '当前位置、地图定位和点位创建', icon: MapPin },
-    { id: 'orientation', title: '方向与运动', detail: '当前位置标记的朝向扇区', icon: Compass },
+    { id: 'orientation', title: '方向与运动', detail: '当前位置标记的朝向指示', icon: Compass },
     { id: 'camera', title: '相机', detail: '直接拍照添加媒体', icon: Camera },
     { id: 'clipboard', title: '剪贴板读取', detail: '读取复制的图片', icon: Clipboard },
     { id: 'storage', title: '本地存储', detail: storageText, icon: HardDrive }
@@ -181,7 +215,7 @@ export function ResourcePermissionsPanel({ themeColor }: { themeColor: string })
     <section>
       <div className="mb-2 px-1"><h3 className="text-sm font-bold text-gray-800">权限</h3><p className="text-xs text-gray-500">权限只会在点击授权时向浏览器申请。</p></div>
       <div>
-        {permissionItems.map((item, index) => { const Icon = item.icon; const state = permissions[item.id]; return <button key={item.id} type="button" disabled={(state === 'granted' && item.id !== 'orientation') || state === 'unsupported'} onClick={() => void requestPermission(item.id)} className={`flex w-full items-center gap-3 px-1 py-3 text-left hover:opacity-75 disabled:cursor-default ${index ? 'border-t border-gray-300/35' : ''}`}><span className="flex h-9 w-7 shrink-0 items-center justify-center text-gray-500"><Icon size={18} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-gray-800">{item.title}</span><span className="block truncate text-xs text-gray-500">{item.detail}</span></span><span className={`shrink-0 text-xs font-semibold ${state === 'granted' ? 'text-emerald-600' : state === 'denied' ? 'text-red-500' : 'text-gray-500'}`}>{permissionText(state)}</span><ChevronRight size={15} className="shrink-0 text-gray-300" /></button>; })}
+        {permissionItems.map((item, index) => { const Icon = item.icon; const state = permissions[item.id]; const status = item.id === 'location' && state === 'granted' ? (locationAvailability === 'available' ? '定位可用' : locationAvailability === 'unavailable' ? '定位不可用' : locationAvailability === 'checking' ? '检测中…' : '已允许') : permissionText(state); const statusOk = state === 'granted' && (item.id !== 'location' || locationAvailability === 'available'); return <button key={item.id} type="button" disabled={(statusOk && item.id !== 'orientation') || state === 'unsupported' || (item.id === 'location' && locationAvailability === 'checking')} onClick={() => void requestPermission(item.id)} className={`flex w-full items-center gap-3 px-1 py-3 text-left hover:opacity-75 disabled:cursor-default ${index ? 'border-t border-gray-300/35' : ''}`}><span className="flex h-9 w-7 shrink-0 items-center justify-center text-gray-500"><Icon size={18} /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-gray-800">{item.title}</span><span className="block truncate text-xs text-gray-500">{item.detail}</span></span><span className={`shrink-0 text-xs font-semibold ${statusOk ? 'text-emerald-600' : state === 'denied' || (item.id === 'location' && locationAvailability === 'unavailable') ? 'text-red-500' : 'text-gray-500'}`}>{status}</span><ChevronRight size={15} className="shrink-0 text-gray-300" /></button>; })}
       </div>
     </section>
   </div>;

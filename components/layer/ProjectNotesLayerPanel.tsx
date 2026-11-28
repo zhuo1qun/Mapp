@@ -23,6 +23,7 @@ import {
 import {
   groupDisplayLabel,
   noteBelongsToLayerGroupKey,
+  normalizeTagVisibilityLogic,
   sortNotesForLayerPanelDesc,
   truncateRawTextLabel
 } from '../../utils/layer/unifiedNoteLayer';
@@ -65,11 +66,6 @@ export interface ProjectNotesLayerPanelProps {
   onActivateNote?: (note: Note) => void;
   /** 当前连出到右侧窗口的记录：高亮行并作为贝塞尔起点。 */
   linkedNoteId?: string | null;
-  boardVariantToggles?: {
-    primary: boolean;
-    image: boolean;
-    onChange: (next: { primary: boolean; image: boolean }) => void;
-  };
   /** Table 等：嵌入滚动区，不用 absolute 下拉 */
   embed?: boolean;
   /**
@@ -109,7 +105,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
   frames,
   onActivateNote,
   linkedNoteId = null,
-  boardVariantToggles,
   embed = false,
   flow = false,
   hosted = false,
@@ -612,6 +607,17 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
                 <HelpCircle size={14} strokeWidth={2} aria-hidden />
               </button>
             </PortalTooltip>
+            <ChromeSegmentedControl
+              aria-label="多分组显隐逻辑"
+              size="sm"
+              className="ml-auto shrink-0"
+              value={normalizeTagVisibilityLogic(merged.tagVisibilityLogic)}
+              onChange={(logic) => patch((p) => ({ ...p, tagVisibilityLogic: logic }))}
+              options={[
+                { id: 'and', label: 'AND', title: '且：任一所属分组隐藏则隐藏对象' },
+                { id: 'or', label: 'OR', title: '或：任一所属分组显示则显示对象' }
+              ]}
+            />
           </div>
         ) : null}
         {!hideStandardToggle ? (
@@ -645,43 +651,6 @@ export const ProjectNotesLayerPanel: React.FC<ProjectNotesLayerPanelProps> = ({
           </div>
         ) : null}
         <div className={`${tableMode ? 'overflow-visible' : hosted ? 'overflow-y-auto overscroll-contain theme-surface-scrollbar' : 'max-h-[min(22rem,68vh)] overflow-y-auto overscroll-contain theme-surface-scrollbar'} min-h-0 flex-1 px-1.5 py-0.5`}>
-          {boardVariantToggles ? (
-            <>
-              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">显示类型</div>
-              <div className="mb-2 space-y-1 rounded-lg border border-gray-100 bg-gray-50/50 px-2 py-1.5">
-                <label className="flex items-center justify-between gap-2 text-xs text-gray-700">
-                  <span>便签</span>
-                  <input
-                    type="checkbox"
-                    checked={boardVariantToggles.primary}
-                    onChange={() =>
-                      boardVariantToggles.onChange({
-                        primary: !boardVariantToggles.primary,
-                        image: boardVariantToggles.image
-                      })
-                    }
-                    className="h-4 w-4 rounded border-2"
-                    style={{ accentColor: themeColor }}
-                  />
-                </label>
-                <label className="flex items-center justify-between gap-2 text-xs text-gray-700">
-                  <span>图片</span>
-                  <input
-                    type="checkbox"
-                    checked={boardVariantToggles.image}
-                    onChange={() =>
-                      boardVariantToggles.onChange({
-                        primary: boardVariantToggles.primary,
-                        image: !boardVariantToggles.image
-                      })
-                    }
-                    className="h-4 w-4 rounded border-2"
-                    style={{ accentColor: themeColor }}
-                  />
-                </label>
-              </div>
-            </>
-          ) : null}
           {layerGroupStandard === 'tag' ? (
             <TagLayerHierarchyList
               themeColor={themeColor}

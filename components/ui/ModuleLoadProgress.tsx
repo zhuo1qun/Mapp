@@ -8,6 +8,8 @@ interface ModuleLoadProgressProps {
   themeColor: string;
   className?: string;
   resourceId?: FeatureResourceId;
+  /** 用在既有玻璃窗口内时保持宿主材质，只渲染加载内容。 */
+  transparent?: boolean;
 }
 
 /**
@@ -21,7 +23,8 @@ export const ModuleLoadProgress: React.FC<ModuleLoadProgressProps> = ({
   icon,
   themeColor,
   className = '',
-  resourceId
+  resourceId,
+  transparent = false
 }) => {
   const [localProgress, setLocalProgress] = useState(10);
   const resourceTasks = useSyncExternalStore(subscribeFeatureResources, featureResourceSnapshot, featureResourceSnapshot);
@@ -47,7 +50,7 @@ export const ModuleLoadProgress: React.FC<ModuleLoadProgressProps> = ({
   return (
     <div
       className={`module-load-progress flex h-full min-h-0 w-full flex-1 items-center justify-center px-6 ${className}`}
-      style={{ backgroundColor: themeColor }}
+      style={{ backgroundColor: transparent ? 'transparent' : themeColor }}
       role="status"
       aria-live="polite"
       aria-label={title}

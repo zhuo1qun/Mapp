@@ -11,6 +11,13 @@ export interface LocationData {
 }
 
 export type LocationPermissionStatus = 'unknown' | 'prompt' | 'granted' | 'denied';
+export type LocationAvailability = 'idle' | 'requesting' | 'available' | 'unavailable';
+export type LocationFailureStage = 'environment' | 'support' | 'permission' | 'service' | 'position';
+export type LocationFailure = {
+  stage: LocationFailureStage;
+  code: 'insecure' | 'unsupported' | 'denied' | 'unavailable' | 'timeout' | 'unknown';
+  message: string;
+};
 
 const normalizeHeading = (deg: number): number => {
   const n = deg % 360;
@@ -39,6 +46,7 @@ const headingFromOrientationEvent = (event: DeviceOrientationEvent): number | nu
 
 const HEADING_DEAD_ZONE_DEG = 2.5;
 const HEADING_LOW_PASS = 0.28;
+const ACTIVE_POSITION_TIMEOUT_MS = 10000;
 
 /** 浏览器只在安全上下文允许定位：https、localhost、127.0.0.1。局域网 http://IP 会直接失败且不弹窗。 */
 export const isSecureLocationContext = (): boolean => {
@@ -61,11 +69,10 @@ export const insecureLocationHint = (): string => {
  * 冷启动优先「唤起权限 / 网络粗定位」，不要一上来高精度 GPS（手机端常直接 UNAVAILABLE 且不弹窗）。
  * 已授权后再提高精度。
  */
-const POSITION_ATTEMPTS: PositionOptions[] = [
-  { timeout: 25000, enableHighAccuracy: false, maximumAge: 120000 },
-  { timeout: 12000, enableHighAccuracy: true, maximumAge: 5000 },
-  { timeout: 20000, enableHighAccuracy: false, maximumAge: 60000 }
-];
+const isDesktopPositionEnvironment = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia?.('(pointer: fine)').matches &&
+  (navigator.maxTouchPoints ?? 0) === 0;
 
 /**
  * 定位模型（替代「无手势预热」）：
@@ -79,6 +86,8 @@ export const useGeolocation = (isMapMode: boolean) => {
   const [permissionStatus, setPermissionStatus] = useState<LocationPermissionStatus>('unknown');
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isRequestingLocation, setIsRequestingLocation] = useState(false);
+  const [locationAvailability, setLocationAvailability] = useState<LocationAvailability>('idle');
+  const [locationFailure, setLocationFailure] = useState<LocationFailure | null>(null);
 
   const filteredHeadingRef = useRef<number | null>(null);
   const orientationAttachedRef = useRef(false);
@@ -86,7 +95,7 @@ export const useGeolocation = (isMapMode: boolean) => {
   const watchIdRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const locationRequestSeqRef = useRef(0);
-  const permissionStatusRef = useRef<LocationPermissionStatus>('unknown');
+  const currentLocationRef = useRef<LocationData | null>(null);
 
   const hasLocationPermission = permissionStatus === 'granted';
   const needsLocationEnable =
@@ -100,7 +109,6 @@ export const useGeolocation = (isMapMode: boolean) => {
   }, []);
 
   const setPermission = useCallback((status: LocationPermissionStatus) => {
-    permissionStatusRef.current = status;
     if (mountedRef.current) setPermissionStatus(status);
   }, []);
 
@@ -118,19 +126,37 @@ export const useGeolocation = (isMapMode: boolean) => {
     }
   }, []);
 
-  const formatLocationError = useCallback((error: GeolocationPositionError): string => {
+  const describeLocationFailure = useCallback((error: GeolocationPositionError): LocationFailure => {
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
     switch (error.code) {
       case error.PERMISSION_DENIED:
-        return isIOS
-          ? '位置权限未获允许。请在「设置 → Safari → 位置」或地址栏中允许后，再点「启用位置」。'
-          : '位置权限未获允许。请在浏览器站点设置中允许位置访问后，再点「启用位置」。';
+        return {
+          stage: 'permission',
+          code: 'denied',
+          message: isIOS
+            ? '权限环节失败：位置权限未获允许。请在「设置 → Safari → 位置」或地址栏中允许后重试。'
+            : '权限环节失败：位置权限未获允许。请在浏览器站点设置中允许位置访问后重试。'
+        };
       case error.POSITION_UNAVAILABLE:
-        return '暂时无法确定当前位置。请确认系统定位已开启后重试。';
+        return {
+          stage: 'service',
+          code: 'unavailable',
+          message: '定位服务环节失败：站点位置权限已经允许，因此浏览器不会再次弹出权限框；但系统定位服务没有返回坐标。请先在电脑系统设置中开启定位服务，并检查 Wi-Fi 或网络连接后重新获取。'
+        };
       case error.TIMEOUT:
-        return '获取位置超时。请到信号较好的地方重试。';
+        return {
+          stage: 'position',
+          code: 'timeout',
+          message: isDesktopPositionEnvironment()
+            ? '坐标获取环节超时：站点位置权限已经允许，因此浏览器不会再次弹出权限框；但系统没有及时返回坐标。请检查系统定位、Wi-Fi 或网络后重新获取。'
+            : '坐标获取环节超时：权限请求已完成，但设备没有及时返回坐标。请到信号较好的地方重试。'
+        };
       default:
-        return '暂时无法获取当前位置，请重试。';
+        return {
+          stage: 'position',
+          code: 'unknown',
+          message: '坐标获取环节失败：暂时无法获取当前位置，请重试。'
+        };
     }
   }, []);
 
@@ -205,8 +231,11 @@ export const useGeolocation = (isMapMode: boolean) => {
         lat: position.coords.latitude,
         lng: position.coords.longitude
       };
+      currentLocationRef.current = loc;
       if (!mountedRef.current) return loc;
       setCurrentLocation(loc);
+      setLocationAvailability('available');
+      setLocationFailure(null);
       setLocationError(null);
       setPermission('granted');
 
@@ -242,52 +271,17 @@ export const useGeolocation = (isMapMode: boolean) => {
         console.warn('Location watch error:', error);
         if (error.code === 1) {
           setPermission('denied');
+          setLocationAvailability('unavailable');
           stopWatching();
+        } else if (!currentLocationRef.current) {
+          setLocationAvailability('unavailable');
         }
       },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 3000,
-        timeout: 15000
-      }
+      isDesktopPositionEnvironment()
+        ? { enableHighAccuracy: false, maximumAge: 120000, timeout: 15000 }
+        : { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
     );
   }, [applyPositionUpdate, setPermission, stopWatching]);
-
-  const getCurrentPositionWithRetry = useCallback(
-    (
-      onSuccess: (position: GeolocationPosition) => void,
-      onError: (error: GeolocationPositionError) => void,
-      attemptIndex: number = 0,
-      requestSeq?: number
-    ): void => {
-      const seq = requestSeq ?? ++locationRequestSeqRef.current;
-      const options = POSITION_ATTEMPTS[Math.min(attemptIndex, POSITION_ATTEMPTS.length - 1)];
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          if (seq !== locationRequestSeqRef.current) return;
-          onSuccess(position);
-        },
-        (error) => {
-          if (seq !== locationRequestSeqRef.current) return;
-          if (error.code === error.PERMISSION_DENIED) {
-            onError(error);
-            return;
-          }
-          if (attemptIndex + 1 < POSITION_ATTEMPTS.length) {
-            setTimeout(() => {
-              if (seq !== locationRequestSeqRef.current) return;
-              getCurrentPositionWithRetry(onSuccess, onError, attemptIndex + 1, seq);
-            }, 1000);
-          } else {
-            onError(error);
-          }
-        },
-        options
-      );
-    },
-    []
-  );
 
   /**
    * 必须在用户 click 调用栈内同步调用（不要 pointerdown+preventDefault，Safari 不认）。
@@ -298,23 +292,39 @@ export const useGeolocation = (isMapMode: boolean) => {
       const wantOrientation = opts?.requestOrientation !== false;
 
       if (!isSecureLocationContext()) {
+        const failure: LocationFailure = {
+          stage: 'environment',
+          code: 'insecure',
+          message: `运行环境环节失败：${insecureLocationHint()}`
+        };
         if (mountedRef.current) {
-          setLocationError(insecureLocationHint());
+          setLocationError(failure.message);
+          setLocationFailure(failure);
           setIsRequestingLocation(false);
+          setLocationAvailability('unavailable');
         }
         return Promise.resolve(null);
       }
 
       if (!navigator.geolocation) {
+        const failure: LocationFailure = {
+          stage: 'support',
+          code: 'unsupported',
+          message: '浏览器支持环节失败：此设备或浏览器不支持地理位置功能。'
+        };
         if (mountedRef.current) {
-          setLocationError('此设备或浏览器不支持地理位置功能。');
+          setLocationError(failure.message);
+          setLocationFailure(failure);
+          setLocationAvailability('unavailable');
         }
         return Promise.resolve(null);
       }
 
       if (mountedRef.current) {
         setLocationError(null);
+        setLocationFailure(null);
         setIsRequestingLocation(true);
+        setLocationAvailability('requesting');
       }
 
       // iOS requires the orientation prompt to start in the original click stack.
@@ -327,31 +337,41 @@ export const useGeolocation = (isMapMode: boolean) => {
           resolve(value);
         };
 
-        // 同步第一枪：唤起系统权限对话框（冷启动用低精度，避免秒失败且不弹窗）
-        getCurrentPositionWithRetry(
+        const seq = ++locationRequestSeqRef.current;
+        // 每次主动定位只调用一次原生请求；这次用户手势同时负责刷新权限与坐标。
+        navigator.geolocation.getCurrentPosition(
           (position) => {
+            if (seq !== locationRequestSeqRef.current) return;
             const loc = applyPositionUpdate(position);
             if (mountedRef.current) startWatching();
             done(loc ?? { lat: position.coords.latitude, lng: position.coords.longitude });
           },
           (error) => {
+            if (seq !== locationRequestSeqRef.current) return;
             console.warn('Location request failed:', error);
+            stopWatching();
+            const failure = describeLocationFailure(error);
             if (mountedRef.current) {
-              setLocationError(formatLocationError(error));
+              setLocationError(failure.message);
+              setLocationFailure(failure);
+              setLocationAvailability('unavailable');
               if (error.code === 1) setPermission('denied');
             }
             done(null);
-          }
+          },
+          isDesktopPositionEnvironment()
+            ? { timeout: ACTIVE_POSITION_TIMEOUT_MS, enableHighAccuracy: false, maximumAge: 600000 }
+            : { timeout: ACTIVE_POSITION_TIMEOUT_MS, enableHighAccuracy: false, maximumAge: 120000 }
         );
       });
     },
     [
       applyPositionUpdate,
-      formatLocationError,
-      getCurrentPositionWithRetry,
+      describeLocationFailure,
       requestOrientationPermission,
       setPermission,
-      startWatching
+      startWatching,
+      stopWatching
     ]
   );
 
@@ -422,6 +442,8 @@ export const useGeolocation = (isMapMode: boolean) => {
     isRequestingLocation,
     isSecureContext: isSecureLocationContext(),
     locationError,
+    locationAvailability,
+    locationFailure,
     setLocationError,
     requestLocation,
     requestOrientationPermission,

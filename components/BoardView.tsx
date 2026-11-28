@@ -75,9 +75,11 @@ import { createBoardPointerMoveHandler } from './board/createBoardPointerMoveHan
 import { createBoardPointerUpHandler } from './board/createBoardPointerUpHandler';
 import { resolveBoardFrameLayout } from '../utils/board/boardFrameLayout';
 import { resolveBoardFrameTitleTint } from '../utils/board/boardFrameTitleStyle';
+import type { BoardMediaMode } from '../utils/board/boardMediaPresentation';
 import { ChromeIconButton } from './ui/ChromeIconButton';
 import { LayerToolbarIcon } from './ui/LayerToolbarIcon';
 import { WORKSPACE_TRANSIENT_DISMISS_EVENT } from '../utils/ui/workspaceTransientDismiss';
+import { WORKSPACE_PAGE_RESUME_EVENT } from '../utils/ui/workspacePageLifecycle';
 import { ChromeToolbarSlot, CHROME_TOOLBAR_WINDOW_CLASS } from './ui/ChromeToolbarSlot';
 import { useChromeMenuTop } from '../utils/ui/chromeMenuPosition';
 import { VIBRATION_MEDIUM } from './board-constants';
@@ -397,12 +399,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     }
   }, [isSelectingNotePosition]);
   
-  // Layer Visibility State
-  const [layerVisibility, setLayerVisibility] = useState({
-    frame: true,
-    primary: true,
-    image: true,
-  });
+  const [showBoardMedia, setShowBoardMedia] = useState(true);
+  const [boardMediaMode, setBoardMediaMode] = useState<BoardMediaMode>('background');
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -416,6 +414,18 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
     if (!editingNote || isIntroPending) return;
     setShowSettingsPanel(false);
   }, [editingNote, isIntroPending]);
+
+  useEffect(() => {
+    if (showBoardMedia) return;
+    const visibleIds = new Set(
+      notes.filter((note) => !noteRendersAsBoardSticker(note)).map((note) => note.id)
+    );
+    setSelectedNoteIds((current) => {
+      const next = new Set(Array.from(current).filter((id) => visibleIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+    setSelectedNoteId((current) => (current && visibleIds.has(current) ? current : null));
+  }, [notes, showBoardMedia]);
 
   const projectFull = project as Project | undefined;
   const effectiveConnections = useMemo(
@@ -514,6 +524,25 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
   const [isZooming, setIsZooming] = useState(false);
   isZoomingRef.current = isZooming;
   const dragRectRef = useRef<DOMRect | null>(null);
+
+  // 保持用户的 x/y/scale，不做重新适配；只在外部 App / bfcache 返回后更新视口测量，
+  // 让后续拖拽与编辑器锚点使用当前尺寸而不是离开前的陈旧 rect。
+  useEffect(() => {
+    let frame: number | null = null;
+    const refreshAfterResume = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        dragRectRef.current = containerRef.current?.getBoundingClientRect() ?? null;
+        setTransform((current) => ({ ...current }));
+      });
+    };
+    window.addEventListener(WORKSPACE_PAGE_RESUME_EVENT, refreshAfterResume);
+    return () => {
+      window.removeEventListener(WORKSPACE_PAGE_RESUME_EVENT, refreshAfterResume);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [setTransform]);
   
   const animationFrameRef = useRef<number | null>(null);
   // 触屏长按卡片进入编辑时保留当前视图，不触发“进入编辑自动适配”。
@@ -1890,7 +1919,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           
           <BoardFrameBodies
             frames={frames}
-            visible={layerVisibility.frame}
+            visible
             filterFrameIds={filterFrameIds}
             selectedFrameId={selectedFrameId}
             draggingFrameId={draggingFrameId}
@@ -1908,7 +1937,7 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
           />
           
           {/* Frame Titles Layer - Above Notes - 标题始终显示以便多选 */}
-          {layerVisibility.frame && frames.map((frame) => {
+          {frames.map((frame) => {
             const display = resolveBoardFrameLayout(frame, {
               draggingFrameId,
               draggingPreview: localDraggingFramePos,
@@ -2109,8 +2138,8 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
               notePassesBoardVisibilityFilters(note) &&
               isNoteVisibleInUnifiedLayer(note, mergedProjectBoardLayers, graphLayerGroupStandard)
             }
-            showImages={layerVisibility.image}
-            showNotes={layerVisibility.primary}
+            showMedia={showBoardMedia}
+            mediaMode={boardMediaMode}
             workspaceEditMode={workspaceEditMode}
             standardSizeScale={project?.standardSizeScale || 1}
             selectedNoteId={selectedNoteId}
@@ -2385,12 +2414,10 @@ const BoardViewComponent: React.FC<BoardViewProps> = ({
                             onMapUiChromeBlurPxChange={onMapUiChromeBlurPxChange ?? (() => {})}
                             currentMapStyle={mapStyleId}
                             onMapStyleChange={onMapStyleChange ?? (() => {})}
-                            boardVariantToggles={{
-                              primary: layerVisibility.primary,
-                              image: layerVisibility.image,
-                              onChange: (next) =>
-                                setLayerVisibility((prev) => ({ ...prev, ...next }))
-                            }}
+                            showBoardMedia={showBoardMedia}
+                            onShowBoardMediaChange={setShowBoardMedia}
+                            boardMediaMode={boardMediaMode}
+                            onBoardMediaModeChange={setBoardMediaMode}
                           />
                         )
                       };

@@ -105,6 +105,13 @@ export function noteRendersAsMapMediaPin(
   return noteHasBoardMedia(note);
 }
 
+/** Mapping「隐藏媒体」时需要完全隐藏的纯媒体记录。Emoji 仍算作点位内容。 */
+export function noteIsMapMediaOnly(
+  note: Pick<Note, 'text' | 'emoji' | 'images' | 'imageRefs' | 'media' | 'sketch'>
+): boolean {
+  return noteHasBoardMedia(note) && !noteHasBoardTextContent(note) && !note.emoji;
+}
+
 /**
  * 是否仍需从 IndexedDB / Variant 解析展示像素。
  */

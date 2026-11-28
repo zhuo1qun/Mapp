@@ -15,6 +15,7 @@ function createNoteIcon(
   _showTextLabels: boolean | undefined,
   pinSize: number | undefined,
   imageSize: number | undefined,
+  showMedia: boolean | undefined,
   motion: 'enter' | 'settle' | 'exit' | undefined
 ): L.DivIcon {
   const model = buildMapNoteIconModel(note, {
@@ -22,6 +23,7 @@ function createNoteIcon(
     clusterCount: count,
     pinSize,
     imageSize,
+    showMedia,
     motion
   });
   return L.divIcon({
@@ -40,6 +42,7 @@ interface NoteMarkerProps {
   showTextLabels?: boolean;
   pinSize?: number;
   imageSize?: number;
+  showMedia?: boolean;
   themeColor: string;
   zIndexOffset?: number;
   onClick: (e: L.LeafletMouseEvent) => void;
@@ -58,6 +61,12 @@ interface NoteMarkerProps {
   onLongPressDragStart?: () => void;
   onLongPressDrag?: (latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => void;
   onLongPressDragEnd?: (latLng: L.LatLng, pointer: { clientX: number; clientY: number }) => void;
+  /** 聚合重排路径：marker 已位于终点，用独立 translate 从旧像素位置飞向终点。 */
+  clusterPathFrom?: [number, number];
+  /** 聚合路径中的成员幽灵，到达终点时淡出，由真实聚合/点位接管。 */
+  clusterPathGhost?: boolean;
+  /** 新布局目标在路径后段显现，避免先瞬移到终点再播放成员路径。 */
+  clusterPathReveal?: boolean;
 }
 
 export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
@@ -67,6 +76,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
   showTextLabels,
   pinSize,
   imageSize,
+  showMedia = true,
   themeColor,
   zIndexOffset = 0,
   onClick,
@@ -81,7 +91,10 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
   longPressDragEnabled = false,
   onLongPressDragStart,
   onLongPressDrag,
-  onLongPressDragEnd
+  onLongPressDragEnd,
+  clusterPathFrom,
+  clusterPathGhost = false,
+  clusterPathReveal = false
 }) {
   const map = useMap();
   const markerRef = useRef<L.Marker | null>(null);
@@ -100,9 +113,9 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
   };
   const photoKey = noteOrderedDisplayMediaSources(note)[0]?.slice(0, 48) || '';
   const mediaOrderKey = note.media?.map((item) => item.id).join('|') || '';
-  const asSticker = noteRendersAsMapMediaPin(note);
+  const asSticker = showMedia && noteRendersAsMapMediaPin(note);
   const icon = useMemo(
-    () => createNoteIcon(note, themeColor, clusterCount, showTextLabels, pinSize, imageSize, motion),
+    () => createNoteIcon(note, themeColor, clusterCount, showTextLabels, pinSize, imageSize, showMedia, motion),
     [
       note.id,
       note.text,
@@ -119,6 +132,7 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
       showTextLabels,
       pinSize,
       imageSize,
+      showMedia,
       motion
     ]
   );
@@ -151,6 +165,55 @@ export const NoteMarker = React.memo<NoteMarkerProps>(function NoteMarker({
     element.classList.toggle('mapp-map-pin-selected', selected);
     element.setAttribute('aria-selected', selected ? 'true' : 'false');
   }, [icon, selected]);
+
+  useEffect(() => {
+    const element = markerRef.current?.getElement();
+    if (!element || (!clusterPathFrom && !clusterPathReveal)) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+    const duration = 300;
+    let animation: Animation | null = null;
+    if (clusterPathFrom) {
+      const target = map.latLngToLayerPoint(position);
+      let sourceLng = clusterPathFrom[1];
+      while (sourceLng - position[1] > 180) sourceLng -= 360;
+      while (sourceLng - position[1] < -180) sourceLng += 360;
+      const source = map.latLngToLayerPoint([clusterPathFrom[0], sourceLng]);
+      const dx = source.x - target.x;
+      const dy = source.y - target.y;
+      animation = element.animate(
+        clusterPathGhost
+          ? [
+              { translate: `${dx}px ${dy}px`, opacity: 0.92, offset: 0 },
+              { translate: `${dx * 0.18}px ${dy * 0.18}px`, opacity: 0.82, offset: 0.72 },
+              { translate: '0px 0px', opacity: 0, offset: 1 }
+            ]
+          : [
+              { translate: `${dx}px ${dy}px`, opacity: 0.88 },
+              { translate: '0px 0px', opacity: 1 }
+            ],
+        { duration, easing: 'cubic-bezier(0.2, 0.72, 0.24, 1)', fill: 'both' }
+      );
+    } else if (clusterPathReveal) {
+      animation = element.animate(
+        [
+          { opacity: 0, offset: 0 },
+          { opacity: 0, offset: 0.58 },
+          { opacity: 1, offset: 1 }
+        ],
+        { duration, easing: 'ease-out', fill: 'both' }
+      );
+    }
+    return () => animation?.cancel();
+  }, [
+    clusterPathFrom?.[0],
+    clusterPathFrom?.[1],
+    clusterPathGhost,
+    clusterPathReveal,
+    map,
+    position[0],
+    position[1]
+  ]);
 
   useEffect(() => {
     const marker = markerRef.current;

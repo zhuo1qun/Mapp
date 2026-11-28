@@ -40,6 +40,15 @@ const UNPLACED_POINTER_DROP_EVENT = 'mapp:unplaced-note-pointer-drop';
 
 type PointerCardDrag = { note: Note; noteIds: string[]; pointerId: number; startX: number; startY: number; clientX: number; clientY: number; active: boolean };
 
+type TrayMarquee = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  baseSelection: Set<string>;
+};
+
 function mediaSource(note: Note): string | null {
   const src = boardNoteMediaSource(note);
   return src && /^(data:|blob:|https?:)/.test(src) ? src : null;
@@ -103,6 +112,7 @@ export function UnplacedNotesSidebar({
   const pointerCardDragRef = useRef<PointerCardDrag | null>(null);
   const [pointerCardDrag, setPointerCardDrag] = useState<PointerCardDrag | null>(null);
   const suppressCardClickRef = useRef<string | null>(null);
+  const [trayMarquee, setTrayMarquee] = useState<TrayMarquee | null>(null);
   /** 最新加入的记录始终排在最前；叠起时它也是唯一可直接拖动的对象。 */
   const orderedNotes = useMemo(
     () =>
@@ -302,6 +312,62 @@ export function UnplacedNotesSidebar({
     setLastSelectedNoteId(null);
   };
 
+  const updateTrayMarqueeSelection = (marquee: TrayMarquee) => {
+    const left = Math.min(marquee.startX, marquee.currentX);
+    const right = Math.max(marquee.startX, marquee.currentX);
+    const top = Math.min(marquee.startY, marquee.currentY);
+    const bottom = Math.max(marquee.startY, marquee.currentY);
+    const next = new Set(marquee.baseSelection);
+    const hits: string[] = [];
+    for (const note of visibleOrderedNotes) {
+      const card = cardRefs.current.get(note.id);
+      if (!card) continue;
+      const rect = card.getBoundingClientRect();
+      if (rect.right < left || rect.left > right || rect.bottom < top || rect.top > bottom) continue;
+      next.add(note.id);
+      hits.push(note.id);
+    }
+    setSelectedNoteIds(next);
+    setLastSelectedNoteId(hits.at(-1) ?? Array.from(next).at(-1) ?? null);
+  };
+
+  const beginTrayMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isExpanded || !event.shiftKey || event.button !== 0) return;
+    const target = event.target as Element;
+    if (target.closest('[data-unplaced-note-card], button, input, textarea, select, a')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const marquee: TrayMarquee = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      currentX: event.clientX,
+      currentY: event.clientY,
+      baseSelection: new Set(selectedNoteIds)
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setTrayMarquee(marquee);
+  };
+
+  const moveTrayMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!trayMarquee || trayMarquee.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = { ...trayMarquee, currentX: event.clientX, currentY: event.clientY };
+    setTrayMarquee(next);
+    updateTrayMarqueeSelection(next);
+  };
+
+  const endTrayMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!trayMarquee || trayMarquee.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setTrayMarquee(null);
+  };
+
   const setBoardSizedDragPreview = (
     event: React.DragEvent<HTMLButtonElement>,
     note: Note,
@@ -400,6 +466,10 @@ export function UnplacedNotesSidebar({
             ? 'overflow-x-auto overflow-y-hidden snap-x snap-mandatory lg:overflow-x-hidden lg:overflow-y-auto lg:snap-none'
             : 'overflow-hidden'
         }`}
+        onPointerDown={beginTrayMarquee}
+        onPointerMove={moveTrayMarquee}
+        onPointerUp={endTrayMarquee}
+        onPointerCancel={endTrayMarquee}
         onDragOver={(event) => {
           if (!onDropFiles || !isFileDragTypes(event.dataTransfer.types)) return;
           event.preventDefault();
@@ -481,6 +551,7 @@ export function UnplacedNotesSidebar({
             return (
               <div
                 key={note.id}
+                data-unplaced-note-card
                 ref={(element) => {
                   if (element) cardRefs.current.set(note.id, element);
                   else cardRefs.current.delete(note.id);
@@ -655,6 +726,21 @@ export function UnplacedNotesSidebar({
         <div className="pointer-events-none fixed z-[2000] h-36 w-36 -translate-x-1/2 -translate-y-1/2 opacity-90 drop-shadow-2xl" style={{ left: pointerCardDrag.clientX, top: pointerCardDrag.clientY }}>
           <BoardNoteObject note={pointerCardDrag.note} selected contentWidth={116} rootAs="div" paperBackground="#FFFDF5" mediaSrc={mediaSource(pointerCardDrag.note)} expandedContent={false} className="h-full w-full border-[3px]" style={{ width: 144, height: 144, backgroundColor: '#FFFDF5' }} />
         </div>,
+        document.body
+      ) : null}
+      {trayMarquee && typeof document !== 'undefined' ? createPortal(
+        <div
+          className="pointer-events-none fixed z-[2100] rounded-sm"
+          style={{
+            left: Math.min(trayMarquee.startX, trayMarquee.currentX),
+            top: Math.min(trayMarquee.startY, trayMarquee.currentY),
+            width: Math.abs(trayMarquee.currentX - trayMarquee.startX),
+            height: Math.abs(trayMarquee.currentY - trayMarquee.startY),
+            border: `1.5px solid ${themeColor}`,
+            backgroundColor: `${themeColor}1f`
+          }}
+          aria-hidden
+        />,
         document.body
       ) : null}
     </aside>

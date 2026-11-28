@@ -1,8 +1,9 @@
-import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
-import type L from 'leaflet';
+import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import L, { type Map as LeafletMap } from 'leaflet';
 import type { Connection, Note } from '../../types';
 
 type Options = {
+  mapInstance: LeafletMap | null;
   isUIVisible: boolean;
   showTextLabels: boolean;
   connections: Connection[];
@@ -41,6 +42,7 @@ function connectedNoteIds(noteIds: Iterable<string>, connections: Connection[]) 
 
 /** Keeps marker click and cluster expansion rules out of the map rendering shell. */
 export function useMapMarkerSelection({
+  mapInstance,
   isUIVisible,
   showTextLabels,
   connections,
@@ -57,6 +59,15 @@ export function useMapMarkerSelection({
   setPreSelectedNotes,
   setConnectionHighlightNoteIds
 }: Options) {
+  useEffect(() => {
+    if (!mapInstance) return;
+    const clearTransientClusterList = () => setPreSelectedNotes(null);
+    mapInstance.on('zoomstart', clearTransientClusterList);
+    return () => {
+      mapInstance.off('zoomstart', clearTransientClusterList);
+    };
+  }, [mapInstance, setPreSelectedNotes]);
+
   const clearSelectionTimer = useCallback(() => {
     if (!selectionTimerRef.current) return;
     clearTimeout(selectionTimerRef.current);
@@ -142,13 +153,46 @@ export function useMapMarkerSelection({
   const handleClusterClick = useCallback(
     (clusterNotes: Note[], event?: L.LeafletMouseEvent) => {
       stopMarkerEvent(event);
+      if (mapInstance) {
+        const currentZoom = mapInstance.getZoom();
+        const maxZoom = mapInstance.getMaxZoom();
+        if (currentZoom < maxZoom - 0.01) {
+          clearSelectionTimer();
+          setPreSelectedNotes(null);
+          const bounds = L.latLngBounds(
+            clusterNotes.map((note) => [note.coords.lat, note.coords.lng] as L.LatLngTuple)
+          );
+          const boundsZoom = bounds.isValid()
+            ? mapInstance.getBoundsZoom(bounds, false, L.point(72, 72))
+            : currentZoom + 2;
+          const targetZoom = Math.min(
+            maxZoom,
+            Math.max(currentZoom + 1, Number.isFinite(boundsZoom) ? boundsZoom : currentZoom + 2)
+          );
+          const center = bounds.isValid()
+            ? bounds.getCenter()
+            : L.latLng(clusterNotes[0]!.coords.lat, clusterNotes[0]!.coords.lng);
+          mapInstance.flyTo(center, targetZoom, { duration: 0.45 });
+          return;
+        }
+      }
+
+      // 已到最大缩放仍重叠：只展示成员列表，不把聚合本身变成选中对象。
       const sortedClusterNotes = sortNotes(clusterNotes);
       if (!isUIVisible) clearSelectionTimer();
       setSelectedNoteId(null);
       setSelectedNoteIds(new Set());
       setPreSelectedNotes(sortedClusterNotes);
     },
-    [clearSelectionTimer, isUIVisible, setPreSelectedNotes, setSelectedNoteId, setSelectedNoteIds, sortNotes]
+    [
+      clearSelectionTimer,
+      isUIVisible,
+      mapInstance,
+      setPreSelectedNotes,
+      setSelectedNoteId,
+      setSelectedNoteIds,
+      sortNotes
+    ]
   );
 
   return { handleMarkerClick, handleClusterClick };

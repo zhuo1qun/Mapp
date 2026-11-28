@@ -70,6 +70,7 @@ import { dismissWorkspaceTransients } from './utils/ui/workspaceTransientDismiss
 import { hasSupabaseClientConfig, isSupabaseEnabled } from './utils/supabaseEnv';
 import { loadBoardResource, loadMapResource, loadTableResource } from './utils/resources/featureResources';
 import { installVisualViewportInsets } from './utils/ui/visualViewportInsets';
+import { dispatchWorkspacePageResume } from './utils/ui/workspacePageLifecycle';
 
 type ProjectEnterMode = 'from-home' | 'project-switch' | 'steady';
 
@@ -141,6 +142,42 @@ export default function App() {
   const emptyFrames = useMemo(() => [], []);
 
   useEffect(() => installVisualViewportInsets(), []);
+
+  /**
+   * 从外部地图 App 或浏览器前进/后退回来时，优先让 bfcache 恢复整棵 UI。
+   * 这里只通知依赖视口尺寸的工作区校正布局，绝不重新读取项目或重置当前视图。
+   */
+  useEffect(() => {
+    let firstFrame: number | null = null;
+    let secondFrame: number | null = null;
+    let pending = false;
+
+    const publishResume = (reason: 'bfcache' | 'visibility') => {
+      if (document.visibilityState !== 'visible' || pending) return;
+      pending = true;
+      firstFrame = window.requestAnimationFrame(() => {
+        secondFrame = window.requestAnimationFrame(() => {
+          pending = false;
+          dispatchWorkspacePageResume(reason);
+        });
+      });
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) publishResume('bfcache');
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') publishResume('visibility');
+    };
+
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (firstFrame !== null) window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
+    };
+  }, []);
 
   // Use custom hooks for state management
   const projectState = useProjectState();

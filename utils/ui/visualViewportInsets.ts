@@ -43,6 +43,10 @@ export function installVisualViewportInsets(): () => void {
   viewport?.addEventListener('scroll', update);
   window.addEventListener('resize', update);
   window.addEventListener('orientationchange', update);
+  // 外部 App 返回或 bfcache 恢复时不一定触发 resize，但 Safari 的浏览器工具栏
+  // 可能已经变化，需重新计算安全区变量。
+  window.addEventListener('pageshow', update);
+  document.addEventListener('visibilitychange', update);
   standaloneQuery.addEventListener?.('change', update);
   fullscreenQuery.addEventListener?.('change', update);
 
@@ -51,6 +55,8 @@ export function installVisualViewportInsets(): () => void {
     viewport?.removeEventListener('scroll', update);
     window.removeEventListener('resize', update);
     window.removeEventListener('orientationchange', update);
+    window.removeEventListener('pageshow', update);
+    document.removeEventListener('visibilitychange', update);
     standaloneQuery.removeEventListener?.('change', update);
     fullscreenQuery.removeEventListener?.('change', update);
   };

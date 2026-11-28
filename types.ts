@@ -314,9 +314,10 @@ export interface GraphLayerState {
   /** 各分组环形/时间轴纵轴权重，范围 0.1～1，越大越靠近圆心、时间线纵轴越靠上 */
   weights?: Record<string, number>;
   /**
-   * 多标签便签的显隐逻辑（仅标签层）：
-   * - `and`：任一标签隐藏 → 隐藏节点
-   * - `or`：任一标签显示 → 显示节点（默认）
+   * 对象属于多个当前筛选分组时的显隐逻辑：
+   * - `and`：任一所属分组隐藏 → 隐藏对象
+   * - `or`：任一所属分组显示 → 显示对象（默认）
+   * 字段名保留 tag 前缀以兼容旧项目数据。
    */
   tagVisibilityLogic?: TagVisibilityLogic;
 }
